@@ -56,18 +56,32 @@ if (-not $principalId) {
     $principalId = Invoke-Az ad sp create --id $clientId --query id -o tsv
 }
 
-$subject = "repo:${Repository}:environment:$Environment"
-$existingSubjects = Invoke-Az ad app federated-credential list --id $clientId --query '[].subject' -o tsv
-if ($existingSubjects -notcontains $subject) {
-    Write-Host "Adding federated credential for $subject"
+$oidc = gh api "repos/$Repository/actions/oidc/customization/sub" | ConvertFrom-Json
+if (-not $oidc.use_default) {
+    Write-Warning "Repository uses custom OIDC subject claim keys ($($oidc.include_claim_keys -join ', ')); verify the federated credential subject manually."
+}
+# Repositories with immutable subjects present 'repo:owner@id/name@id' instead of 'repo:owner/name'.
+$subjectPrefix = if ($oidc.sub_claim_prefix) { $oidc.sub_claim_prefix } else { "repo:$Repository" }
+$subject = "${subjectPrefix}:environment:$Environment"
+$credentialName = "github-$Environment"
+$existing = Invoke-Az ad app federated-credential list --id $clientId --query "[?name=='$credentialName'] | [0]" -o json | ConvertFrom-Json
+if (-not $existing -or $existing.subject -ne $subject) {
+    Write-Host "Configuring federated credential for $subject"
     $credentialFile = New-TemporaryFile
     @{
-        name      = "github-$Environment"
+        name      = $credentialName
         issuer    = 'https://token.actions.githubusercontent.com'
         subject   = $subject
         audiences = @('api://AzureADTokenExchange')
     } | ConvertTo-Json | Set-Content $credentialFile
-    try { Invoke-Az ad app federated-credential create --id $clientId --parameters "@$credentialFile" | Out-Null }
+    try {
+        if ($existing) {
+            Invoke-Az ad app federated-credential update --id $clientId --federated-credential-id $existing.id --parameters "@$credentialFile" | Out-Null
+        }
+        else {
+            Invoke-Az ad app federated-credential create --id $clientId --parameters "@$credentialFile" | Out-Null
+        }
+    }
     finally { Remove-Item $credentialFile }
 }
 
