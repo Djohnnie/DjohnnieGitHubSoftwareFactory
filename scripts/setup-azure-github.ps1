@@ -114,4 +114,4 @@ if ($ConfigureWebApp) {
 Write-Host ''
 Write-Host 'Done. Remaining manual steps:' -ForegroundColor Green
 Write-Host "  - Configure Web App app settings GitHub__ClientId, GitHub__ClientSecret, OpenAI__* (see docs/azure-deployment.md)."
-Write-Host "  - Publish a GitHub release (or run the workflow manually) to migrate the database and deploy."
+Write-Host "  - Push to main (or run the workflow manually) to migrate the database and deploy."

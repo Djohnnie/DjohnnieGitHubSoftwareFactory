@@ -9,7 +9,7 @@
 - Set `ConnectionStrings__Database` in the shell before using EF tools (use the connection string from your local development settings).
 - Add a migration: `dotnet ef migrations add <Name> --project src\Djohnnie.SoftwareFactory.DataAccess.Sql --output-dir Migrations`
 - Check the migration snapshot: `dotnet ef migrations has-pending-model-changes --project src\Djohnnie.SoftwareFactory.DataAccess.Sql`
-- Azure deployment: `.github\workflows\release.yml` builds and tests on pushes and pull requests to `main`. When a GitHub release is published, it applies an EF migrations bundle to Azure SQL and deploys to App Service. One-time OIDC setup is in `scripts\setup-azure-github.ps1`; see `docs\azure-deployment.md`.
+- Azure deployment: `.github\workflows\release.yml` builds and tests on pushes and pull requests to `main`. On every push to `main`, it applies an EF migrations bundle to Azure SQL and deploys to App Service. One-time OIDC setup is in `scripts\setup-azure-github.ps1`; see `docs\azure-deployment.md`.
 
 The app targets .NET 10. Development startup applies EF migrations automatically and uses the LocalDB connection string in `appsettings.Development.json`; other environments must supply `ConnectionStrings:Database`. `appsettings.Development.json` is gitignored and holds personal settings such as `OpenAI:ApiKey`; create it by copying the tracked `appsettings.Development.example.json` (keep the template free of secrets and in sync when adding settings). Neither file is published.
 

@@ -1,6 +1,6 @@
 # Azure deployment
 
-The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web` on every push and pull request to `main`. When a GitHub release is **published** (or the workflow is run manually), the `deploy` job:
+The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web` on every push and pull request to `main`. On every **push to `main`** (or a manual run on `main`), the `deploy` job:
 
 1. Logs in to Azure with OpenID Connect (no Azure secret stored in GitHub).
 2. Opens a temporary Azure SQL firewall rule for the runner's IP.
@@ -57,4 +57,4 @@ Also turn on **Web sockets** (needed for Blazor Interactive Server) and **Sessio
 
 ## Releasing
 
-Create and publish a GitHub release (for example `gh release create v1.0.0 --generate-notes`), or run **Build and release** manually from the Actions tab. To require approval before production deployments, add required reviewers to the `production` environment.
+Push or merge to `main`, or run **Build and release** manually from the Actions tab. Pull requests only build and test. To require approval before production deployments, add required reviewers to the `production` environment.
