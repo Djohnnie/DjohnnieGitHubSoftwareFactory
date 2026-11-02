@@ -1,0 +1,75 @@
+@using ToastUI
+
+@*
+    WYSIWYG Markdown editor (Toast UI Editor), with a switch to raw Markdown at the bottom.
+    The Toast UI wrapper's own Value is HTML while in WYSIWYG mode, so this component always
+    reads the Markdown back from the editor and only exposes Markdown through Value.
+*@
+<div class="markdown-editor">
+    <Editor @ref="_editor" @bind-Value="_editorValue" Options="_options" Placeholder="@Placeholder" Change="OnChangeAsync" />
+    @if (MaxLength is { } max)
+    {
+        <MudText Typo="Typo.caption" Align="Align.End" Color="@((Value?.Length ?? 0) > max ? Color.Error : Color.Secondary)" Class="d-block mt-1">
+            @(Value?.Length ?? 0) / @max
+        </MudText>
+    }
+</div>
+
+@code {
+    private Editor? _editor;
+    private string? _editorValue;
+    private string? _markdown;
+    private EditorOptions _options = default!;
+
+    /// <summary>The Markdown content.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter] public string Height { get; set; } = "500px";
+
+    /// <summary>Shows a character counter against this maximum (not enforced).</summary>
+    [Parameter] public int? MaxLength { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _editorValue = _markdown = Value;
+        _options = new EditorOptions
+        {
+            Height = Height,
+            MinHeight = "200px",
+            InitialEditType = EditorType.WYSIWYG,
+            PreviewStyle = PreviewStyle.Tab,
+            UsageStatistics = false,
+            Autofocus = false
+        };
+    }
+
+    // The value was changed from outside the editor (e.g. by DGHSF Copilot): push it into the editor.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_editor is not null && Value != _markdown)
+        {
+            _markdown = Value;
+            await _editor.SetMarkdown(Value ?? string.Empty, false);
+        }
+    }
+
+    private async Task OnChangeAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var markdown = await _editor.GetMarkdown();
+        _markdown = markdown;
+        if (markdown != Value)
+        {
+            Value = markdown;
+            await ValueChanged.InvokeAsync(markdown);
+        }
+    }
+}

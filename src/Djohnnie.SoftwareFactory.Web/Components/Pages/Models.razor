@@ -1,0 +1,301 @@
+@page "/models"
+@inject AiModelService ModelService
+@inject AiModelService Scraper
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>Models</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Models</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            AI models available to custom agents, with their price in USD per 1M tokens. Shared by all repositories.
+        </MudText>
+    </div>
+    <MudStack Row="true">
+        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudDownload"
+                   OnClick="() => _importOpen = !_importOpen">Import from GitHub docs</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="() => EditAsync(null)">New model</MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_importOpen)
+{
+    <MudPaper Class="pa-4 mb-4" Outlined="true" Elevation="0">
+        <MudText Typo="Typo.h6">Import from GitHub docs</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            Paste the link to the Copilot "Models and pricing" page. New models are added; pricing of existing models
+            (matched on name and tier) is refreshed. Model ids and enabled state you changed are kept.
+        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="_importUrl" Label="Documentation URL" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ScrapeAsync" Disabled="_scraping"
+                       StartIcon="@Icons.Material.Filled.TravelExplore">
+                @if (_scraping)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Fetch
+            </MudButton>
+        </MudStack>
+
+        @if (_scraped is not null)
+        {
+            <MudTable Outlined="true" T="AiModel" Items="_scraped" MultiSelection="true" @bind-SelectedItems="_selected" Dense="true" Hover="true"
+                      Elevation="0" Class="mt-4" Height="400px" FixedHeader="true">
+                <HeaderContent>
+                    <MudTh>Model</MudTh>
+                    <MudTh>Provider</MudTh>
+                    <MudTh>Tier</MudTh>
+                    <MudTh Style="text-align:right">Input</MudTh>
+                    <MudTh Style="text-align:right">Output</MudTh>
+                    <MudTh>Change</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText></MudTd>
+                    <MudTd>@context.Provider</MudTd>
+                    <MudTd>@TierLabel(context)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+                    <MudTd>
+                        @switch (ChangeOf(context))
+                        {
+                            case "New":
+                                <MudChip Variant="Variant.Outlined" T="string" Size="Size.Small" Color="Color.Success">New</MudChip>
+                                break;
+                            case "Updated":
+                                <MudChip Variant="Variant.Outlined" T="string" Size="Size.Small" Color="Color.Warning">Price change</MudChip>
+                                break;
+                            default:
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Unchanged</MudChip>
+                                break;
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_selected.Count of @_scraped.Count selected</MudText>
+                <MudButton Variant="Variant.Outlined" OnClick="() => _scraped = null">Discard</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ImportAsync" Disabled="_selected.Count == 0 || _importing"
+                           StartIcon="@Icons.Material.Filled.Download">Import selected</MudButton>
+            </MudStack>
+        }
+    </MudPaper>
+}
+
+<MudTable Outlined="true" T="AiModel" Items="_models" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0"
+          GroupBy="_groupByProvider" GroupHeaderStyle="background-color: var(--mud-palette-background-gray)">
+    <ToolBarContent>
+        <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search models" Adornment="Adornment.Start" Immediate="true"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
+        <MudSpacer />
+        <MudSwitch @bind-Value="_onlyEnabled" Color="Color.Primary" Label="Enabled only" />
+    </ToolBarContent>
+    <GroupHeaderTemplate>
+        <MudTh colspan="8"><b>@(context.Key as string ?? "Other")</b></MudTh>
+    </GroupHeaderTemplate>
+    <HeaderContent>
+        <MudTh>Model</MudTh>
+        <MudTh>Category</MudTh>
+        <MudTh>Tier</MudTh>
+        <MudTh Style="text-align:right">Input</MudTh>
+        <MudTh Style="text-align:right">Cached input</MudTh>
+        <MudTh Style="text-align:right">Cache write</MudTh>
+        <MudTh Style="text-align:right">Output</MudTh>
+        <MudTh Style="text-align:right">Enabled / actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Model">
+            <MudText Typo="Typo.body1"><b>@context.Name</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText>
+            @if (!string.IsNullOrEmpty(context.ReleaseStatus) && context.ReleaseStatus != "GA")
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@context.ReleaseStatus</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Category">@context.Category</MudTd>
+        <MudTd DataLabel="Tier">@TierLabel(context)</MudTd>
+        <MudTd DataLabel="Input" Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
+        <MudTd DataLabel="Cached input" Style="text-align:right">@AiModel.FormatPrice(context.CachedInputPrice)</MudTd>
+        <MudTd DataLabel="Cache write" Style="text-align:right">@AiModel.FormatPrice(context.CacheWritePrice)</MudTd>
+        <MudTd DataLabel="Output" Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="v => SetEnabledAsync(context, v)" Color="Color.Primary" />
+                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" OnClick="() => EditAsync(context)" title="Edit" />
+                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+            </MudStack>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>No models yet. Import them from the GitHub docs or add one manually.</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => _importOpen = true">Import from GitHub docs</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private readonly TableGroupDefinition<AiModel> _groupByProvider = new() { Selector = m => m.Provider ?? "Other" };
+
+    private List<AiModel> _models = [];
+    private bool _loading = true;
+    private string? _error;
+    private string? _search;
+    private bool _onlyEnabled;
+
+    private bool _importOpen;
+    private string _importUrl = ModelPricingScraper.DefaultUrl;
+    private bool _scraping;
+    private bool _importing;
+    private List<AiModel>? _scraped;
+    private HashSet<AiModel> _selected = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _importOpen = _models.Count == 0;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _models = await ModelService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load models: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool Matches(AiModel model) =>
+        (!_onlyEnabled || model.IsEnabled) &&
+        (string.IsNullOrWhiteSpace(_search)
+         || model.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+         || model.ModelId.Contains(_search, StringComparison.OrdinalIgnoreCase)
+         || (model.Provider?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    private async Task EditAsync(AiModel? model)
+    {
+        var dialog = await Dialogs.ShowAsync<AiModelDialog>(
+            model is null ? "New model" : $"Edit {model.Name}",
+            new DialogParameters<AiModelDialog> { { d => d.Model, model } },
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: AiModel saved })
+        {
+            Snackbar.Add($"Saved '{saved.Name}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task SetEnabledAsync(AiModel model, bool enabled)
+    {
+        try
+        {
+            await ModelService.SetEnabledAsync(model.Id, enabled);
+            model.IsEnabled = enabled;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not update '{model.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(AiModel model)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete model", $"Delete '{model.Name}' ({TierLabel(model)})? Existing agent files are not changed.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await ModelService.DeleteAsync(model.Id);
+            _models.Remove(model);
+            Snackbar.Add($"Deleted '{model.Name}'.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not delete '{model.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ScrapeAsync()
+    {
+        _scraping = true;
+        _scraped = null;
+        try
+        {
+            var scraped = await Scraper.ScrapeAsync(_importUrl);
+            _scraped = scraped.ToList();
+            _selected = _scraped.Where(m => ChangeOf(m) != "Unchanged").ToHashSet();
+            Snackbar.Add($"Found {_scraped.Count} models.", Severity.Info);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException or TaskCanceledException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _scraping = false;
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        _importing = true;
+        try
+        {
+            var result = await ModelService.ImportAsync(_selected);
+            Snackbar.Add($"Imported: {result.Added} added, {result.Updated} updated, {result.Unchanged} unchanged.", Severity.Success);
+            _scraped = null;
+            _selected = [];
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Import failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private string ChangeOf(AiModel scraped)
+    {
+        var existing = _models.FirstOrDefault(m =>
+            string.Equals(m.Name, scraped.Name, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(m.Tier, scraped.Tier, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            return "New";
+        }
+        return existing.InputPrice != scraped.InputPrice || existing.CachedInputPrice != scraped.CachedInputPrice
+               || existing.CacheWritePrice != scraped.CacheWritePrice || existing.OutputPrice != scraped.OutputPrice
+            ? "Updated"
+            : "Unchanged";
+    }
+
+    private static string TierLabel(AiModel model) =>
+        string.IsNullOrEmpty(model.Threshold) ? model.Tier : $"{model.Tier} ({model.Threshold})";
+}

@@ -1,0 +1,182 @@
+@page "/agents"
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject AgentTemplateService Templates
+@inject NavigationManager Navigation
+
+<PageTitle>Custom agents</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Custom agents</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Agent profiles in <code>@AgentDefinition.Directory</code> of <b>@Repository.Current?.FullName</b>. Every change is committed directly to the default branch.
+        </MudText>
+    </div>
+    <MudStack Row="true">
+        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+        <MudButton Href="/agent-templates" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy">From template</MudButton>
+        <MudButton Href="/agents/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New agent</MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" T="AgentRow" Items="_agents" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <HeaderContent>
+        <MudTh>Agent</MudTh>
+        <MudTh>File</MudTh>
+        <MudTh>Target</MudTh>
+        <MudTh>Model</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Agent">
+            <MudText Typo="Typo.body1"><b>@(context.Agent?.Name ?? AgentDefinition.GetFileName(context.Item.Name))</b></MudText>
+            @if (context.ParseError is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error">Invalid file: @context.ParseError</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Agent?.Description</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="File">
+            <MudLink Href="@context.Item.HtmlUrl" Target="_blank" Typo="Typo.body2"><code>@context.Item.Name</code></MudLink>
+        </MudTd>
+        <MudTd DataLabel="Target">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TargetLabel(context.Agent?.Target)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Model">@(string.IsNullOrEmpty(context.Agent?.Model) ? "default" : context.Agent.Model)</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" Href="@($"/agents/edit/{Uri.EscapeDataString(context.Item.Name)}")"
+                           Disabled="context.ParseError is not null" title="Edit" />
+            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => SaveAsTemplateAsync(context)"
+                           Disabled="context.Agent is null" title="Save as template" />
+            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>This repository has no custom agents yet.</MudText>
+            <MudButton Href="/agents/new" Variant="Variant.Outlined" Color="Color.Primary">Create the first agent</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private sealed record AgentRow(GitHubContentItem Item, string Sha, AgentDefinition? Agent, string? ParseError);
+
+    private List<AgentRow> _agents = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var repo = Repository.Current!.FullName;
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var items = (await GitHub.GetDirectoryAsync(repo, AgentDefinition.Directory))
+                .Where(i => i.Type == "file" && i.Name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var rows = await Task.WhenAll(items.Select(async item =>
+            {
+                var file = await GitHub.GetFileAsync(repo, item.Path);
+                try
+                {
+                    return new AgentRow(item, file?.Sha ?? item.Sha, file is null ? null : AgentFileSerializer.Parse(file.Content), null);
+                }
+                catch (FormatException ex)
+                {
+                    return new AgentRow(item, file?.Sha ?? item.Sha, null, ex.Message);
+                }
+            }));
+
+            _agents = rows.OrderBy(r => r.Agent?.Name ?? r.Item.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not load agents: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DeleteAsync(AgentRow row)
+    {
+        var name = row.Agent?.Name ?? AgentDefinition.GetFileName(row.Item.Name);
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete agent",
+            $"Delete '{name}' ({row.Item.Path})? This commits the deletion directly to the default branch of {Repository.Current!.FullName}.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await GitHub.DeleteFileAsync(Repository.Current.FullName, row.Item.Path, $"Delete custom agent {name}", row.Sha);
+            _agents.Remove(row);
+            Snackbar.Add($"Deleted '{name}' (commit {Short(result.CommitSha)}).", Severity.Success);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            Snackbar.Add($"Could not delete '{name}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveAsTemplateAsync(AgentRow row)
+    {
+        var fileName = AgentDefinition.GetFileName(row.Item.Name);
+        try
+        {
+            var existing = (await Templates.GetAllAsync()).SingleOrDefault(t => t.FileName == fileName);
+            if (existing is not null)
+            {
+                var replace = await Dialogs.ShowMessageBoxAsync(
+                    "Replace template",
+                    $"The template '{existing.Name}' already uses the file name '{fileName}'. Replace it with this agent?",
+                    yesText: "Replace", cancelText: "Cancel");
+                if (replace != true)
+                {
+                    return;
+                }
+            }
+
+            var template = await Templates.SaveAsync(existing?.Id ?? 0, fileName, row.Agent!);
+            Snackbar.Add($"Saved '{template.Name}' as a template.", Severity.Success);
+            Navigation.NavigateTo($"/agent-templates/edit/{template.Id}");
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not save '{fileName}' as a template: {ex.Message}", Severity.Error);
+        }
+    }
+
+    internal static string TargetLabel(string? target) => target switch
+    {
+        "github-copilot" => "GitHub Copilot",
+        "vscode" => "VS Code",
+        null or "" => "All",
+        _ => target
+    };
+
+    internal static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
+}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" font-family="Segoe UI, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#444"/></marker>
+  </defs>
+  <rect width="800" height="280" fill="#fafafa"/>
+  <text x="400" y="28" text-anchor="middle" font-size="18" font-weight="bold">Two-way sync</text>
+
+  <rect x="30" y="90" width="170" height="90" rx="8" fill="#e6f4ea" stroke="#3d8b57"/>
+  <text x="115" y="125" text-anchor="middle">Azure SQL</text>
+  <text x="115" y="145" text-anchor="middle" font-size="12">source of truth</text>
+  <text x="115" y="162" text-anchor="middle" font-size="12">(app wins conflicts)</text>
+
+  <rect x="330" y="90" width="170" height="90" rx="8" fill="#fff4e0" stroke="#c98a1b"/>
+  <text x="415" y="125" text-anchor="middle">Azure Function</text>
+  <text x="415" y="145" text-anchor="middle" font-size="12">CRON polling, PAT</text>
+  <text x="415" y="162" text-anchor="middle" font-size="12">repos with work only</text>
+
+  <rect x="610" y="90" width="160" height="90" rx="8" fill="#f3e8fd" stroke="#7b4fa5"/>
+  <text x="690" y="140" text-anchor="middle">GitHub</text>
+
+  <g stroke="#444" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M200,115 L330,115"/>
+    <path d="M330,155 L200,155"/>
+    <path d="M500,115 L610,115"/>
+    <path d="M610,155 L500,155"/>
+  </g>
+  <text x="400" y="228" text-anchor="middle" font-size="12" fill="#444">App → GitHub: issues on acceptance, diff-issues, labels, agent commits, agent assignment</text>
+  <text x="400" y="248" text-anchor="middle" font-size="12" fill="#444">GitHub → App: state, labels, comments, linked PRs, agent sessions</text>
+</svg>

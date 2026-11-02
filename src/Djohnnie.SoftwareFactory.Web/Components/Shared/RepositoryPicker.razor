@@ -1,0 +1,196 @@
+@inject GitHubService GitHub
+@inject RepositoryHistoryService History
+@using Djohnnie.SoftwareFactory.Application.Features.Repositories
+@using Djohnnie.SoftwareFactory.Contracts.Repositories
+@implements IDisposable
+
+@if (_recentError is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning">Could not load recently accessed repositories: @_recentError</MudAlert>
+}
+@if (_recentRepositories.Count > 0)
+{
+    <MudStack Class="pa-4" Spacing="2">
+        <MudText Typo="Typo.h6">Recently accessed</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+            @foreach (var repository in _recentRepositories)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.History"
+                           Disabled="_selecting" OnClick="() => SelectRecentAsync(repository)"
+                           title="@($"Last accessed {repository.LastAccessedAt.ToLocalTime():yyyy-MM-dd HH:mm}")">
+                    @repository.FullName
+                </MudButton>
+            }
+        </MudStack>
+    </MudStack>
+}
+@if (_selectionError is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error">Could not select repository: @_selectionError</MudAlert>
+}
+@if (_selecting)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" aria-label="Opening repository" />
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error">Could not load repositories: @_error</MudAlert>
+}
+else if (_repositories is null)
+{
+    <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6" role="status" aria-live="polite">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" aria-label="Loading repositories" />
+        <MudText>Loading repositories from GitHub...</MudText>
+    </MudStack>
+}
+else
+{
+    <MudTable Outlined="true" T="GitHubRepository" Items="_repositories"
+              Filter="Matches" Hover="true" Dense="true" Elevation="0" RowsPerPage="10"
+              OnRowClick="@(args => SelectAsync(args.Item!))" RowClass="cursor-pointer"
+              RowClassFunc="@((repo, _) => repo.FullName == SelectedFullName ? "mud-theme-primary-text selected-row" : string.Empty)">
+        <ToolBarContent>
+            <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search repositories" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Immediate="true"
+                          Clearable="true" AutoFocus="true" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Repository</MudTh>
+            <MudTh>Language</MudTh>
+            <MudTh>Visibility</MudTh>
+            <MudTh>Last push</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Repository">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudAvatar Size="Size.Small"><MudImage Src="@context.Owner.AvatarUrl" Alt="" /></MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.body1"><b>@context.FullName</b></MudText>
+                        @if (!string.IsNullOrEmpty(context.Description))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                        }
+                    </div>
+                    @if (context.Fork) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">fork</MudChip> }
+                    @if (context.Archived) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">archived</MudChip> }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Language">@context.Language</MudTd>
+            <MudTd DataLabel="Visibility">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Icon="@(context.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">
+                    @(context.Private ? "private" : "public")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Last push">@context.PushedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No repositories match your search.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="[10, 25, 50]" />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    /// <summary>Raised when the user clicks a repository.</summary>
+    [Parameter] public EventCallback<GitHubRepository> OnSelected { get; set; }
+
+    /// <summary>Highlights the currently selected repository.</summary>
+    [Parameter] public string? SelectedFullName { get; set; }
+
+    private IReadOnlyList<GitHubRepository>? _repositories;
+    private IReadOnlyList<RecentRepository> _recentRepositories = [];
+    private readonly CancellationTokenSource _cancellation = new();
+    private string? _recentError;
+    private string? _selectionError;
+    private bool _selecting;
+    private string? _error;
+    private string? _search;
+
+    protected override Task OnInitializedAsync() => Task.WhenAll(LoadRecentAsync(), LoadRepositoriesAsync());
+
+    private async Task LoadRecentAsync()
+    {
+        try
+        {
+            _recentRepositories = await History.GetRecentAsync(_cancellation.Token);
+        }
+        catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _recentError = ex.Message;
+        }
+        if (!_cancellation.IsCancellationRequested)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadRepositoriesAsync()
+    {
+        try
+        {
+            _repositories = await GitHub.GetRepositoriesAsync(_cancellation.Token);
+        }
+        catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = ex.Message;
+        }
+        if (!_cancellation.IsCancellationRequested)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task SelectRecentAsync(RecentRepository recent) =>
+        SelectAsync(async () => _repositories?.FirstOrDefault(repository =>
+                string.Equals(repository.FullName, recent.FullName, StringComparison.OrdinalIgnoreCase))
+                ?? await GitHub.GetRepositoryAsync(recent.FullName, _cancellation.Token));
+
+    private Task SelectAsync(GitHubRepository repository) => SelectAsync(() => Task.FromResult(repository));
+
+    private async Task SelectAsync(Func<Task<GitHubRepository>> loadRepository)
+    {
+        if (_selecting)
+        {
+            return;
+        }
+        _selecting = true;
+        _selectionError = null;
+        try
+        {
+            await OnSelected.InvokeAsync(await loadRepository());
+        }
+        catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _selectionError = ex.Message;
+        }
+        finally
+        {
+            _selecting = false;
+        }
+    }
+
+    private bool Matches(GitHubRepository repo) =>
+        string.IsNullOrWhiteSpace(_search)
+        || repo.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || (repo.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (repo.Language?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+}

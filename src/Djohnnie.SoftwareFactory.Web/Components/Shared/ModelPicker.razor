@@ -1,0 +1,92 @@
+@inject AiModelService ModelService
+@inject ISnackbar Snackbar
+
+<MudSelect Variant="Variant.Outlined" T="string" Value="Value" ValueChanged="ValueChanged" Label="@Label" ToStringFunc="ModelLabel"
+           HelperText="@HelperText" Clearable="true" Disabled="Disabled" ReadOnly="ReadOnly"
+           AnchorOrigin="Origin.BottomCenter" MaxHeight="420">
+    <MudSelectItem T="string" Value="@((string?)null)">@DefaultText</MudSelectItem>
+    @if (!string.IsNullOrEmpty(Value) && !_options.Any(o => o.ModelId == Value))
+    {
+        <MudSelectItem T="string" Value="@Value">
+            <span class="mono">@Value</span>
+            <MudText Typo="Typo.caption" Color="Color.Warning">Not in the managed models</MudText>
+        </MudSelectItem>
+    }
+    @foreach (var option in _options)
+    {
+        <MudSelectItem T="string" Value="@option.ModelId">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width:100%">
+                <div>
+                    <MudText Typo="Typo.body2"><b>@option.Name</b></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@option.Provider · @option.Category</MudText>
+                </div>
+                <MudText Typo="Typo.caption" Align="Align.Right" Class="ml-4">
+                    @AiModel.FormatPrice(option.InputPrice) in<br />@AiModel.FormatPrice(option.OutputPrice) out
+                </MudText>
+            </MudStack>
+        </MudSelectItem>
+    }
+</MudSelect>
+@if (SelectedModel is { } selected)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+        <span class="mono">@selected.ModelId</span> · @selected.CostSummary
+        @foreach (var tier in _tiers.Where(t => t.ModelId == selected.ModelId && !t.IsDefaultTier))
+        {
+            <br />@($"{tier.Tier} ({tier.Threshold}): {tier.CostSummary}")
+        }
+    </MudText>
+}
+else if (_loaded && _options.Count == 0)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+        No models yet. <MudLink Href="/models" Typo="Typo.caption">Manage models</MudLink>
+    </MudText>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Model";
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string DefaultText { get; set; } = "Default (inherit)";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private List<AiModel> _tiers = [];
+    private List<AiModel> _options = [];
+    private bool _loaded;
+
+    private AiModel? SelectedModel => _options.FirstOrDefault(o => o.ModelId == Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _tiers = await ModelService.GetEnabledAsync();
+            // One option per model id; prefer the default pricing tier.
+            _options = _tiers
+                .GroupBy(m => m.ModelId, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderBy(m => m.IsDefaultTier ? 0 : 1).First())
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the managed models: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _loaded = true;
+        }
+    }
+
+    private string ModelLabel(string? modelId)
+    {
+        if (string.IsNullOrEmpty(modelId))
+        {
+            return DefaultText;
+        }
+        var option = _options.FirstOrDefault(o => o.ModelId == modelId);
+        return option is null ? modelId : $"{option.Name} — {AiModel.FormatPrice(option.InputPrice)} in / {AiModel.FormatPrice(option.OutputPrice)} out";
+    }
+}

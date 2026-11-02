@@ -1,0 +1,118 @@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" Model="_model">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Name" Label="Name" Required="true" MaxLength="100"
+                                  Immediate="true" TextChanged="NameChanged" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.ModelId" Label="Model id" Required="true" MaxLength="100" Class="mono"
+                                  HelperText="Value written to the agent's model key." />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Provider" Label="Provider" MaxLength="100" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.ReleaseStatus" Label="Release status" MaxLength="50" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect Variant="Variant.Outlined" T="string" @bind-Value="_model.Category" Label="Category" Clearable="true">
+                        <MudSelectItem T="string" Value="@("Powerful")">Powerful</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Versatile")">Versatile</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Lightweight")">Lightweight</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Tier" Label="Tier" Required="true" MaxLength="50"
+                                  HelperText="'Default' or e.g. 'Long context'." />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Threshold" Label="Threshold (input tokens)" MaxLength="50" Placeholder="e.g. > 200K" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Price in USD per 1M tokens</MudText>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField @bind-Value="_model.InputPrice" Label="Input" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField @bind-Value="_model.CachedInputPrice" Label="Cached input" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField @bind-Value="_model.CacheWritePrice" Label="Cache write" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField @bind-Value="_model.OutputPrice" Label="Output" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_model.IsEnabled" Color="Color.Primary" Label="Available in the agent editor" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+        @if (_error is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="() => MudDialog.Cancel()" Disabled="_saving">Cancel</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Inject] private AiModelService Models { get; set; } = default!;
+
+    [Parameter] public AiModel? Model { get; set; }
+
+    private MudForm? _form;
+    private AiModel _model = new();
+    private string _derivedModelId = string.Empty;
+    private bool _saving;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        _model = Model?.Copy() ?? new AiModel();
+        _derivedModelId = ModelPricingScraper.ToModelId(_model.Name);
+    }
+
+    // The id follows the name until the user changes it.
+    private void NameChanged(string name)
+    {
+        var derived = ModelPricingScraper.ToModelId(name ?? string.Empty);
+        if (string.IsNullOrEmpty(_model.ModelId) || _model.ModelId == _derivedModelId)
+        {
+            _model.ModelId = derived;
+        }
+        _derivedModelId = derived;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            MudDialog.Close(DialogResult.Ok(await Models.SaveAsync(_model)));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

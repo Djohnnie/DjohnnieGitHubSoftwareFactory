@@ -1,0 +1,303 @@
+@* The custom agent form, shared by the agent editor (a file in a repository) and the agent template editor (the database). *@
+
+<MudForm @ref="_form" Model="Agent">
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudStack Spacing="4">
+                @Header
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Profile</MudText>
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.Name" Label="Name" Immediate="true" DebounceInterval="200"
+                                  OnDebounceIntervalElapsed="OnNameChangedAsync"
+                                  HelperText="Display name. Optional; defaults to the file name." />
+                    @if (ReadOnlyFile is null)
+                    {
+                        <MudTextField Variant="Variant.Outlined" T="string" Value="FileName" ValueChanged="OnFileNameChangedAsync" Label="File name" Required="true" Immediate="true"
+                                      RequiredError="A file name is required." Validation="@(new Func<string?, string?>(ValidateFileName))"
+                                      Adornment="Adornment.End" AdornmentText="@AgentDefinition.FileExtension"
+                                      HelperText="@FileNameHelperText" />
+                    }
+                    else
+                    {
+                        <MudTextField Value="@ReadOnlyFile" Label="File" ReadOnly="true" Variant="Variant.Outlined" />
+                    }
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.Description" Label="Description" Required="true" Lines="2" Sizing="InputSizing.Auto"
+                                  RequiredError="A description is required."
+                                  HelperText="What the agent is for and what it can do. Copilot uses this to decide when to use it." />
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">Instructions</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                        The Markdown prompt below the frontmatter: the agent's behavior, expertise and instructions.
+                        Switch between WYSIWYG and raw Markdown at the bottom of the editor.
+                    </MudText>
+                    <MarkdownEditor @bind-Value="Agent.Prompt" MaxLength="AgentDefinition.MaxPromptLength" Placeholder="You are a ..." />
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">Tools</MudText>
+                    <MudRadioGroup T="AgentToolsMode" @bind-Value="Agent.ToolsMode">
+                        <MudRadio Value="AgentToolsMode.All" Color="Color.Primary">All tools</MudRadio>
+                        <MudRadio Value="AgentToolsMode.Selected" Color="Color.Primary">Selected tools</MudRadio>
+                        <MudRadio Value="AgentToolsMode.None" Color="Color.Primary">No tools</MudRadio>
+                    </MudRadioGroup>
+
+                    @if (Agent.ToolsMode == AgentToolsMode.Selected)
+                    {
+                        <div class="mt-2">
+                            @foreach (var tool in Agent.Tools)
+                            {
+                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClose="@(_ => Agent.Tools.Remove(tool))">@tool</MudChip>
+                            }
+                            @if (Agent.Tools.Count == 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Warning">No tools selected yet: this is the same as "No tools".</MudText>
+                            }
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 d-block">Quick add</MudText>
+                        <div>
+                            @foreach (var (alias, description) in ToolAliases.Where(a => !Agent.Tools.Contains(a.Alias, StringComparer.OrdinalIgnoreCase)))
+                            {
+                                <MudTooltip Text="@description">
+                                    <MudChip Variant="Variant.Outlined" T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Add" OnClick="() => AddTool(alias)">@alias</MudChip>
+                                </MudTooltip>
+                            }
+                        </div>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_customTool" Label="Other tool" Immediate="true"
+                                          HelperText="e.g. some-mcp-server/some-tool or some-mcp-server/*"
+                                          OnKeyDown="@(e => e.Key == "Enter" ? AddCustomTool() : Task.CompletedTask)" />
+                            <MudButton Variant="Variant.Outlined" OnClick="AddCustomTool" Disabled="string.IsNullOrWhiteSpace(_customTool)">Add</MudButton>
+                        </MudStack>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.h6">Handoffs</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Suggested next steps to another agent. VS Code only; ignored on GitHub.com.</MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Agent.Handoffs.Add(new AgentHandoff()))">Add handoff</MudButton>
+                    </MudStack>
+                    @foreach (var handoff in Agent.Handoffs)
+                    {
+                        <MudPaper Outlined="true" Elevation="0" Class="pa-3 mt-3">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField Variant="Variant.Outlined" @bind-Value="handoff.Label" Label="Label" Required="true" RequiredError="A label is required." />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudAutocomplete Variant="Variant.Outlined" T="string" @bind-Value="handoff.Agent" Label="Agent" Required="true" RequiredError="An agent is required."
+                                                     SearchFunc="SearchAgentsAsync" CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField Variant="Variant.Outlined" @bind-Value="handoff.Prompt" Label="Prompt" Lines="2" Sizing="InputSizing.Auto" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudSwitch @bind-Value="handoff.Send" Color="Color.Primary" Label="Send the prompt automatically" />
+                                        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => Agent.Handoffs.Remove(handoff)" title="Remove handoff" />
+                                    </MudStack>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">MCP servers</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                        Extra MCP servers for this agent, as the YAML value of <code>mcp-servers</code>. GitHub.com only; ignored by VS Code.
+                    </MudText>
+                    <MudTextField @bind-Value="Agent.McpServersYaml" Variant="Variant.Outlined" Lines="6" Sizing="InputSizing.Auto" MaxLines="30"
+                                  Class="mono" Immediate="true" Validation="@(new Func<string?, string?>(AgentFileSerializer.ValidateMcpServers))"
+                                  Placeholder="@McpPlaceholder" />
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.h6">Metadata</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Free-form name/value annotations. GitHub.com only.</MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Agent.Metadata.Add(new AgentMetadataEntry()))">Add entry</MudButton>
+                    </MudStack>
+                    @foreach (var entry in Agent.Metadata)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="entry.Key" Label="Name" />
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="entry.Value" Label="Value" />
+                            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => Agent.Metadata.Remove(entry)" title="Remove entry" />
+                        </MudStack>
+                    }
+                </MudPaper>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudStack Spacing="4" Class="sticky-side">
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Settings</MudText>
+                    <MudSelect Variant="Variant.Outlined" T="string" @bind-Value="Agent.Target" Label="Target" HelperText="Where the agent is available.">
+                        <MudSelectItem T="string" Value="@((string?)null)">GitHub Copilot and VS Code</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("github-copilot")">GitHub Copilot only</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("vscode")">VS Code only</MudSelectItem>
+                    </MudSelect>
+                    <ModelPicker @bind-Value="Agent.Model" HelperText="Leave on default to use the default model." />
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.ArgumentHint" Label="Argument hint"
+                                  HelperText="Hint shown in the chat input (VS Code only)." />
+                    <MudSwitch @bind-Value="Agent.UserInvocable" Color="Color.Primary" Class="mt-4"
+                               Label="Users can select this agent" />
+                    <MudSwitch @bind-Value="Agent.DisableModelInvocation" Color="Color.Primary"
+                               Label="Only when selected manually" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        When on, Copilot will not pick this agent automatically based on the task.
+                    </MudText>
+                </MudPaper>
+
+                @if (Agent.PreservedKeys.Count > 0)
+                {
+                    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true">
+                        Other frontmatter keys are kept as they are: @string.Join(", ", Agent.PreservedKeys)
+                    </MudAlert>
+                }
+
+                @Actions
+
+                <MudExpansionPanels Outlined="true" Elevation="0">
+                    <MudExpansionPanel Text="Preview file" @bind-Expanded="_previewExpanded">
+                        @if (_previewExpanded)
+                        {
+                            <pre class="preview">@Preview()</pre>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudForm>
+
+@code {
+    /// <summary>The agent being edited; the form changes it in place.</summary>
+    [Parameter, EditorRequired] public AgentDefinition Agent { get; set; } = default!;
+
+    /// <summary>The editable file name (without extension). Ignored when <see cref="ReadOnlyFile"/> is set.</summary>
+    [Parameter] public string? FileName { get; set; }
+
+    [Parameter] public EventCallback<string?> FileNameChanged { get; set; }
+
+    [Parameter] public string? FileNameHelperText { get; set; }
+
+    /// <summary>The path of an existing file, which cannot be renamed. When set, the file name is shown read-only.</summary>
+    [Parameter] public string? ReadOnlyFile { get; set; }
+
+    /// <summary>Agent names suggested as handoff targets.</summary>
+    [Parameter] public IReadOnlyList<string> HandoffAgents { get; set; } = [];
+
+    /// <summary>Content above the profile, such as DGHSF Copilot.</summary>
+    [Parameter] public RenderFragment? Header { get; set; }
+
+    /// <summary>The save panel in the side column.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private static readonly (string Alias, string Description)[] ToolAliases =
+    [
+        ("read", "Read file contents"),
+        ("edit", "Edit files"),
+        ("search", "Search for files or text in files"),
+        ("execute", "Run commands in the shell"),
+        ("agent", "Invoke other custom agents"),
+        ("web", "Fetch URLs and search the web (not on GitHub.com)"),
+        ("todo", "Manage task lists (not on GitHub.com)"),
+        ("github/*", "All read-only tools of the GitHub MCP server"),
+        ("playwright/*", "All tools of the Playwright MCP server")
+    ];
+
+    private const string McpPlaceholder = "custom-mcp:\n  type: local\n  command: some-command\n  args: ['--arg1']\n  tools: ['*']";
+
+    private MudForm? _form;
+    private AgentDefinition? _agent;
+    private string _nameSlug = string.Empty;
+    private string? _customTool;
+    private bool _previewExpanded;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_agent, Agent))
+        {
+            _agent = Agent;
+            _nameSlug = AgentDefinition.Slugify(Agent.Name);
+        }
+    }
+
+    /// <summary>Validates the form and the instructions length; returns the problem, or <c>null</c> when the agent can be saved.</summary>
+    public async Task<string?> ValidateAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return "Please fix the highlighted fields.";
+        }
+
+        return Agent.Prompt.Length > AgentDefinition.MaxPromptLength
+            ? $"The instructions are longer than {AgentDefinition.MaxPromptLength:N0} characters."
+            : null;
+    }
+
+    // The file name follows the name until it is changed by hand.
+    private async Task OnNameChangedAsync(string? name)
+    {
+        var slug = AgentDefinition.Slugify(name);
+        if (ReadOnlyFile is null && (string.IsNullOrEmpty(FileName) || FileName == _nameSlug))
+        {
+            await FileNameChanged.InvokeAsync(slug);
+        }
+
+        _nameSlug = slug;
+    }
+
+    private Task OnFileNameChangedAsync(string? fileName) => FileNameChanged.InvokeAsync(fileName);
+
+    private string? ValidateFileName(string? value) =>
+        AgentDefinition.IsValidFileName(value) ? null : "Use letters, digits, '-', '_' or '.' only.";
+
+    private void AddTool(string tool)
+    {
+        tool = tool.Trim();
+        if (tool.Length > 0 && !Agent.Tools.Contains(tool, StringComparer.OrdinalIgnoreCase))
+        {
+            Agent.Tools.Add(tool);
+        }
+    }
+
+    private Task AddCustomTool()
+    {
+        foreach (var tool in (_customTool ?? string.Empty).Split(','))
+        {
+            AddTool(tool);
+        }
+
+        _customTool = null;
+        return Task.CompletedTask;
+    }
+
+    private Task<IEnumerable<string>> SearchAgentsAsync(string? value, CancellationToken cancellationToken) =>
+        Task.FromResult(string.IsNullOrWhiteSpace(value)
+            ? HandoffAgents.AsEnumerable()
+            : HandoffAgents.Where(a => a.Contains(value, StringComparison.OrdinalIgnoreCase)));
+
+    private string Preview()
+    {
+        try
+        {
+            return AgentFileSerializer.Serialize(Agent);
+        }
+        catch (FormatException ex)
+        {
+            return $"Cannot generate the file: {ex.Message}";
+        }
+    }
+}

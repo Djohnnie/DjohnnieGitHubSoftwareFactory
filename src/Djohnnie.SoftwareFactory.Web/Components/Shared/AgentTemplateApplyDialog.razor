@@ -1,0 +1,181 @@
+@inject GitHubService GitHub
+@inject AgentTemplateService Templates
+@inject RepositoryContext Repository
+
+<MudDialog>
+    <DialogContent>
+        @if (_results is null)
+        {
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_fileName" Label="File name" Required="true" Immediate="true"
+                                  Adornment="Adornment.End" AdornmentText="@AgentDefinition.FileExtension"
+                                  Error="@(!AgentDefinition.IsValidFileName(_fileName))" ErrorText="Use letters, digits, '-', '_' or '.' only."
+                                  HelperText="@($"Committed as {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)} to the default branch.")" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message"
+                                  Placeholder="@($"Create custom agent {Template.Name} from template")" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_overwrite" Color="Color.Warning" Label="Replace the agent file when a repository already has a different one" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_error is not null)
+            {
+                <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">Could not load repositories: @_error</MudAlert>
+            }
+            else
+            {
+                <MudTable Outlined="true" T="GitHubRepository" Items="_repositories" Loading="_repositories is null" LoadingProgressColor="Color.Primary"
+                          MultiSelection="true" @bind-SelectedItems="_selected" Filter="Matches" Dense="true" Hover="true" Elevation="0"
+                          RowsPerPage="10" Class="mt-2">
+                    <ToolBarContent>
+                        <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search repositories" Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Immediate="true" Clearable="true" Class="mt-0" />
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh>Repository</MudTh>
+                        <MudTh>Language</MudTh>
+                        <MudTh>Visibility</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Repository"><b>@context.FullName</b></MudTd>
+                        <MudTd DataLabel="Language">@context.Language</MudTd>
+                        <MudTd DataLabel="Visibility">@(context.Private ? "private" : "public")</MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText>No repositories match your search.</MudText>
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="[10, 25, 50]" />
+                    </PagerContent>
+                </MudTable>
+            }
+        }
+        else
+        {
+            @if (_running)
+            {
+                <MudProgressLinear Color="Color.Primary" Value="@(100.0 * _results.Count / _total)" Class="mb-2" />
+            }
+            <MudList T="string" Dense="true">
+                @foreach (var result in _results)
+                {
+                    <MudListItem T="string" Icon="@OutcomeIcon(result.Outcome)" IconColor="@OutcomeColor(result.Outcome)">
+                        <b>@result.Repository</b>: @OutcomeText(result.Outcome)
+                        @if (result.CommitUrl is not null)
+                        {
+                            <text> (</text><MudLink Href="@result.CommitUrl" Target="_blank">@result.CommitSha?[..Math.Min(7, result.CommitSha.Length)]</MudLink><text>)</text>
+                        }
+                        @if (result.Message is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@result.Message</MudText>
+                        }
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_results is null)
+        {
+            <MudButton Variant="Variant.Outlined" OnClick="() => MudDialog.Cancel()">Cancel</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ApplyAsync" StartIcon="@Icons.Material.Filled.LibraryAdd"
+                       Disabled="@(_selected.Count == 0 || !AgentDefinition.IsValidFileName(_fileName))">
+                Commit to @_selected.Count @(_selected.Count == 1 ? "repository" : "repositories")
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => MudDialog.Close()" Disabled="_running">Close</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public AgentTemplate Template { get; set; } = default!;
+
+    private IReadOnlyList<GitHubRepository>? _repositories;
+    private HashSet<GitHubRepository> _selected = [];
+    private string? _fileName;
+    private string? _commitMessage;
+    private bool _overwrite;
+    private string? _search;
+    private string? _error;
+    private List<AgentTemplateApplyResult>? _results;
+    private bool _running;
+    private int _total;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fileName = Template.FileName;
+        try
+        {
+            _repositories = (await GitHub.GetRepositoriesAsync()).Where(r => !r.Archived).ToList();
+            if (Repository.Current is { } current && _repositories.FirstOrDefault(r => r.FullName == current.FullName) is { } selected)
+            {
+                _selected.Add(selected);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        _results = [];
+        _total = _selected.Count;
+        _running = true;
+        try
+        {
+            await Templates.ApplyAsync(Template, _selected.Select(r => r.FullName).Order(StringComparer.OrdinalIgnoreCase), _fileName!, _overwrite, _commitMessage,
+                new SynchronousProgress(result => { _results.Add(result); StateHasChanged(); }));
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private bool Matches(GitHubRepository repo) =>
+        string.IsNullOrWhiteSpace(_search)
+        || repo.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || (repo.Language?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static string OutcomeText(AgentTemplateApplyOutcome outcome) => outcome switch
+    {
+        AgentTemplateApplyOutcome.Created => "created",
+        AgentTemplateApplyOutcome.Updated => "replaced",
+        AgentTemplateApplyOutcome.Unchanged => "already up to date",
+        AgentTemplateApplyOutcome.Skipped => "skipped",
+        _ => "failed"
+    };
+
+    private static string OutcomeIcon(AgentTemplateApplyOutcome outcome) => outcome switch
+    {
+        AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Icons.Material.Filled.CheckCircle,
+        AgentTemplateApplyOutcome.Unchanged => Icons.Material.Filled.Remove,
+        AgentTemplateApplyOutcome.Skipped => Icons.Material.Filled.SkipNext,
+        _ => Icons.Material.Filled.Error
+    };
+
+    private static Color OutcomeColor(AgentTemplateApplyOutcome outcome) => outcome switch
+    {
+        AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Color.Success,
+        AgentTemplateApplyOutcome.Skipped => Color.Warning,
+        AgentTemplateApplyOutcome.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    // Progress<T> posts to the captured context asynchronously; this reports in order, on the render thread.
+    private sealed class SynchronousProgress(Action<AgentTemplateApplyResult> report) : IProgress<AgentTemplateApplyResult>
+    {
+        public void Report(AgentTemplateApplyResult value) => report(value);
+    }
+}

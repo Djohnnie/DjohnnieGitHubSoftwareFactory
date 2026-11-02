@@ -1,0 +1,423 @@
+@page "/epics/new"
+@page "/epics/{Id:int}"
+@using ToastUI
+@inject EpicService EpicService
+@inject EpicTemplateService Templates
+@inject AiModelService ModelService
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New epic" : _epic?.Title ?? "Epic")</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+
+<MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New epic" : _epic?.Title ?? "Epic")</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_epic is not null)
+{
+    <MudForm @ref="_form" Model="_epic">
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudStack Spacing="4">
+                    @if (IsNew && _templates.Count > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                            <MudSelect T="int" Value="_templateChoiceId" ValueChanged="ChangeTemplateAsync" Label="Epic template"
+                                       Variant="Variant.Outlined" Disabled="_busy"
+                                       HelperText="The first template alphabetically is proposed. Choose another or start blank.">
+                                <MudSelectItem T="int" Value="0">No template</MudSelectItem>
+                                @foreach (var template in _templates)
+                                {
+                                    <MudSelectItem T="int" Value="template.Id">@template.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudPaper>
+                    }
+                    @if (_epic.IsDraft)
+                    {
+                        <AssistantChat Instructions="@AssistantForms.EpicInstructions" Tools="_assistantTools" Placeholder="Describe what you want to build"
+                                       Subtitle="Describe the epic; I'll ask what I need to know and fill in the form."
+                                       Suggestions="@(IsNew ? EpicSuggestions : [])" />
+                    }
+                    @if (!_epic.IsDraft)
+                    {
+                        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true">
+                            This epic is accepted and lives on as GitHub issue #@_epic.IssueNumber; its content is no longer edited here.
+                        </MudAlert>
+                    }
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudTextField Variant="Variant.Outlined" @bind-Value="_epic.Title" Label="Title" Required="true" RequiredError="A title is required."
+                                      MaxLength="256" ReadOnly="!_epic.IsDraft" Immediate="true"
+                                      Placeholder="@SelectedTemplate?.TitleTemplate"
+                                      HelperText="Becomes the title of the GitHub issue." />
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6">Description</MudText>
+                        @if (_epic.IsDraft)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                                What needs to be built and why: goals, scope, acceptance criteria. This becomes the issue body and is
+                                what the Copilot cloud agent works from.
+                            </MudText>
+                            <MarkdownEditor @bind-Value="_epic.Description" MaxLength="Epic.MaxDescriptionLength"
+                                            Placeholder="Describe the epic: goal, scope and acceptance criteria..." />
+                        }
+                        else
+                        {
+                            <Viewer Value="@(_epic.Description ?? string.Empty)" />
+                        }
+                    </MudPaper>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudStack Spacing="4" Class="sticky-side">
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Status</MudText>
+                        <WorkItemStatusChip Status="_epic.Status" />
+                        @if (_epic.IssueNumber is { } number)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                GitHub issue <MudLink Href="@_epic.IssueUrl" Target="_blank">#@number</MudLink>
+                            </MudText>
+                        }
+                        @if (_epic.AcceptedAt is { } accepted)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Accepted @accepted.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                        }
+                        @if (_epic.AssignedAt is { } assigned)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Assigned to Copilot @assigned.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                        }
+                        @if (_epic.Status == WorkItemStatus.Accepted)
+                        {
+                            <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
+                                The issue exists but is not assigned to Copilot yet. Check the assignment and try again.
+                            </MudAlert>
+                        }
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6">Assignment</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                            On accept, the issue is assigned to the Copilot cloud agent with these settings.
+                        </MudText>
+                        <AgentPicker @bind-Value="_epic.CustomAgent" ReadOnly="!CanEditAssignment"
+                                     HelperText="A custom agent from .github/agents, or the default Copilot agent." />
+                        <ModelPicker @bind-Value="_epic.Model" ReadOnly="!CanEditAssignment" DefaultText="Auto (Copilot picks the model)"
+                                     HelperText="The model the cloud agent uses." />
+                        <MudTextField Variant="Variant.Outlined" @bind-Value="_epic.BaseBranch" Label="Base branch" ReadOnly="!CanEditAssignment"
+                                      Placeholder="@Repository.Current?.DefaultBranch" MaxLength="250"
+                                      HelperText="The branch Copilot starts from. Empty for the default branch." />
+                        <MudTextField Variant="Variant.Outlined" @bind-Value="_epic.CustomInstructions" Label="Custom instructions" ReadOnly="!CanEditAssignment"
+                                      Lines="3" Sizing="InputSizing.Auto" MaxLength="10000"
+                                      HelperText="Extra guidance for Copilot on top of the issue." />
+
+                        <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
+                            <MudButton Variant="Variant.Outlined" Href="/epics" Disabled="_busy">Back</MudButton>
+                            @if (CanEditAssignment)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_busy"
+                                           StartIcon="@Icons.Material.Filled.Save">@(_epic.IsDraft ? "Save draft" : "Save")</MudButton>
+                            }
+                            @if (_epic.IsDraft)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="AcceptAsync" Disabled="_busy"
+                                           StartIcon="@Icons.Material.Filled.RocketLaunch">Accept &amp; assign</MudButton>
+                            }
+                            else if (_epic.Status == WorkItemStatus.Accepted)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="AssignAsync" Disabled="_busy"
+                                           StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
+                            }
+                        </MudStack>
+                        @if (_busy)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+                        }
+                    </MudPaper>
+
+                    @if (!IsNew)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync"
+                                   Disabled="_busy">Delete epic</MudButton>
+                    }
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "template")] public int? TemplateId { get; set; }
+
+    private static readonly string[] EpicSuggestions =
+    [
+        "Add passkey login next to the existing sign-in",
+        "Add a dark mode that follows the system setting",
+        "Export all data to CSV"
+    ];
+
+    private AssistantTools? _assistantTools;
+    private List<AgentSummary>? _customAgents;
+
+    private MudForm? _form;
+    private Epic? _epic;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private List<BreadcrumbItem> _breadcrumbs = [];
+    private List<EpicTemplate> _templates = [];
+    private int _selectedTemplateId;
+    private int _templateChoiceId;
+    private bool _initialized;
+    private (int? Id, int? TemplateId) _loadedParameters;
+
+    private bool IsNew => Id is null;
+    private EpicTemplate? SelectedTemplate => _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
+    private bool CanEditAssignment => _epic is { Status: WorkItemStatus.Draft or WorkItemStatus.Accepted };
+    private string RepositoryName => Repository.Current!.FullName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var parameters = (Id, TemplateId);
+        if (_initialized && _loadedParameters == parameters)
+        {
+            return;
+        }
+        _initialized = true;
+        _loadedParameters = parameters;
+        _loading = true;
+        _error = null;
+        _templates = [];
+        _selectedTemplateId = 0;
+        _templateChoiceId = 0;
+        try
+        {
+            _epic = IsNew ? new Epic { RepositoryFullName = RepositoryName } : await EpicService.GetAsync(RepositoryName, Id!.Value);
+            if (_epic is null)
+            {
+                _error = "This epic does not exist in the selected repository.";
+            }
+            if (IsNew)
+            {
+                await LoadTemplatesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the epic: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        SetBreadcrumbs();
+        await CreateAssistantToolsAsync();
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        try
+        {
+            _templates = await Templates.GetAllAsync();
+            var template = TemplateId is { } id
+                ? _templates.FirstOrDefault(t => t.Id == id)
+                : _templates.FirstOrDefault();
+            if (TemplateId is not null && template is null)
+            {
+                Snackbar.Add("The requested epic template no longer exists. Start blank or choose another template.", Severity.Warning);
+            }
+            _selectedTemplateId = template?.Id ?? 0;
+            _templateChoiceId = _selectedTemplateId;
+            _epic!.Description = template?.Description ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the epic templates: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task ChangeTemplateAsync(int templateId)
+    {
+        _templateChoiceId = templateId;
+        if (templateId == _selectedTemplateId)
+        {
+            return;
+        }
+
+        var previousDescription = SelectedTemplate?.Description ?? string.Empty;
+        if (_epic!.Description != previousDescription)
+        {
+            StateHasChanged();
+            if (await Dialogs.ShowMessageBoxAsync("Replace description?",
+                "Changing the template replaces your current description. The epic title and assignment stay unchanged.",
+                yesText: "Replace", cancelText: "Cancel") != true)
+            {
+                _templateChoiceId = _selectedTemplateId;
+                return;
+            }
+        }
+
+        _selectedTemplateId = templateId;
+        _epic.Description = SelectedTemplate?.Description ?? string.Empty;
+    }
+
+    private async Task CreateAssistantToolsAsync()
+    {
+        List<AiModel> models = [];
+        try
+        {
+            models = await ModelService.GetEnabledAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the managed models for DGHSF Copilot: {ex.Message}", Severity.Warning);
+        }
+
+        _assistantTools = AssistantForms.ForEpic(
+            () => _epic!,
+            models,
+            async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
+            change => InvokeAsync(() => { change(); StateHasChanged(); }));
+    }
+
+    private void SetBreadcrumbs() => _breadcrumbs =
+    [
+        new("Epics", "/epics"),
+        new(_epic is { Id: > 0 } ? _epic.Title : IsNew ? "New" : $"#{Id}", null, disabled: true)
+    ];
+
+    private async Task<bool> SaveCoreAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return false;
+        }
+
+        var wasNew = _epic!.Id == 0;
+        _epic = await EpicService.SaveAsync(_epic);
+        SetBreadcrumbs();
+        if (wasNew)
+        {
+            Navigation.NavigateTo($"/epics/{_epic.Id}", replace: true);
+        }
+        return true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (await SaveCoreAsync())
+            {
+                Snackbar.Add($"Saved '{_epic!.Title}'.", Severity.Success);
+            }
+        }
+        catch (Exception ex) when (EpicActions.IsExpected(ex) || ex is Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AcceptAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_epic!.Description))
+        {
+            Snackbar.Add("Describe the epic before accepting it.", Severity.Warning);
+            return;
+        }
+        if (await EpicActions.ConfirmAcceptAsync(Dialogs, _epic, RepositoryName) != true)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (await SaveCoreAsync())
+            {
+                var result = await EpicService.AcceptAsync(RepositoryName, _epic!.Id);
+                _epic = result.Epic;
+                EpicActions.Report(Snackbar, result);
+            }
+        }
+        catch (Exception ex) when (EpicActions.IsExpected(ex) || ex is Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not accept: {ex.Message}", Severity.Error);
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AssignAsync()
+    {
+        _busy = true;
+        try
+        {
+            _epic = await EpicService.SaveAsync(_epic!);
+            var result = await EpicService.AssignAgentAsync(RepositoryName, _epic.Id);
+            _epic = result.Epic;
+            EpicActions.Report(Snackbar, result);
+        }
+        catch (Exception ex) when (EpicActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not assign: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (await EpicActions.ConfirmDeleteAsync(Dialogs, _epic!) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await EpicService.DeleteAsync(RepositoryName, _epic!.Id);
+            Snackbar.Add($"Deleted '{_epic.Title}'.", Severity.Success);
+            Navigation.NavigateTo("/epics");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not delete: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_epic is { Id: > 0 } && await EpicService.GetAsync(RepositoryName, _epic.Id) is { } fresh)
+        {
+            _epic = fresh;
+        }
+    }
+}

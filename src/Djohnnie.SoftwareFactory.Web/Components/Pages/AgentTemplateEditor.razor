@@ -1,0 +1,164 @@
+@page "/agent-templates/new"
+@page "/agent-templates/edit/{Id:int}"
+@attribute [RepositoryIndependent]
+@inject AgentTemplateService Templates
+@inject AiModelService ModelService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New agent template" : $"Edit template {_fileName}")</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+
+<MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New agent template" : $"Edit template {_title}")</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_agent is not null)
+{
+    <AgentForm @ref="_agentForm" Agent="_agent" @bind-FileName="_fileName" HandoffAgents="_otherTemplates"
+               FileNameHelperText="@($"Default file name when creating an agent: {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)}")">
+        <Header>
+            <AssistantChat Instructions="@AssistantForms.TemplateInstructions" Tools="_assistantTools" Placeholder="Describe the agent you need"
+                           Subtitle="@(IsNew ? "Describe the reusable agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this template; I'll update the form.")"
+                           Suggestions="@(IsNew ? TemplateSuggestions : [])" />
+        </Header>
+        <Actions>
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Template</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Stored in DGHSF, not in a repository. Saving doesn't change agents that were already created from it.
+                </MudText>
+                <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                    <MudButton Variant="Variant.Outlined" Href="/agent-templates" Disabled="_saving">Cancel</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Save template
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </Actions>
+    </AgentForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private static readonly string[] TemplateSuggestions =
+    [
+        "A code reviewer that focuses on security and performance",
+        "A documentation writer that keeps the README up to date",
+        "A read-only planner that breaks work into tasks"
+    ];
+
+    private AssistantTools? _assistantTools;
+
+    private AgentForm? _agentForm;
+    private AgentDefinition? _agent;
+    private string? _fileName;
+    private string? _title;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private List<string> _otherTemplates = [];
+    private List<BreadcrumbItem> _breadcrumbs = [];
+
+    private bool IsNew => Id is null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CreateAssistantToolsAsync();
+        try
+        {
+            var templates = await Templates.GetAllAsync();
+            _otherTemplates = templates.Where(t => t.Id != Id).Select(t => t.FileName).Order(StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (IsNew)
+            {
+                _agent = new AgentDefinition();
+                return;
+            }
+
+            var template = templates.SingleOrDefault(t => t.Id == Id);
+            if (template is null)
+            {
+                _error = "This agent template does not exist.";
+                return;
+            }
+
+            _title = template.Name;
+            _fileName = template.FileName;
+            _agent = template.ToAgent();
+        }
+        catch (FormatException ex)
+        {
+            _error = $"This template cannot be edited because it is not a valid agent file: {ex.Message}";
+        }
+        finally
+        {
+            _breadcrumbs =
+            [
+                new("Agent templates", "/agent-templates"),
+                new(IsNew ? "New" : _fileName ?? Id.ToString()!, null, disabled: true)
+            ];
+            _loading = false;
+        }
+    }
+
+    private async Task CreateAssistantToolsAsync()
+    {
+        List<AiModel> models = [];
+        try
+        {
+            models = await ModelService.GetEnabledAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the managed models for DGHSF Copilot: {ex.Message}", Severity.Warning);
+        }
+
+        _assistantTools = AssistantForms.ForAgent(
+            () => _agent!,
+            () => _fileName,
+            fileName => _fileName = fileName,
+            models,
+            change => InvokeAsync(() => { change(); StateHasChanged(); }));
+    }
+
+    private async Task SaveAsync()
+    {
+        if (await _agentForm!.ValidateAsync() is { } problem)
+        {
+            Snackbar.Add(problem, Severity.Warning);
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            var template = await Templates.SaveAsync(Id ?? 0, _fileName!, _agent!);
+            Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
+            Navigation.NavigateTo("/agent-templates");
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not save the template: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

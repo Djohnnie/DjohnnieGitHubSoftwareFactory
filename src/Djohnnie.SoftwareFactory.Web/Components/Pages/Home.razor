@@ -1,0 +1,66 @@
+@page "/"
+@inject RepositoryContext Repository
+
+<PageTitle>DGHSF</PageTitle>
+
+@if (Repository.Current is { } repo)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-6">
+        <MudAvatar Size="Size.Large"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+        <div>
+            <MudText Typo="Typo.h4">@repo.FullName</MudText>
+            @if (!string.IsNullOrEmpty(repo.Description))
+            {
+                <MudText Typo="Typo.body1" Color="Color.Secondary">@repo.Description</MudText>
+            }
+        </div>
+    </MudStack>
+
+    <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap">
+        <MudChip Variant="Variant.Outlined" T="string" Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">@(repo.Private ? "Private" : "Public")</MudChip>
+        @if (!string.IsNullOrEmpty(repo.Language))
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Code">@repo.Language</MudChip>
+        }
+        @if (!string.IsNullOrEmpty(repo.DefaultBranch))
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.AccountTree">@repo.DefaultBranch</MudChip>
+        }
+        @if (repo.PushedAt is { } pushedAt)
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Schedule">Last push @pushedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudChip>
+        }
+        <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true" Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderAvatar><MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" /></CardHeaderAvatar>
+                    <CardHeaderContent><MudText Typo="Typo.h6">Custom agents</MudText></CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">Create, edit and delete the Copilot agent profiles in <code>.github/agents</code>.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Href="/agents" Color="Color.Primary">Manage agents</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true" Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderAvatar><MudIcon Icon="@Icons.Material.Filled.Flag" Color="Color.Primary" /></CardHeaderAvatar>
+                    <CardHeaderContent><MudText Typo="Typo.h6">Epics</MudText></CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">Draft epics, then accept them as GitHub issues assigned to the Copilot cloud agent.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Href="/epics" Color="Color.Primary">Manage epics</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}

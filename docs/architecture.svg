@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Segoe UI, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#444"/></marker>
+  </defs>
+  <rect width="900" height="520" fill="#fafafa"/>
+  <text x="450" y="28" text-anchor="middle" font-size="18" font-weight="bold">DGHSF – Architecture</text>
+
+  <rect x="20" y="200" width="110" height="60" rx="8" fill="#e8f0fe" stroke="#4a6fa5"/>
+  <text x="75" y="226" text-anchor="middle">Me</text>
+  <text x="75" y="246" text-anchor="middle" font-size="12">(browser)</text>
+
+  <rect x="190" y="60" width="300" height="400" rx="10" fill="#fff" stroke="#4a6fa5" stroke-width="2"/>
+  <text x="340" y="84" text-anchor="middle" font-weight="bold">Azure App Service</text>
+  <text x="340" y="102" text-anchor="middle" font-size="12">Blazor SSR (.NET 10)</text>
+  <rect x="210" y="115" width="260" height="50" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
+  <text x="340" y="145" text-anchor="middle">UI: repos, agents, work items, settings</text>
+  <rect x="210" y="180" width="260" height="50" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
+  <text x="340" y="210" text-anchor="middle">GitHub OAuth login (allow-list)</text>
+  <rect x="210" y="245" width="260" height="50" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
+  <text x="340" y="275" text-anchor="middle">GitHub API client (user token)</text>
+  <rect x="210" y="310" width="260" height="60" rx="6" fill="#fff4e0" stroke="#c98a1b"/>
+  <text x="340" y="335" text-anchor="middle">DGHSF Copilot</text>
+  <text x="340" y="355" text-anchor="middle" font-size="12">Microsoft Agent Framework + tools</text>
+  <rect x="210" y="385" width="260" height="55" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
+  <text x="340" y="410" text-anchor="middle">EF Core data access</text>
+  <text x="340" y="428" text-anchor="middle" font-size="12">(session holds OAuth token)</text>
+
+  <rect x="570" y="60" width="150" height="70" rx="8" fill="#e6f4ea" stroke="#3d8b57"/>
+  <text x="645" y="90" text-anchor="middle">Azure SQL</text>
+  <text x="645" y="110" text-anchor="middle" font-size="12">source of truth</text>
+
+  <rect x="570" y="190" width="150" height="70" rx="8" fill="#fff4e0" stroke="#c98a1b"/>
+  <text x="645" y="218" text-anchor="middle">Azure Function</text>
+  <text x="645" y="238" text-anchor="middle" font-size="12">CRON poller (PAT)</text>
+
+  <rect x="570" y="320" width="150" height="70" rx="8" fill="#fff4e0" stroke="#c98a1b"/>
+  <text x="645" y="348" text-anchor="middle">Microsoft Foundry</text>
+  <text x="645" y="368" text-anchor="middle" font-size="12">LLM (own cost)</text>
+
+  <rect x="770" y="170" width="110" height="130" rx="8" fill="#f3e8fd" stroke="#7b4fa5"/>
+  <text x="825" y="225" text-anchor="middle">GitHub</text>
+  <text x="825" y="245" text-anchor="middle" font-size="12">repos, issues,</text>
+  <text x="825" y="262" text-anchor="middle" font-size="12">labels, agents,</text>
+  <text x="825" y="279" text-anchor="middle" font-size="12">Copilot agent</text>
+
+  <g stroke="#444" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M130,230 L190,230"/>
+    <path d="M470,410 L520,410 L520,95 L570,95"/>
+    <path d="M470,270 L520,270 L520,300 L760,300 L760,260 L770,260"/>
+    <path d="M470,340 L570,355"/>
+    <path d="M720,225 L770,225"/>
+    <path d="M645,190 L645,130"/>
+  </g>
+  <text x="650" y="165" font-size="11" fill="#444">reads/writes</text>
+  <text x="530" y="315" font-size="11" fill="#444">issues, commits</text>
+</svg>

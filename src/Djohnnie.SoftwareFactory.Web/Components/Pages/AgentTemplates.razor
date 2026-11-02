@@ -1,0 +1,145 @@
+@page "/agent-templates"
+@attribute [RepositoryIndependent]
+@inject AgentTemplateService Templates
+@inject RepositoryContext Repository
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>Agent templates</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Agent templates</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Reusable custom agents, stored in DGHSF. Use them to create the same agent in one or more repositories.
+        </MudText>
+    </div>
+    <MudStack Row="true">
+        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+        <MudButton Href="/agent-templates/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" T="TemplateRow" Items="_templates" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <HeaderContent>
+        <MudTh>Template</MudTh>
+        <MudTh>File</MudTh>
+        <MudTh>Target</MudTh>
+        <MudTh>Model</MudTh>
+        <MudTh>Updated</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Template">
+            <MudText Typo="Typo.body1"><b>@context.Template.Name</b></MudText>
+            @if (context.ParseError is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error">Invalid template: @context.ParseError</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Template.Description</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="File"><code>@context.Template.FileName@AgentDefinition.FileExtension</code></MudTd>
+        <MudTd DataLabel="Target">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Agents.TargetLabel(context.Agent?.Target)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Model">@(string.IsNullOrEmpty(context.Agent?.Model) ? "default" : context.Agent.Model)</MudTd>
+        <MudTd DataLabel="Updated">@context.Template.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            <MudTooltip Text="@(Repository.Current is { } repo ? $"Create an agent in {repo.FullName} from this template" : "Select a repository and create an agent from this template")">
+                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary" Disabled="context.ParseError is not null"
+                               Href="@($"/agents/new?template={context.Template.Id}")" aria-label="Create agent" />
+            </MudTooltip>
+            <MudTooltip Text="Commit to several repositories">
+                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.LibraryAdd" Disabled="context.ParseError is not null"
+                               OnClick="() => AddToRepositoriesAsync(context.Template)" aria-label="Add to repositories" />
+            </MudTooltip>
+            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" Href="@($"/agent-templates/edit/{context.Template.Id}")"
+                           Disabled="context.ParseError is not null" title="Edit" />
+            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>There are no agent templates yet. Create one here, or save an existing agent as a template from the Agents page.</MudText>
+            <MudButton Href="/agent-templates/new" Variant="Variant.Outlined" Color="Color.Primary">Create the first template</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private sealed record TemplateRow(AgentTemplate Template, AgentDefinition? Agent, string? ParseError);
+
+    private List<TemplateRow> _templates = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _templates = (await Templates.GetAllAsync()).Select(template =>
+            {
+                try
+                {
+                    return new TemplateRow(template, template.ToAgent(), null);
+                }
+                catch (FormatException ex)
+                {
+                    return new TemplateRow(template, null, ex.Message);
+                }
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the agent templates: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task AddToRepositoriesAsync(AgentTemplate template)
+    {
+        var parameters = new DialogParameters<AgentTemplateApplyDialog> { { d => d.Template, template } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true, BackdropClick = false };
+        await Dialogs.ShowAsync<AgentTemplateApplyDialog>($"Add '{template.Name}' to repositories", parameters, options);
+    }
+
+    private async Task DeleteAsync(TemplateRow row)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete template",
+            $"Delete the template '{row.Template.Name}'? Agents that were created from it are not affected.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await Templates.DeleteAsync(row.Template.Id);
+            _templates.Remove(row);
+            Snackbar.Add($"Deleted the template '{row.Template.Name}'.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not delete '{row.Template.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+}

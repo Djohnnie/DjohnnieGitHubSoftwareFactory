@@ -1,0 +1,78 @@
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+
+@*
+    Picks a custom agent of the current repository. The value is the agent id that GitHub expects:
+    the file name without .agent.md, e.g. "code-reviewer" for .github/agents/code-reviewer.agent.md.
+*@
+<MudSelect Variant="Variant.Outlined" T="string" Value="Value" ValueChanged="ValueChanged" Label="@Label" ToStringFunc="AgentLabel"
+           HelperText="@HelperText" Clearable="true" Disabled="Disabled" ReadOnly="ReadOnly" Error="_error is not null" ErrorText="@_error"
+           AnchorOrigin="Origin.BottomCenter" MaxHeight="420">
+    <MudSelectItem T="string" Value="@((string?)null)">@DefaultText</MudSelectItem>
+    @if (!string.IsNullOrEmpty(Value) && !_agents.Any(a => a.Id == Value))
+    {
+        <MudSelectItem T="string" Value="@Value">
+            <span class="mono">@Value</span>
+            <MudText Typo="Typo.caption" Color="Color.Warning">Not found in @AgentDefinition.Directory</MudText>
+        </MudSelectItem>
+    }
+    @foreach (var agent in _agents)
+    {
+        <MudSelectItem T="string" Value="@agent.Id" Disabled="!agent.AvailableOnGitHub">
+            <MudText Typo="Typo.body2"><b>@agent.Name</b> <span class="mono">(@agent.Id)</span></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @(agent.AvailableOnGitHub ? agent.Description : "VS Code only; not available to the cloud agent.")
+            </MudText>
+        </MudSelectItem>
+    }
+</MudSelect>
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+}
+else if (SelectedAgent is { Model: { Length: > 0 } model })
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">The agent's own model: <span class="mono">@model</span></MudText>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Custom agent";
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string DefaultText { get; set; } = "Copilot (no custom agent)";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private List<AgentSummary> _agents = [];
+    private bool _loading = true;
+    private string? _error;
+
+    private AgentSummary? SelectedAgent => _agents.FirstOrDefault(a => a.Id == Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _agents = await GitHub.GetCustomAgentsAsync(Repository.Current!.FullName);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not load the custom agents: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string AgentLabel(string? id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return DefaultText;
+        }
+        var agent = _agents.FirstOrDefault(a => a.Id == id);
+        return agent is null || agent.Name == id ? id : $"{agent.Name} ({id})";
+    }
+}

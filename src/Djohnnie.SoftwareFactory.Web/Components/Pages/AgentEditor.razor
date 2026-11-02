@@ -1,0 +1,248 @@
+@page "/agents/new"
+@page "/agents/edit/{FileName}"
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+@inject AiModelService ModelService
+@inject AgentTemplateService Templates
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New agent" : $"Edit {FileName}")</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+
+<MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New custom agent" : $"Edit {_agent?.Name ?? FileName}")</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_agent is not null)
+{
+    @if (_template is not null)
+    {
+        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.ContentCopy">
+            Prefilled from the template <b>@_template.Name</b>. Adapt it to @Repository.Current?.FullName before you save; the template itself does not change.
+        </MudAlert>
+    }
+
+    <AgentForm @ref="_agentForm" Agent="_agent" @bind-FileName="_fileName" HandoffAgents="_otherAgents"
+               ReadOnlyFile="@(IsNew ? null : _path)"
+               FileNameHelperText="@($"Saved as {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)}")">
+        <Header>
+            <AssistantChat Instructions="@AssistantForms.AgentInstructions" Tools="_assistantTools" Placeholder="Describe the agent you need"
+                           Subtitle="@(IsNew && _template is null ? "Describe the agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this agent; I'll update the form.")"
+                           Suggestions="@(IsNew && _template is null ? AgentSuggestions : [])" />
+        </Header>
+        <Actions>
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Commit</MudText>
+                <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message" Placeholder="@DefaultCommitMessage"
+                              HelperText="@($"Committed directly to {Repository.Current?.DefaultBranch ?? "the default branch"}.")" />
+                <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                    <MudButton Variant="Variant.Outlined" Href="/agents" Disabled="_saving">Cancel</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Save &amp; commit
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </Actions>
+    </AgentForm>
+}
+
+@code {
+    [Parameter] public string? FileName { get; set; }
+
+    /// <summary>The id of an agent template to prefill a new agent with.</summary>
+    [SupplyParameterFromQuery(Name = "template")] public int? TemplateId { get; set; }
+
+    private static readonly string[] AgentSuggestions =
+    [
+        "A code reviewer that focuses on security and performance",
+        "A test writer for our .NET code with xUnit",
+        "A read-only planner that breaks work into tasks"
+    ];
+
+    private AssistantTools? _assistantTools;
+
+    private AgentForm? _agentForm;
+    private AgentDefinition? _agent;
+    private AgentTemplate? _template;
+    private string? _sha;
+    private string _path = string.Empty;
+    private string? _fileName;
+    private string? _commitMessage;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private List<string> _otherAgents = [];
+    private List<BreadcrumbItem> _breadcrumbs = [];
+
+    private bool IsNew => FileName is null;
+
+    private string DisplayName => !string.IsNullOrWhiteSpace(_agent?.Name)
+        ? _agent.Name.Trim()
+        : IsNew ? _fileName ?? "agent" : AgentDefinition.GetFileName(FileName!);
+
+    private string DefaultCommitMessage => $"{(IsNew ? "Create" : "Update")} custom agent {DisplayName}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _breadcrumbs =
+        [
+            new("Agents", "/agents"),
+            new(IsNew ? "New" : FileName!, null, disabled: true)
+        ];
+
+        var repo = Repository.Current!.FullName;
+        await CreateAssistantToolsAsync();
+        try
+        {
+            var directory = await GitHub.GetDirectoryAsync(repo, AgentDefinition.Directory);
+            _otherAgents = directory
+                .Where(i => i.Type == "file" && i.Name.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && i.Name != FileName)
+                .Select(i => AgentDefinition.GetFileName(i.Name))
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (IsNew)
+            {
+                await LoadTemplateAsync();
+                _agent ??= new AgentDefinition();
+                return;
+            }
+
+            if (FileName!.Contains('/') || FileName.Contains('\\'))
+            {
+                _error = "Invalid agent file name.";
+                return;
+            }
+
+            _path = $"{AgentDefinition.Directory}/{FileName}";
+            var file = await GitHub.GetFileAsync(repo, _path);
+            if (file is null)
+            {
+                _error = $"{_path} does not exist in {repo}.";
+                return;
+            }
+
+            _sha = file.Sha;
+            _agent = AgentFileSerializer.Parse(file.Content);
+        }
+        catch (FormatException ex)
+        {
+            _error = $"{_path} cannot be edited here because it is not a valid agent file: {ex.Message}";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadTemplateAsync()
+    {
+        if (TemplateId is not { } id)
+        {
+            return;
+        }
+
+        _template = await Templates.GetAsync(id);
+        if (_template is null)
+        {
+            Snackbar.Add("The agent template no longer exists; starting from an empty agent.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _agent = _template.ToAgent();
+            _fileName = _template.FileName;
+        }
+        catch (FormatException ex)
+        {
+            _error = $"The template '{_template.Name}' is not a valid agent file: {ex.Message}";
+            _template = null;
+        }
+    }
+
+    private async Task CreateAssistantToolsAsync()
+    {
+        List<AiModel> models = [];
+        try
+        {
+            models = await ModelService.GetEnabledAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the managed models for DGHSF Copilot: {ex.Message}", Severity.Warning);
+        }
+
+        _assistantTools = AssistantForms.ForAgent(
+            () => _agent!,
+            () => _fileName,
+            IsNew ? fileName => _fileName = fileName : null,
+            models,
+            change => InvokeAsync(() => { change(); StateHasChanged(); }));
+    }
+
+    private async Task SaveAsync()
+    {
+        if (await _agentForm!.ValidateAsync() is { } problem)
+        {
+            Snackbar.Add(problem, Severity.Warning);
+            return;
+        }
+
+        _error = null;
+        string content;
+        try
+        {
+            content = AgentFileSerializer.Serialize(_agent!);
+        }
+        catch (FormatException ex)
+        {
+            _error = ex.Message;
+            return;
+        }
+
+        var repo = Repository.Current!.FullName;
+        var path = IsNew ? AgentDefinition.GetPath(_fileName!) : _path;
+        var message = string.IsNullOrWhiteSpace(_commitMessage) ? DefaultCommitMessage : _commitMessage.Trim();
+
+        _saving = true;
+        try
+        {
+            if (IsNew && await GitHub.GetFileAsync(repo, path) is not null)
+            {
+                _error = $"{path} already exists in {repo}. Choose another file name.";
+                return;
+            }
+
+            var result = await GitHub.PutFileAsync(repo, path, content, message, _sha);
+            Snackbar.Add($"Saved '{DisplayName}' and committed {Agents.Short(result.CommitSha)} to {repo}.", Severity.Success);
+            Navigation.NavigateTo("/agents");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not save the agent: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

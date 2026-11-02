@@ -1,0 +1,199 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject RepositoryContext Repository
+@inject IDialogService Dialogs
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudThemeProvider Theme="AppTheme.Theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <div class="app-header">
+        <MudAppBar Elevation="0" Dense="false" Fixed="false">
+            <a href="/" class="brand">
+                <img src="logo.svg" alt="" width="28" height="28" />
+                <span>DGHSF</span>
+            </a>
+
+            @if (Repository.Current is { } repo)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider" />
+                <div class="current-repo">
+                    <MudAvatar Size="Size.Small"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+                    <div class="current-repo-text">
+                        <span class="current-repo-owner">@repo.Owner.Login /</span>
+                        <a href="@repo.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@repo.Name</a>
+                    </div>
+                    <MudIcon Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="ml-1 appbar-muted" />
+                    <MudTooltip Text="Switch repository">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link ml-3"
+                                   StartIcon="@Icons.Material.Filled.SwapHoriz" OnClick="SwitchRepositoryAsync">Switch</MudButton>
+                    </MudTooltip>
+                </div>
+            }
+            else if (_loaded && IsRepositoryIndependent)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider" />
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link"
+                           StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="SwitchRepositoryAsync">Select repository</MudButton>
+            }
+
+            <MudSpacer />
+
+            <AuthorizeView>
+                <Authorized>
+                    <form method="post" action="/auth/logout" class="logout">
+                        <AntiforgeryToken />
+                        <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" />
+                        <a href="@($"https://github.com/{Uri.EscapeDataString(context.User.Identity?.Name ?? string.Empty)}")"
+                           target="_blank" rel="noopener" class="current-user-name" title="Open GitHub profile">@context.User.Identity?.Name</a>
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small" Class="header-link"
+                                   StartIcon="@Icons.Material.Filled.Logout">Sign out</MudButton>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+        </MudAppBar>
+
+        @if (Repository.Current is not null || (_loaded && IsRepositoryIndependent))
+        {
+            <nav class="app-navigation" aria-label="Main navigation">
+                @if (Repository.Current is not null)
+                {
+                    <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
+                }
+                <div class="navigation-split" role="group" aria-label="Agents and templates">
+                    @if (Repository.Current is not null)
+                    {
+                        <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
+                    }
+                    else
+                    {
+                        <span class="px-3">Agents</span>
+                    }
+                    <MudTooltip Text="Agent templates">
+                        <MudIconButton Href="/agent-templates" Variant="Variant.Text" Color="Color.Inherit" Icon="@Icons.Material.Filled.ContentCopy"
+                                       Class="header-link navigation-template" aria-label="Agent templates" />
+                    </MudTooltip>
+                </div>
+                <div class="navigation-split" role="group" aria-label="Epics and templates">
+                    @if (Repository.Current is not null)
+                    {
+                        <MudButton Href="/epics" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Flag">Epics</MudButton>
+                    }
+                    else
+                    {
+                        <span class="px-3">Epics</span>
+                    }
+                    <MudTooltip Text="Epic templates">
+                        <MudIconButton Href="/epic-templates" Variant="Variant.Text" Color="Color.Inherit" Icon="@Icons.Material.Filled.ContentCopy"
+                                       Class="header-link navigation-template" aria-label="Epic templates" />
+                    </MudTooltip>
+                </div>
+                @if (Repository.Current is not null)
+                {
+                    <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+                }
+            </nav>
+        }
+    </div>
+
+    <MudMainContent Class="pt-0">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+            @if (!_loaded)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (Repository.Current is null && !IsRepositoryIndependent)
+            {
+                <MudText Typo="Typo.h4" GutterBottom="true">Select a repository</MudText>
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                    Everything in DGHSF works on one repository at a time. Pick the one you want to work on; you can switch at any time from the top bar.
+                    Templates don't need a repository: manage <MudLink Href="/agent-templates">agent templates</MudLink>
+                    or <MudLink Href="/epic-templates">epic templates</MudLink>.
+                </MudText>
+                <MudPaper Outlined="true" Elevation="0">
+                    <RepositoryPicker OnSelected="SelectAsync" />
+                </MudPaper>
+            }
+            else
+            {
+                @* Keyed on the repository, so pages are recreated (and reload their data) after a switch. *@
+                <div @key="@(IsRepositoryIndependent ? string.Empty : Repository.Current!.FullName)">
+                    @Body
+                </div>
+            }
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private bool _loaded;
+
+    private bool IsRepositoryIndependent =>
+        RouteData?.PageType.IsDefined(typeof(RepositoryIndependentAttribute), inherit: false) == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Repository.Changed += OnRepositoryChanged;
+        await Repository.LoadAsync();
+        _loaded = true;
+    }
+
+    private async Task SwitchRepositoryAsync()
+    {
+        var parameters = new DialogParameters<RepositoryPickerDialog>
+        {
+            { d => d.SelectedFullName, Repository.Current?.FullName }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true, CloseOnEscapeKey = true };
+
+        var dialog = await Dialogs.ShowAsync<RepositoryPickerDialog>("Switch repository", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: GitHubRepository repository })
+        {
+            await SelectAsync(repository);
+        }
+    }
+
+    private async Task SelectAsync(GitHubRepository repository)
+    {
+        var changed = Repository.Current is not null && repository.FullName != Repository.Current.FullName;
+        try
+        {
+            await Repository.SelectAsync(repository);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not select repository: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        // Deep pages (like a specific agent) belong to the previous repository; a new agent can move along.
+        var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        if (changed && path.StartsWith("/agents/", StringComparison.OrdinalIgnoreCase)
+            && !path.Equals("/agents/new", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/agents");
+        }
+        else if (changed && path.StartsWith("/epics/", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/epics");
+        }
+    }
+
+    private void OnRepositoryChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Repository.Changed -= OnRepositoryChanged;
+}

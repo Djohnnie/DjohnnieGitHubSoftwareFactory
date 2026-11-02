@@ -1,0 +1,32 @@
+@page "/login"
+@layout PlainLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Sign in</PageTitle>
+
+<div class="login">
+    <MudPaper Outlined="true" Elevation="0" Class="pa-8">
+        <img src="logo.svg" alt="DGHSF logo" width="128" height="128" />
+        <MudText Typo="Typo.h4" Class="mt-4">DGHSF</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">Djohnnie's GitHub Software Factory</MudText>
+
+        @if (Error == "denied")
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">Sign-in failed or this GitHub account is not allowed.</MudAlert>
+        }
+
+        <MudButton Href="@($"/auth/login?returnUrl={Uri.EscapeDataString(SafeReturnUrl)}")" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Custom.Brands.GitHub" Size="Size.Large">Sign in with GitHub</MudButton>
+    </MudPaper>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] private string? Error { get; set; }
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private string SafeReturnUrl =>
+        !string.IsNullOrEmpty(ReturnUrl) && ReturnUrl[0] == '/' && !ReturnUrl.StartsWith("//") && !ReturnUrl.StartsWith("/\\")
+            ? ReturnUrl
+            : "/";
+}

@@ -1,0 +1,32 @@
+/* column-reverse keeps the log scrolled to the newest message. */
+.chat-log {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.chat-message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin: 6px 0;
+    max-width: 90%;
+    font-size: 0.9rem;
+}
+
+.chat-message.from-user {
+    margin-left: auto;
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+.chat-message.from-assistant {
+    margin-right: auto;
+    background: var(--mud-palette-background-gray);
+}
+
+.chat-message.is-error {
+    color: var(--mud-palette-error);
+}

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="DGHSF logo">
+  <title>DGHSF – Djohnnie's GitHub Software Factory</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6E40C9"/>
+      <stop offset="0.55" stop-color="#E8457C"/>
+      <stop offset="1" stop-color="#FF9F1C"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Factory: saw-tooth roof and chimney -->
+  <path d="M100 404 V260 L180 212 V260 L260 212 V260 L340 212 V260 H356 V132 H412 V404 Z" fill="#fff"/>
+
+  <!-- Code mark, coloured with the background gradient so it reads as a cut-out -->
+  <g fill="none" stroke="url(#bg)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="198,300 162,334 198,368"/>
+    <line x1="274" y1="292" x2="238" y2="376"/>
+    <polyline points="314,300 350,334 314,368"/>
+  </g>
+
+  <!-- AI sparkle (DGHSF Copilot) -->
+  <path d="M384 48 Q389 79 420 84 Q389 89 384 120 Q379 89 348 84 Q379 79 384 48 Z" fill="#FFE066"/>
+  <path d="M318 140 Q320 154 334 156 Q320 158 318 172 Q316 158 302 156 Q316 154 318 140 Z" fill="#fff" opacity="0.85"/>
+</svg>
