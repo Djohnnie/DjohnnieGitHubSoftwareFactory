@@ -4,6 +4,7 @@ using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -74,7 +75,7 @@ public class FavoritesTests : IDisposable
     [Fact]
     public async Task InvalidRepositoryName_CannotBeMarkedAsFavorite()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ValidationFailedException>(() =>
             _services.GetRequiredService<RepositoryService>().SetFavoriteAsync("not-a-repository", true, _cancellationToken));
     }
 

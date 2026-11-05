@@ -20,6 +20,10 @@ internal static class WorkItemConfiguration
                 item.HasOne(e => e.Parent).WithMany(e => e.Children)
                     .HasForeignKey(e => e.ParentId).OnDelete(DeleteBehavior.Restrict);
                 item.HasIndex(e => new { e.RepositoryId, e.Type, e.Status });
+
+                // Concurrent accepts of the same draft: only one claims it (see WorkItemStore.BeginAcceptAsync).
+                item.Property(e => e.Status).IsConcurrencyToken();
+                item.Property(e => e.AcceptStartedAt).IsConcurrencyToken();
             });
         }
 

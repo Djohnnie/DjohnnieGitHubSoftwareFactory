@@ -117,7 +117,7 @@
             _agents[_agents.FindIndex(a => a.Key == saved.Key)] = saved;
             Snackbar.Add($"{saved.Name} is {(saved.IsEnabled ? "enabled" : "disabled")}.", Severity.Success);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             Snackbar.Add($"Could not save {agent.Name}: {ex.Message}", Severity.Error);
         }

@@ -54,5 +54,15 @@ public class WorkItem
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? AcceptedAt { get; set; }
+
+    /// <summary>
+    /// Set while a draft is being accepted, so the GitHub issue is created only once: when the attempt started, or
+    /// <see cref="InterruptedAccept"/> when an earlier attempt failed after the issue may already have been created.
+    /// <c>null</c> when no acceptance is going on. A concurrency token, like <see cref="Status"/>.
+    /// </summary>
+    public DateTimeOffset? AcceptStartedAt { get; set; }
+
+    /// <summary>The <see cref="AcceptStartedAt"/> of an interrupted acceptance: the next attempt looks for the issue first.</summary>
+    public static readonly DateTimeOffset InterruptedAccept = DateTimeOffset.MinValue;
     public DateTimeOffset? AssignedAt { get; set; }
 }

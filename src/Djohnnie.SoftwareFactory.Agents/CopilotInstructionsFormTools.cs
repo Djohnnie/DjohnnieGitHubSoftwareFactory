@@ -118,7 +118,11 @@ public sealed class CopilotInstructionsFormTools(
         [Description("The directory path relative to the repository root, e.g. 'src' or '.github/workflows'. Empty for the root.")] string? path = null,
         CancellationToken cancellationToken = default)
     {
-        var directory = NormalizePath(path);
+        if (!TryNormalizePath(path, out var directory))
+        {
+            return OutsideRepository;
+        }
+
         try
         {
             var entries = await listDirectory(directory, cancellationToken);
@@ -142,7 +146,10 @@ public sealed class CopilotInstructionsFormTools(
         [Description("The file path relative to the repository root, e.g. 'README.md' or 'src/App/App.csproj'.")] string path,
         CancellationToken cancellationToken = default)
     {
-        var file = NormalizePath(path);
+        if (!TryNormalizePath(path, out var file))
+        {
+            return OutsideRepository;
+        }
         if (file.Length == 0)
         {
             return "Pass the path of a file; use list_repository_files to list a directory.";
@@ -169,11 +176,17 @@ public sealed class CopilotInstructionsFormTools(
         }
     }
 
-    private static string NormalizePath(string? path)
+    private const string OutsideRepository = "Paths are relative to the repository root and can't contain '..'.";
+
+    /// <summary>Normalizes a repository path; <c>false</c> for paths with '..', which could reach other GitHub API endpoints.</summary>
+    private static bool TryNormalizePath(string? path, out string normalized)
     {
-        return string.Join('/', (path ?? string.Empty).Replace('\\', '/')
+        var segments = (path ?? string.Empty).Replace('\\', '/')
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(segment => segment != "."));
+            .Where(segment => segment != ".")
+            .ToList();
+        normalized = string.Join('/', segments);
+        return !segments.Contains("..");
     }
 
     private static string DisplayPath(string path)

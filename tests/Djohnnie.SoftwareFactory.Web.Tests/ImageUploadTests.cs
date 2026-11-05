@@ -1,6 +1,7 @@
 using System.Reflection;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.Uploads;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,7 +52,7 @@ public class ImageUploadTests : IDisposable
     [Fact]
     public async Task Upload_RejectsNonImages()
     {
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.UploadImageAsync("evil.svg", "<svg onload=alert(1)>"u8.ToArray()));
+        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("evil.svg", "<svg onload=alert(1)>"u8.ToArray()));
 
         Assert.Contains("Only PNG, JPEG, GIF and WebP", error.Message);
         Assert.Empty(_storage.Stored);
@@ -63,7 +64,7 @@ public class ImageUploadTests : IDisposable
         var content = new byte[1024 * 1024 + 1];
         Png.CopyTo(content, 0);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.UploadImageAsync("big.png", content));
+        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("big.png", content));
 
         Assert.Contains("at most 1 MB", error.Message);
         Assert.Empty(_storage.Stored);

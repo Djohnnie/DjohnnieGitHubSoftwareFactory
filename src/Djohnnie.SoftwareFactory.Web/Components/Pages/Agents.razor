@@ -210,7 +210,7 @@
             Snackbar.Add($"Saved '{template.Name}' as a template.", Severity.Success);
             Navigation.NavigateTo($"/agent-templates/edit/{template.Id}");
         }
-        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             Snackbar.Add($"Could not save '{fileName}' as a template: {ex.Message}", Severity.Error);
         }

@@ -4,6 +4,7 @@ using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
@@ -53,8 +54,8 @@ public partial class WorkItemServiceTests
         Assert.Contains("\"id\": \"gpt-5\"", input);
         Assert.DoesNotContain("disabled-model", input);
         Assert.Contains("You are the Model Selector", InternalAgentTests.SystemPrompt(chat, 0));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => items.SelectModelAsync(bug with { Type = WorkItemType.Epic }, _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => items.SelectModelAsync(bug with { Description = " " }, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => items.SelectModelAsync(bug with { Type = WorkItemType.Epic }, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => items.SelectModelAsync(bug with { Description = " " }, _cancellationToken));
     }
 
     [Theory]

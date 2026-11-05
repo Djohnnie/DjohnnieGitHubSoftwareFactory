@@ -6,8 +6,10 @@ using System.Text.RegularExpressions;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Djohnnie.SoftwareFactory.Web.Auth;
 using MediatR;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -50,6 +52,61 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Equal([WorkItemType.Epic, WorkItemType.Feature, WorkItemType.Story], WorkItemType.Bug.ParentTypes);
         Assert.Equal([WorkItemType.Feature, WorkItemType.Bug, WorkItemType.Task], WorkItemType.Epic.ChildTypes);
         Assert.Empty(WorkItemType.Task.ChildTypes);
+    }
+
+    [Fact]
+    public async Task Accept_WhileAnotherAcceptIsGoingOn_IsRefusedWithoutCreatingAnIssue()
+    {
+        var bug = await SaveAsync(WorkItemType.Bug, "Crash");
+        var store = _services.GetRequiredService<IWorkItemStore>();
+        await store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+
+        Assert.Contains("being accepted", error.Message);
+        Assert.Empty(_gitHub.CreatedIssues);
+    }
+
+    [Fact]
+    public async Task Accept_AfterAnAttemptThatMayHaveCreatedTheIssue_ReusesThatIssue()
+    {
+        var bug = await SaveAsync(WorkItemType.Bug, "Crash");
+        _gitHub.NextIssueCreationStatus = HttpStatusCode.BadGateway;
+        await Assert.ThrowsAsync<GitHubApiException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+        Assert.Equal(WorkItemStatus.Draft, (await _service.GetAsync(Repo, bug.Id, _cancellationToken))!.Status);
+
+        var result = await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
+
+        var issue = Assert.Single(_gitHub.CreatedIssues);
+        Assert.Contains(WorkItemWorkflow.Marker(bug), issue.Body);
+        Assert.Equal(issue.Number, result.WorkItem.IssueNumber);
+        Assert.Equal(WorkItemStatus.InProgress, result.WorkItem.Status);
+    }
+
+    [Fact]
+    public async Task Accept_AfterGitHubRefusedTheIssue_CreatesItWithoutLookingForAnEarlierOne()
+    {
+        var bug = await SaveAsync(WorkItemType.Bug, "Crash");
+        _gitHub.NextIssueCreationStatus = HttpStatusCode.UnprocessableEntity;
+        await Assert.ThrowsAsync<GitHubApiException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+
+        var result = await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
+
+        Assert.Equal(42, Assert.Single(_gitHub.CreatedIssues).Number);
+        Assert.Equal(42, result.WorkItem.IssueNumber);
+        Assert.DoesNotContain(_gitHub.Requests, r => r.Method == "GET" && r.Path == "/repos/owner/repo/issues");
+    }
+
+    [Fact]
+    public async Task Accept_AnAcceptedItemAgain_IsRefusedWithoutCreatingAnotherIssue()
+    {
+        var bug = await SaveAsync(WorkItemType.Bug, "Crash");
+        await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
+        var store = _services.GetRequiredService<IWorkItemStore>();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.MarkAcceptedAsync(Repo, bug.Id, 1, 1, "https://example.com", _cancellationToken));
+        Assert.Single(_gitHub.CreatedIssues);
     }
 
     [Fact]
@@ -208,7 +265,7 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Equal(new WorkItemReference(story.Id, WorkItemType.Story, "Story", WorkItemStatus.Draft, null, null), bug.Parent);
         Assert.Null((await SaveAsync(WorkItemType.Task, "Standalone task")).ParentId);
 
-        var missingParent = await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Feature, "Orphan"));
+        var missingParent = await Assert.ThrowsAsync<ValidationFailedException>(() => SaveAsync(WorkItemType.Feature, "Orphan"));
         Assert.Equal("A feature needs a parent.", missingParent.Message);
         var wrongParent = await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Story, "Story", epic.Id));
         Assert.Equal("A user story can only be part of a feature, not of an epic.", wrongParent.Message);
@@ -254,9 +311,9 @@ public partial class WorkItemServiceTests : IDisposable
     {
         var mediator = _services.GetRequiredService<ISender>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Title = new string('x', 257) }), _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Type = (WorkItemType)42, Title = "Bad type" }), _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new AcceptWorkItemCommand(new("", 1)), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Title = new string('x', 257) }), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Type = (WorkItemType)42, Title = "Bad type" }), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new AcceptWorkItemCommand(new("", 1)), _cancellationToken));
 
         Assert.Empty((await mediator.Send(new GetWorkItemsQuery(new(Repo)), _cancellationToken)).Dto.Items);
         Assert.Empty(_gitHub.Requests);
@@ -308,6 +365,32 @@ public partial class WorkItemServiceTests : IDisposable
         public List<(int Parent, long SubIssueId)> SubIssues { get; } = [];
         public bool CopilotAssignable { get; set; } = true;
         public bool SubIssuesFail { get; set; }
+        public List<(int Number, string Body)> CreatedIssues { get; } = [];
+
+        /// <summary>
+        /// The status of the next issue creation. A client error creates nothing; a server error still creates the issue,
+        /// like a gateway error after GitHub created it.
+        /// </summary>
+        public HttpStatusCode? NextIssueCreationStatus { get; set; }
+
+        private HttpResponseMessage CreateIssue(string body)
+        {
+            var status = NextIssueCreationStatus;
+            NextIssueCreationStatus = null;
+            if (status is { } refused && refused < HttpStatusCode.InternalServerError)
+            {
+                return Json(refused, """{"message":"Validation Failed"}""");
+            }
+
+            var number = _nextIssue++;
+            CreatedIssues.Add((number, JsonDocument.Parse(body).RootElement.GetProperty("body").GetString()!));
+            return status is { } error ? Json(error, """{"message":"Bad gateway"}""") : Json(HttpStatusCode.Created, Issue(number, []));
+        }
+
+        private static string IssueWithBody(int number, string body)
+        {
+            return $$"""{"id":{{1000 + number}},"number":{{number}},"title":"Issue","html_url":"https://github.com/owner/repo/issues/{{number}}","state":"open","body":{{JsonSerializer.Serialize(body)}},"assignees":[]}""";
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -327,7 +410,12 @@ public partial class WorkItemServiceTests : IDisposable
             }
             if (method == "POST" && path == "/repos/owner/repo/issues")
             {
-                return Json(HttpStatusCode.Created, Issue(_nextIssue++, []));
+                return CreateIssue(body!);
+            }
+            if (method == "GET" && path == "/repos/owner/repo/issues")
+            {
+                var issues = CreatedIssues.AsEnumerable().Reverse().Select(i => IssueWithBody(i.Number, i.Body));
+                return Json(HttpStatusCode.OK, $"[{string.Join(",", issues)}]");
             }
 
             var match = IssuePath().Match(path);

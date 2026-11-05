@@ -13,12 +13,6 @@ public sealed class WorkItemModelSelector(
     IAiModelStore models,
     ILogger<WorkItemModelSelector> logger)
 {
-    /// <summary>Whether a model will be picked for items without one.</summary>
-    public async Task<bool> IsActiveAsync(CancellationToken cancellationToken = default)
-    {
-        return agents.IsConfigured && (await registry.GetAsync(InternalAgentKeys.ModelSelector, cancellationToken)).IsEnabled;
-    }
-
     /// <summary>
     /// Picks one of the enabled managed models; <c>null</c> when the item isn't assigned to an agent, the Model Selector
     /// is disabled or not configured, there are no enabled models, or the agent failed.
@@ -30,20 +24,20 @@ public sealed class WorkItemModelSelector(
             return null;
         }
 
-        var agent = await registry.GetAsync(InternalAgentKeys.ModelSelector, cancellationToken);
-        if (!agent.IsEnabled)
-        {
-            return null;
-        }
-
-        var enabled = await models.GetEnabledAsync(cancellationToken);
-        if (enabled.Count == 0)
-        {
-            return null;
-        }
-
         try
         {
+            var agent = await registry.GetAsync(InternalAgentKeys.ModelSelector, cancellationToken);
+            if (!agent.IsEnabled)
+            {
+                return null;
+            }
+
+            var enabled = await models.GetEnabledAsync(cancellationToken);
+            if (enabled.Count == 0)
+            {
+                return null;
+            }
+
             return await agents.SelectModelAsync(agent, item, enabled, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

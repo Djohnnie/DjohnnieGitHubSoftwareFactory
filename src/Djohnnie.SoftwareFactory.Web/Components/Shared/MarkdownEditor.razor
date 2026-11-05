@@ -166,7 +166,7 @@
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Uploading image {FileName} failed.", fileName);
-            ReportImageError(ex is InvalidOperationException ? ex.Message : "Uploading the image failed.");
+            ReportImageError(ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException ? ex.Message : "Uploading the image failed.");
             return null;
         }
     }

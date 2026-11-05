@@ -45,3 +45,13 @@ public sealed record AssignRequest(
     [property: JsonPropertyName("agent_assignment")] CopilotAssignment AgentAssignment);
 
 public sealed record AddSubIssueRequest([property: JsonPropertyName("sub_issue_id")] long SubIssueId);
+
+/// <summary>An issue in a list response, with the body the plain <see cref="GitHubIssue"/> doesn't carry.</summary>
+public sealed record IssueListItem(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("number")] int Number,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("html_url")] string HtmlUrl,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("body")] string? Body,
+    [property: JsonPropertyName("assignees")] IReadOnlyList<GitHubOwner>? Assignees);

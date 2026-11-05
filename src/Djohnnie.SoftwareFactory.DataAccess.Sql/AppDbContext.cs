@@ -20,6 +20,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             return await base.SaveChangesAsync(cancellationToken);
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new Djohnnie.SoftwareFactory.Contracts.PersistenceException("The data was changed in the meantime. Reload and try again.", ex);
+        }
         catch (DbUpdateException ex)
         {
             throw new Djohnnie.SoftwareFactory.Contracts.PersistenceException("Could not save changes to the database.", ex);

@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using FluentValidation;
 using MediatR;
 
@@ -17,7 +18,7 @@ public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidat
         }
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(string.Join(" ", errors.Distinct()));
+            throw new ValidationFailedException(errors.Distinct().ToList());
         }
         return await next();
     }

@@ -15,6 +15,18 @@ public interface IWorkItemStore
     /// <summary>Deletes an item that has no children.</summary>
     Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Claims a draft for acceptance, so concurrent accepts can't both create a GitHub issue. Refuses when another
+    /// acceptance started less than <paramref name="claimTimeout"/> ago.
+    /// </summary>
+    /// <returns><c>true</c> when an earlier attempt didn't finish, so its issue may already exist on GitHub.</returns>
+    Task<bool> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken);
+
+    /// <summary>Ends a failed acceptance attempt; the item stays a draft.</summary>
+    /// <param name="issueMayExist">Whether the issue may have been created anyway, so the next attempt looks for it first.</param>
+    Task EndFailedAcceptAsync(string repositoryFullName, int id, bool issueMayExist, CancellationToken cancellationToken);
+
+    /// <summary>Completes an acceptance claimed with <see cref="BeginAcceptAsync"/>.</summary>
     Task<WorkItem> MarkAcceptedAsync(string repositoryFullName, int id, long issueId, int issueNumber, string issueUrl, CancellationToken cancellationToken);
 
     Task<WorkItem> MarkAssignedAsync(string repositoryFullName, int id, CancellationToken cancellationToken);

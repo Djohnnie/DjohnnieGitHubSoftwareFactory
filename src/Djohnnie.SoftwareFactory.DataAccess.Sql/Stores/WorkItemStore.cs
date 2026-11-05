@@ -89,11 +89,61 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        if (entity.Status != WorkItemStatus.Draft)
+        {
+            throw new InvalidOperationException($"Only a draft {Name(entity.Type)} can be accepted.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        if (entity.AcceptStartedAt is { } started && started != Entities.WorkItem.InterruptedAccept && now - started < claimTimeout)
+        {
+            throw BeingAccepted(entity.Type);
+        }
+
+        var issueMayExist = entity.AcceptStartedAt is not null;
+        entity.AcceptStartedAt = now;
+        try
+        {
+            // Status and AcceptStartedAt are concurrency tokens: a concurrent claim makes this save fail.
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Djohnnie.SoftwareFactory.Contracts.PersistenceException ex) when (ex.InnerException is DbUpdateConcurrencyException)
+        {
+            throw BeingAccepted(entity.Type);
+        }
+        return issueMayExist;
+    }
+
+    public async Task EndFailedAcceptAsync(string repositoryFullName, int id, bool issueMayExist, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        if (entity.Status != WorkItemStatus.Draft || entity.AcceptStartedAt is null)
+        {
+            return;
+        }
+
+        // Once an issue may exist, keep remembering that until an attempt finishes.
+        entity.AcceptStartedAt = issueMayExist || entity.AcceptStartedAt == Entities.WorkItem.InterruptedAccept
+            ? Entities.WorkItem.InterruptedAccept
+            : null;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<WorkItem> MarkAcceptedAsync(string repositoryFullName, int id, long issueId, int issueNumber, string issueUrl, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        if (entity.Status != WorkItemStatus.Draft)
+        {
+            throw new InvalidOperationException($"This {Name(entity.Type)} was already accepted.");
+        }
         entity.Status = WorkItemStatus.Accepted;
+        entity.AcceptStartedAt = null;
         entity.IssueId = issueId;
         entity.IssueNumber = issueNumber;
         entity.IssueUrl = issueUrl;
@@ -154,6 +204,11 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     {
         return await Query(db.WorkItems, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("The work item no longer exists.");
+    }
+
+    private static InvalidOperationException BeingAccepted(WorkItemType type)
+    {
+        return new InvalidOperationException($"This {Name(type)} is being accepted right now. Reload in a moment.");
     }
 
     private static string Name(WorkItemType type)

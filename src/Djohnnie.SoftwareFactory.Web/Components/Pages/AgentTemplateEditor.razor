@@ -152,7 +152,7 @@ else if (_agent is not null)
             Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
             Navigation.NavigateTo("/agent-templates");
         }
-        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             _error = $"Could not save the template: {ex.Message}";
         }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 using Api = Djohnnie.SoftwareFactory.Contracts.GitHub.Api;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 
@@ -12,7 +13,7 @@ public sealed class GitHubApiException(HttpStatusCode statusCode, string message
     public HttpStatusCode StatusCode { get; } = statusCode;
 }
 
-public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider tokenProvider)
+public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider tokenProvider)
 {
     private const int PageSize = 100;
 
@@ -130,6 +131,31 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
+    /// <summary>
+    /// Finds the most recent issue with <paramref name="label"/> whose body contains <paramref name="marker"/>, or <c>null</c>.
+    /// Uses the issues list (immediately consistent, unlike search) and looks at most at the last <see cref="MaxMarkerPages"/> pages.
+    /// </summary>
+    public async Task<GitHubIssue?> FindIssueByMarkerAsync(string repositoryFullName, string label, string marker, CancellationToken cancellationToken = default)
+    {
+        string? url = $"repos/{repositoryFullName}/issues?labels={Uri.EscapeDataString(label)}&state=all&sort=created&direction=desc&per_page={PageSize}";
+        for (var page = 0; url is not null && page < MaxMarkerPages; page++)
+        {
+            using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+
+            var issues = await response.Content.ReadFromJsonAsync<List<Api.IssueListItem>>(cancellationToken) ?? [];
+            if (issues.FirstOrDefault(i => i.Body?.Contains(marker, StringComparison.Ordinal) == true) is { } found)
+            {
+                return new GitHubIssue(found.Id, found.Number, found.Title, found.HtmlUrl, found.State, found.Assignees);
+            }
+            url = GetNextLink(response);
+        }
+
+        return null;
+    }
+
+    private const int MaxMarkerPages = 10;
+
     public async Task<GitHubIssue> GetIssueAsync(string repositoryFullName, int issueNumber, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/issues/{issueNumber}", null, cancellationToken);
@@ -203,7 +229,15 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
 
     private static string ContentsUrl(string repositoryFullName, string path)
     {
-        return $"repos/{repositoryFullName}/contents/{string.Join('/', path.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString))}";
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        // Uri collapses dot segments even when escaped, so '..' would leave the contents API (e.g. 'contents/../../../user').
+        if (segments.Any(segment => segment is "." or ".."))
+        {
+            throw new ArgumentException($"The path '{path}' can't contain '.' or '..' segments.", nameof(path));
+        }
+
+        return $"repos/{repositoryFullName}/contents/{string.Join('/', segments.Select(Uri.EscapeDataString))}";
     }
 
     private static string? GetNextLink(HttpResponseMessage response)
@@ -213,17 +247,20 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
             return null;
         }
 
-        // Format: <https://api.github.com/...&page=2>; rel="next", <...>; rel="last"
-        foreach (var part in string.Join(',', values).Split(','))
+        // Format: <https://api.github.com/...&page=2>; rel="next", <...>; rel="last". The URLs themselves can contain
+        // commas (e.g. affiliation=owner,collaborator), so match whole <url>; rel="..." entries instead of splitting on ','.
+        foreach (Match link in LinkEntry().Matches(string.Join(", ", values)))
         {
-            var segments = part.Split(';');
-            if (segments.Length == 2 && segments[1].Trim() == "rel=\"next\"")
+            if (link.Groups["rel"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("next"))
             {
-                return segments[0].Trim().TrimStart('<').TrimEnd('>');
+                return link.Groups["url"].Value;
             }
         }
 
         return null;
     }
+
+    [GeneratedRegex("""<(?<url>[^>]*)>\s*;\s*rel="(?<rel>[^"]*)"\s*""")]
+    private static partial Regex LinkEntry();
 
 }

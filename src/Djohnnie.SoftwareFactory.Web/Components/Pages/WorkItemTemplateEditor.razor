@@ -160,7 +160,7 @@ else if (_template is not null)
             Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
             Navigation.NavigateTo(WorkItemRoutes.TemplatesPath(_type));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             _error = $"Could not save the template: {ex.Message}";
         }

@@ -1,6 +1,7 @@
 using Bunit;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -97,7 +98,7 @@ public class WorkItemTemplateTests : BunitContext
         }
         var service = Services.GetRequiredService<WorkItemTemplateService>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(template, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => service.SaveAsync(template, TestContext.Current.CancellationToken));
 
         Assert.Empty(await service.GetAllAsync(WorkItemType.Story, TestContext.Current.CancellationToken));
     }

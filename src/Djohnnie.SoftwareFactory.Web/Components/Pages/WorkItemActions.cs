@@ -9,7 +9,7 @@ internal static class WorkItemActions
 {
     public static bool IsExpected(Exception ex)
     {
-        return ex is InvalidOperationException or GitHubApiException or HttpRequestException
+        return ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or GitHubApiException or HttpRequestException
             or Djohnnie.SoftwareFactory.Contracts.PersistenceException;
     }
 

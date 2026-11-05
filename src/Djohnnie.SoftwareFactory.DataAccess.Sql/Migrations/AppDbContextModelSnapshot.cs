@@ -260,6 +260,10 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTimeOffset?>("AcceptStartedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("AcceptedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -307,6 +311,7 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("Status")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.Property<string>("Title")

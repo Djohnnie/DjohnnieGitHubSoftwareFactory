@@ -2,6 +2,7 @@ using Bunit;
 using Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -102,11 +103,11 @@ public class InternalAgentTests : BunitContext
     {
         var agent = await Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Agents.SaveAsync(agent with { Instructions = " " }, _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Agents.SaveAsync(
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.SaveAsync(agent with { Instructions = " " }, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.SaveAsync(
             agent with { Instructions = new string('a', InternalAgent.MaxInstructionsLength + 1) }, _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Agents.SaveAsync(agent with { Key = "unknown" }, _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Agents.GetAsync("unknown", _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.SaveAsync(agent with { Key = "unknown" }, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.GetAsync("unknown", _cancellationToken));
         Assert.False((await Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken)).IsCustomized);
     }
 

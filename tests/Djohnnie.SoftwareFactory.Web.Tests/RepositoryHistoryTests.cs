@@ -1,5 +1,6 @@
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +40,7 @@ public class RepositoryHistoryTests
         using var services = CreateServices(new TestClock());
         var history = services.GetRequiredService<RepositoryService>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ValidationFailedException>(() =>
             history.RecordAccessAsync("not-a-full-repository-name", TestContext.Current.CancellationToken));
 
         Assert.Empty(await history.GetRecentAsync(TestContext.Current.CancellationToken));

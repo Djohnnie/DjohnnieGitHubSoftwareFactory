@@ -20,6 +20,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject ILogger<WorkItemEditor> Logger
 
 <PageTitle>@Heading</PageTitle>
 
@@ -635,11 +636,13 @@ else if (_item is not null)
                 }
             });
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        catch (Exception ex)
         {
+            // Fire and forget: nothing else observes this task, so a failure must not leave the spinner running.
+            Logger.LogWarning(ex, "Suggesting a model for work item {Id} failed.", item.Id);
             await InvokeAsync(() =>
             {
                 _suggestingModel = false;
