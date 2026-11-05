@@ -11,6 +11,7 @@ public sealed class ModelHandlers(AiModelStore store, ModelPricingScraper scrape
     IRequestHandler<GetEnabledModelsQuery, Response<CollectionResult<AiModel>>>,
     IRequestHandler<SaveModelCommand, Response<AiModel>>,
     IRequestHandler<SetModelEnabledCommand, Response<OperationResult>>,
+    IRequestHandler<SetModelFavoriteCommand, Response<OperationResult>>,
     IRequestHandler<DeleteModelCommand, Response<OperationResult>>,
     IRequestHandler<ImportModelsCommand, Response<ModelImportResult>>,
     IRequestHandler<ScrapeModelsQuery, Response<CollectionResult<AiModel>>>
@@ -27,6 +28,12 @@ public sealed class ModelHandlers(AiModelStore store, ModelPricingScraper scrape
     public async Task<Response<OperationResult>> Handle(SetModelEnabledCommand request, CancellationToken cancellationToken)
     {
         await store.SetEnabledAsync(request.Dto.Id, request.Dto.Enabled, cancellationToken);
+        return new(new());
+    }
+
+    public async Task<Response<OperationResult>> Handle(SetModelFavoriteCommand request, CancellationToken cancellationToken)
+    {
+        await store.SetFavoriteAsync(request.Dto.Id, request.Dto.IsFavorite, cancellationToken);
         return new(new());
     }
 

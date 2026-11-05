@@ -27,6 +27,7 @@ internal static class ContractMapping
         CacheWritePrice = value.CacheWritePrice,
         OutputPrice = value.OutputPrice,
         IsEnabled = value.IsEnabled,
+        IsFavorite = value.IsFavorite,
         SourceUrl = value.SourceUrl,
         UpdatedAt = value.UpdatedAt
     };
@@ -46,33 +47,16 @@ internal static class ContractMapping
         CacheWritePrice = value.CacheWritePrice,
         OutputPrice = value.OutputPrice,
         IsEnabled = value.IsEnabled,
+        IsFavorite = value.IsFavorite,
         SourceUrl = value.SourceUrl,
         UpdatedAt = value.UpdatedAt
     };
 
+    /// <summary>Requires <see cref="Entities.Epic.Repository"/> to be loaded.</summary>
     public static Djohnnie.SoftwareFactory.Contracts.Epics.Epic ToContract(this Entities.Epic value) => new()
     {
         Id = value.Id,
-        RepositoryFullName = value.RepositoryFullName,
-        Title = value.Title,
-        Description = value.Description,
-        Status = value.Status,
-        CustomAgent = value.CustomAgent,
-        Model = value.Model,
-        BaseBranch = value.BaseBranch,
-        CustomInstructions = value.CustomInstructions,
-        IssueNumber = value.IssueNumber,
-        IssueUrl = value.IssueUrl,
-        CreatedAt = value.CreatedAt,
-        UpdatedAt = value.UpdatedAt,
-        AcceptedAt = value.AcceptedAt,
-        AssignedAt = value.AssignedAt
-    };
-
-    public static Entities.Epic ToEntity(this Djohnnie.SoftwareFactory.Contracts.Epics.Epic value) => new()
-    {
-        Id = value.Id,
-        RepositoryFullName = value.RepositoryFullName,
+        RepositoryFullName = value.Repository.FullName,
         Title = value.Title,
         Description = value.Description,
         Status = value.Status,

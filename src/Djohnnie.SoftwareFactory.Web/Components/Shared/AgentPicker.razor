@@ -19,7 +19,14 @@
     @foreach (var agent in _agents)
     {
         <MudSelectItem T="string" Value="@agent.Id" Disabled="!agent.AvailableOnGitHub">
-            <MudText Typo="Typo.body2"><b>@agent.Name</b> <span class="mono">(@agent.Id)</span></MudText>
+            <MudText Typo="Typo.body2">
+                @if (agent.IsFavorite)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" Class="mr-1"
+                             Style="vertical-align:text-bottom" aria-label="Favorite" />
+                }
+                <b>@agent.Name</b> <span class="mono">(@agent.Id)</span>
+            </MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary">
                 @(agent.AvailableOnGitHub ? agent.Description : "VS Code only; not available to the cloud agent.")
             </MudText>

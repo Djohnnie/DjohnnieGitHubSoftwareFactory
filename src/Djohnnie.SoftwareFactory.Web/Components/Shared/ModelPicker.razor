@@ -17,7 +17,14 @@
         <MudSelectItem T="string" Value="@option.ModelId">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width:100%">
                 <div>
-                    <MudText Typo="Typo.body2"><b>@option.Name</b></MudText>
+                    <MudText Typo="Typo.body2">
+                        @if (_favoriteIds.Contains(option.ModelId))
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" Class="mr-1"
+                                     Style="vertical-align:text-bottom" aria-label="Favorite" />
+                        }
+                        <b>@option.Name</b>
+                    </MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@option.Provider · @option.Category</MudText>
                 </div>
                 <MudText Typo="Typo.caption" Align="Align.Right" Class="ml-4">
@@ -55,6 +62,7 @@ else if (_loaded && _options.Count == 0)
 
     private List<AiModel> _tiers = [];
     private List<AiModel> _options = [];
+    private HashSet<string> _favoriteIds = [];
     private bool _loaded;
 
     private AiModel? SelectedModel => _options.FirstOrDefault(o => o.ModelId == Value);
@@ -64,10 +72,13 @@ else if (_loaded && _options.Count == 0)
         try
         {
             _tiers = await ModelService.GetEnabledAsync();
-            // One option per model id; prefer the default pricing tier.
+            // A model id is a favorite when any of its pricing tiers is.
+            _favoriteIds = _tiers.Where(m => m.IsFavorite).Select(m => m.ModelId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // One option per model id; prefer the default pricing tier. Favorites first.
             _options = _tiers
                 .GroupBy(m => m.ModelId, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.OrderBy(m => m.IsDefaultTier ? 0 : 1).First())
+                .OrderBy(m => _favoriteIds.Contains(m.ModelId) ? 0 : 1)
                 .ToList();
         }
         catch (Exception ex)

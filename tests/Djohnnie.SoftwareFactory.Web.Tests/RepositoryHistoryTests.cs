@@ -13,7 +13,7 @@ public class RepositoryHistoryTests
     {
         var clock = new TestClock();
         using var services = CreateServices(clock);
-        var history = services.GetRequiredService<RepositoryHistoryService>();
+        var history = services.GetRequiredService<RepositoryService>();
         var cancellationToken = TestContext.Current.CancellationToken;
 
         for (var index = 0; index < 7; index++)
@@ -30,14 +30,14 @@ public class RepositoryHistoryTests
             recent.Select(repository => repository.FullName));
         Assert.Equal(clock.Now, recent[0].LastAccessedAt);
         await using var db = services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
-        Assert.Equal(7, await db.RepositoryAccesses.CountAsync(cancellationToken));
+        Assert.Equal(7, await db.Repositories.CountAsync(cancellationToken));
     }
 
     [Fact]
     public async Task InvalidRepositoryName_IsRejectedWithoutRecordingAccess()
     {
         using var services = CreateServices(new TestClock());
-        var history = services.GetRequiredService<RepositoryHistoryService>();
+        var history = services.GetRequiredService<RepositoryService>();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             history.RecordAccessAsync("not-a-full-repository-name", TestContext.Current.CancellationToken));

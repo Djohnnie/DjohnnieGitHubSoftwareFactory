@@ -6,10 +6,11 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<AiModel> AiModels => Set<AiModel>();
+    public DbSet<Repository> Repositories => Set<Repository>();
     public DbSet<Epic> Epics => Set<Epic>();
+    public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
     public DbSet<EpicTemplate> EpicTemplates => Set<EpicTemplate>();
-    public DbSet<RepositoryAccess> RepositoryAccesses => Set<RepositoryAccess>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -25,17 +26,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<RepositoryAccess>()
-            .HasIndex(repository => repository.LastAccessedAt);
+        modelBuilder.Entity<Repository>(repository =>
+        {
+            repository.HasIndex(r => r.FullName).IsUnique();
+            repository.HasIndex(r => r.LastAccessedAt);
+        });
+
+        // Everything that belongs to a repository blocks deleting it (no cascades).
+        modelBuilder.Entity<Epic>(epic =>
+        {
+            epic.HasOne(e => e.Repository).WithMany(r => r.Epics)
+                .HasForeignKey(e => e.RepositoryId).OnDelete(DeleteBehavior.Restrict);
+            epic.HasIndex(e => new { e.RepositoryId, e.Status });
+        });
+
+        modelBuilder.Entity<Agent>(agent =>
+        {
+            agent.HasOne(a => a.Repository).WithMany(r => r.Agents)
+                .HasForeignKey(a => a.RepositoryId).OnDelete(DeleteBehavior.Restrict);
+            agent.HasIndex(a => new { a.RepositoryId, a.FileName }).IsUnique();
+        });
 
         modelBuilder.Entity<AgentTemplate>(template =>
         {
             template.HasIndex(t => t.FileName).IsUnique();
-        });
-
-        modelBuilder.Entity<Epic>(epic =>
-        {
-            epic.HasIndex(e => new { e.RepositoryFullName, e.Status });
         });
 
         modelBuilder.Entity<AiModel>(model =>

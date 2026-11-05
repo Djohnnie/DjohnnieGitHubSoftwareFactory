@@ -1,6 +1,4 @@
 using Djohnnie.SoftwareFactory.Application.Common;
-using Djohnnie.SoftwareFactory.Application.Features.Agents;
-using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.Common;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using MediatR;
@@ -13,8 +11,7 @@ public sealed class GitHubHandlers(GitHubApiClient gitHub) :
     IRequestHandler<GetDirectoryQuery, Response<CollectionResult<GitHubContentItem>>>,
     IRequestHandler<GetFileQuery, Response<GitHubFile?>>,
     IRequestHandler<PutFileCommand, Response<GitHubCommitResult>>,
-    IRequestHandler<DeleteFileCommand, Response<GitHubCommitResult>>,
-    IRequestHandler<GetCustomAgentsQuery, Response<CollectionResult<AgentSummary>>>
+    IRequestHandler<DeleteFileCommand, Response<GitHubCommitResult>>
 {
     public async Task<Response<GitHubRepository>> Handle(GetRepositoryQuery request, CancellationToken cancellationToken) =>
         new(await gitHub.GetRepositoryAsync(request.Dto.RepositoryFullName, cancellationToken));
@@ -33,7 +30,4 @@ public sealed class GitHubHandlers(GitHubApiClient gitHub) :
 
     public async Task<Response<GitHubCommitResult>> Handle(DeleteFileCommand request, CancellationToken cancellationToken) =>
         new(await gitHub.DeleteFileAsync(request.Dto.RepositoryFullName, request.Dto.Path, request.Dto.Message, request.Dto.Sha, cancellationToken));
-
-    public async Task<Response<CollectionResult<AgentSummary>>> Handle(GetCustomAgentsQuery request, CancellationToken cancellationToken) =>
-        new(new(await AgentCatalog.LoadAsync(gitHub, request.Dto.RepositoryFullName, cancellationToken)));
 }

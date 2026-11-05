@@ -4,6 +4,7 @@
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 @inject AgentTemplateService Templates
+@inject AgentService AgentData
 @inject NavigationManager Navigation
 
 <PageTitle>Custom agents</PageTitle>
@@ -30,6 +31,7 @@
 
 <MudTable Outlined="true" Striped="true" T="AgentRow" Items="_agents" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
     <HeaderContent>
+        <MudTh Style="width:1%"><span class="visually-hidden">Favorite</span></MudTh>
         <MudTh>Agent</MudTh>
         <MudTh>File</MudTh>
         <MudTh>Target</MudTh>
@@ -37,6 +39,10 @@
         <MudTh Style="text-align:right">Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
+        <MudTd DataLabel="Favorite">
+            <FavoriteToggle Value="_favorites.Contains(context.Id)" ValueChanged="v => SetFavoriteAsync(context, v)"
+                            Name="@(context.Agent?.Name ?? context.Id)" Size="Size.Small" />
+        </MudTd>
         <MudTd DataLabel="Agent">
             <MudText Typo="Typo.body1"><b>@(context.Agent?.Name ?? AgentDefinition.GetFileName(context.Item.Name))</b></MudText>
             @if (context.ParseError is not null)
@@ -73,9 +79,13 @@
 </MudTable>
 
 @code {
-    private sealed record AgentRow(GitHubContentItem Item, string Sha, AgentDefinition? Agent, string? ParseError);
+    private sealed record AgentRow(GitHubContentItem Item, string Sha, AgentDefinition? Agent, string? ParseError)
+    {
+        public string Id => AgentDefinition.GetFileName(Item.Name);
+    }
 
     private List<AgentRow> _agents = [];
+    private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading = true;
     private string? _error;
 
@@ -106,7 +116,19 @@
                 }
             }));
 
-            _agents = rows.OrderBy(r => r.Agent?.Name ?? r.Item.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            try
+            {
+                _favorites = new(await AgentData.SyncAsync(repo, rows.Select(r => r.Id)), StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Could not load favorite agents: {ex.Message}", Severity.Warning);
+            }
+
+            _agents = rows
+                .OrderBy(r => _favorites.Contains(r.Id) ? 0 : 1)
+                .ThenBy(r => r.Agent?.Name ?? r.Item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
         {
@@ -115,6 +137,26 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task SetFavoriteAsync(AgentRow row, bool isFavorite)
+    {
+        try
+        {
+            await AgentData.SetFavoriteAsync(Repository.Current!.FullName, row.Id, isFavorite);
+            if (isFavorite)
+            {
+                _favorites.Add(row.Id);
+            }
+            else
+            {
+                _favorites.Remove(row.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not update '{row.Agent?.Name ?? row.Id}': {ex.Message}", Severity.Error);
         }
     }
 

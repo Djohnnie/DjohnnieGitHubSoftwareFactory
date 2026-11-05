@@ -42,7 +42,8 @@ public class ProjectArchitectureTests
         Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(
             ["20261029222630_InitialCreate", "20261029225348_AddEpics", "20261030124727_AddAgentTemplates",
-                "20261102125044_AddRepositoryAccesses", "20261102133114_AddEpicTemplates"],
+                "20261102125044_AddRepositoryAccesses", "20261102133114_AddEpicTemplates",
+                "20261105083736_AddRepositoriesAgentsAndFavorites"],
             db.Database.GetMigrations());
         Assert.All(db.Model.GetEntityTypes(), entity =>
         {

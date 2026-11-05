@@ -21,7 +21,8 @@ public static class DependencyInjection
         services.TryAddScoped<EpicStore>();
         services.TryAddScoped<AgentTemplateStore>();
         services.TryAddScoped<EpicTemplateStore>();
-        services.TryAddScoped<RepositoryAccessStore>();
+        services.TryAddScoped<RepositoryStore>();
+        services.TryAddScoped<AgentStore>();
         return services;
     }
 

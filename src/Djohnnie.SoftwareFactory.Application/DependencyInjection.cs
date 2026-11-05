@@ -1,5 +1,6 @@
 using Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Application.Common;
+using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
@@ -35,7 +36,8 @@ public static class DependencyInjection
         services.AddScoped<AgentTemplateService>();
         services.AddScoped<EpicTemplateService>();
         services.AddScoped<GitHubService>();
-        services.AddScoped<RepositoryHistoryService>();
+        services.AddScoped<RepositoryService>();
+        services.AddScoped<AgentService>();
         services.AddScoped<AssistantService>();
         services.AddHttpClient<ModelPricingScraper>(client =>
         {

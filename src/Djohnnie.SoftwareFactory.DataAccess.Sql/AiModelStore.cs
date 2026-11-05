@@ -58,6 +58,17 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         }
     }
 
+    public async Task SetFavoriteAsync(int id, bool isFavorite, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var model = await db.AiModels.FindAsync([id], cancellationToken);
+        if (model is not null)
+        {
+            model.IsFavorite = isFavorite;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

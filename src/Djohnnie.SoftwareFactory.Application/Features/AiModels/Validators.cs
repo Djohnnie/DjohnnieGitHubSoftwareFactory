@@ -56,3 +56,8 @@ public sealed class DeleteModelValidator : AbstractValidator<DeleteModelCommand>
 {
     public DeleteModelValidator() => RuleFor(request => request.Dto.Id).GreaterThan(0);
 }
+
+public sealed class SetModelFavoriteValidator : AbstractValidator<SetModelFavoriteCommand>
+{
+    public SetModelFavoriteValidator() => RuleFor(request => request.Dto.Id).GreaterThan(0);
+}

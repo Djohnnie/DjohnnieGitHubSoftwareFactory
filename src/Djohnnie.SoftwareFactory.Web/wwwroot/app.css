@@ -160,6 +160,19 @@ h1:focus {
     background: rgba(45, 164, 78, 0.08);
 }
 
+/* Text for screen readers only, e.g. the header of the favorite column. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* Agent editor */
 .mono textarea {
     font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;

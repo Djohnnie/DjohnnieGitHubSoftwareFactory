@@ -97,12 +97,14 @@
         <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="Search models" Adornment="Adornment.Start" Immediate="true"
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
         <MudSpacer />
+        <MudSwitch @bind-Value="_onlyFavorites" Color="Color.Primary" Label="Favorites only" />
         <MudSwitch @bind-Value="_onlyEnabled" Color="Color.Primary" Label="Enabled only" />
     </ToolBarContent>
     <GroupHeaderTemplate>
-        <MudTh colspan="8"><b>@(context.Key as string ?? "Other")</b></MudTh>
+        <MudTh colspan="9"><b>@(context.Key as string ?? "Other")</b></MudTh>
     </GroupHeaderTemplate>
     <HeaderContent>
+        <MudTh Style="width:1%"><span class="visually-hidden">Favorite</span></MudTh>
         <MudTh>Model</MudTh>
         <MudTh>Category</MudTh>
         <MudTh>Tier</MudTh>
@@ -113,6 +115,9 @@
         <MudTh Style="text-align:right">Enabled / actions</MudTh>
     </HeaderContent>
     <RowTemplate>
+        <MudTd DataLabel="Favorite">
+            <FavoriteToggle Value="context.IsFavorite" ValueChanged="v => SetFavoriteAsync(context, v)" Name="@context.Name" Size="Size.Small" />
+        </MudTd>
         <MudTd DataLabel="Model">
             <MudText Typo="Typo.body1"><b>@context.Name</b></MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText>
@@ -152,6 +157,7 @@
     private string? _error;
     private string? _search;
     private bool _onlyEnabled;
+    private bool _onlyFavorites;
 
     private bool _importOpen;
     private string _importUrl = ModelPricingScraper.DefaultUrl;
@@ -186,6 +192,7 @@
 
     private bool Matches(AiModel model) =>
         (!_onlyEnabled || model.IsEnabled) &&
+        (!_onlyFavorites || model.IsFavorite) &&
         (string.IsNullOrWhiteSpace(_search)
          || model.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
          || model.ModelId.Contains(_search, StringComparison.OrdinalIgnoreCase)
@@ -211,6 +218,19 @@
         {
             await ModelService.SetEnabledAsync(model.Id, enabled);
             model.IsEnabled = enabled;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not update '{model.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SetFavoriteAsync(AiModel model, bool isFavorite)
+    {
+        try
+        {
+            await ModelService.SetFavoriteAsync(model.Id, isFavorite);
+            model.IsFavorite = isFavorite;
         }
         catch (Exception ex)
         {

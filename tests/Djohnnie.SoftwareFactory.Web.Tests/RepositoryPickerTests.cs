@@ -42,7 +42,7 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
     [Fact]
     public async Task RecentRepository_CanBeSelectedWhileFullListIsStillLoading()
     {
-        await Services.GetRequiredService<RepositoryHistoryService>().RecordAccessAsync(
+        await Services.GetRequiredService<RepositoryService>().RecordAccessAsync(
             Repository.FullName, Xunit.TestContext.Current.CancellationToken);
         GitHubRepository? selected = null;
         var cut = Render<RepositoryPicker>(parameters => parameters
@@ -84,9 +84,35 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task StarringRepositoryInList_MovesItFromRecentToFavorites()
+    {
+        var repositories = Services.GetRequiredService<RepositoryService>();
+        await repositories.RecordAccessAsync(Repository.FullName, Xunit.TestContext.Current.CancellationToken);
+        var cut = Render<RepositoryPicker>();
+        _gitHub.ListResponse.SetResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { Repository }) });
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Recently accessed", cut.Markup);
+            Assert.DoesNotContain("Favorites", cut.Markup);
+            Assert.NotNull(cut.Find($"[aria-label='Add {Repository.FullName} to favorites']"));
+        });
+
+        await cut.InvokeAsync(() => cut.Find($"[aria-label='Add {Repository.FullName} to favorites']").Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Favorites", cut.Markup);
+            Assert.DoesNotContain("Recently accessed", cut.Markup);
+            Assert.NotNull(cut.Find($"[aria-label='Remove {Repository.FullName} from favorites']"));
+        });
+        var favorite = Assert.Single(await repositories.GetFavoritesAsync(Xunit.TestContext.Current.CancellationToken));
+        Assert.Equal(Repository.FullName, favorite.FullName);
+    }
+
+    [Fact]
     public async Task InaccessibleRecentRepository_ShowsErrorAndDoesNotSelectIt()
     {
-        await Services.GetRequiredService<RepositoryHistoryService>().RecordAccessAsync(
+        await Services.GetRequiredService<RepositoryService>().RecordAccessAsync(
             Repository.FullName, Xunit.TestContext.Current.CancellationToken);
         _gitHub.RecentStatus = HttpStatusCode.NotFound;
         GitHubRepository? selected = null;
@@ -106,7 +132,7 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
 
         await context.SelectAsync(Repository);
 
-        var recent = Assert.Single(await Services.GetRequiredService<RepositoryHistoryService>()
+        var recent = Assert.Single(await Services.GetRequiredService<RepositoryService>()
             .GetRecentAsync(Xunit.TestContext.Current.CancellationToken));
         Assert.Equal(Repository.FullName, recent.FullName);
         Assert.Equal(Repository, context.Current);
@@ -122,19 +148,19 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
         var previousAccess = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
         await using (var db = Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext())
         {
-            var stored = await db.RepositoryAccesses.SingleAsync(Xunit.TestContext.Current.CancellationToken);
+            var stored = await db.Repositories.SingleAsync(Xunit.TestContext.Current.CancellationToken);
             stored.LastAccessedAt = previousAccess;
             await db.SaveChangesAsync(Xunit.TestContext.Current.CancellationToken);
         }
         var restored = new RepositoryContext(
             Services.GetRequiredService<ProtectedLocalStorage>(),
             Services.GetRequiredService<ILogger<RepositoryContext>>(),
-            Services.GetRequiredService<RepositoryHistoryService>());
+            Services.GetRequiredService<RepositoryService>());
 
         await restored.LoadAsync();
 
         Assert.Equal(Repository, restored.Current);
-        var recent = Assert.Single(await Services.GetRequiredService<RepositoryHistoryService>()
+        var recent = Assert.Single(await Services.GetRequiredService<RepositoryService>()
             .GetRecentAsync(Xunit.TestContext.Current.CancellationToken));
         Assert.True(recent.LastAccessedAt > previousAccess);
     }
@@ -142,7 +168,7 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
     [Fact]
     public async Task FullListFailure_LeavesRecentRepositoriesSelectable()
     {
-        await Services.GetRequiredService<RepositoryHistoryService>().RecordAccessAsync(
+        await Services.GetRequiredService<RepositoryService>().RecordAccessAsync(
             Repository.FullName, Xunit.TestContext.Current.CancellationToken);
         GitHubRepository? selected = null;
         var cut = Render<RepositoryPicker>(parameters => parameters

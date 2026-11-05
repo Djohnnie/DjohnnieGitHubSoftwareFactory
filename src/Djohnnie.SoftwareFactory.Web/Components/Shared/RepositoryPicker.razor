@@ -1,12 +1,28 @@
 @inject GitHubService GitHub
-@inject RepositoryHistoryService History
+@inject RepositoryService Repositories
+@inject ISnackbar Snackbar
 @using Djohnnie.SoftwareFactory.Application.Features.Repositories
 @using Djohnnie.SoftwareFactory.Contracts.Repositories
 @implements IDisposable
 
-@if (_recentError is not null)
+@if (_knownError is not null)
 {
-    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning">Could not load recently accessed repositories: @_recentError</MudAlert>
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning">Could not load favorite and recently accessed repositories: @_knownError</MudAlert>
+}
+@if (_favoriteRepositories.Count > 0)
+{
+    <MudStack Class="pa-4" Spacing="2">
+        <MudText Typo="Typo.h6">Favorites</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+            @foreach (var repository in _favoriteRepositories)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Star"
+                           Disabled="_selecting" OnClick="() => SelectKnownAsync(repository)">
+                    @repository.FullName
+                </MudButton>
+            }
+        </MudStack>
+    </MudStack>
 }
 @if (_recentRepositories.Count > 0)
 {
@@ -16,8 +32,8 @@
             @foreach (var repository in _recentRepositories)
             {
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.History"
-                           Disabled="_selecting" OnClick="() => SelectRecentAsync(repository)"
-                           title="@($"Last accessed {repository.LastAccessedAt.ToLocalTime():yyyy-MM-dd HH:mm}")">
+                           Disabled="_selecting" OnClick="() => SelectKnownAsync(repository)"
+                           title="@($"Last accessed {repository.LastAccessedAt?.ToLocalTime():yyyy-MM-dd HH:mm}")">
                     @repository.FullName
                 </MudButton>
             }
@@ -56,12 +72,17 @@ else
                           Clearable="true" AutoFocus="true" Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
+            <MudTh Style="width:1%"><span class="visually-hidden">Favorite</span></MudTh>
             <MudTh>Repository</MudTh>
             <MudTh>Language</MudTh>
             <MudTh>Visibility</MudTh>
             <MudTh>Last push</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd DataLabel="Favorite">
+                <FavoriteToggle Value="IsFavorite(context)" ValueChanged="v => SetFavoriteAsync(context.FullName, v)"
+                                Name="@context.FullName" Size="Size.Small" />
+            </MudTd>
             <MudTd DataLabel="Repository">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudAvatar Size="Size.Small"><MudImage Src="@context.Owner.AvatarUrl" Alt="" /></MudAvatar>
@@ -102,28 +123,32 @@ else
     [Parameter] public string? SelectedFullName { get; set; }
 
     private IReadOnlyList<GitHubRepository>? _repositories;
-    private IReadOnlyList<RecentRepository> _recentRepositories = [];
+    private IReadOnlyList<RepositorySummary> _recentRepositories = [];
+    private IReadOnlyList<RepositorySummary> _favoriteRepositories = [];
     private readonly CancellationTokenSource _cancellation = new();
-    private string? _recentError;
+    private string? _knownError;
     private string? _selectionError;
     private bool _selecting;
     private string? _error;
     private string? _search;
 
-    protected override Task OnInitializedAsync() => Task.WhenAll(LoadRecentAsync(), LoadRepositoriesAsync());
+    protected override Task OnInitializedAsync() => Task.WhenAll(LoadKnownAsync(), LoadRepositoriesAsync());
 
-    private async Task LoadRecentAsync()
+    /// <summary>Loads the favorite and the recently accessed repositories (the latter excludes favorites).</summary>
+    private async Task LoadKnownAsync()
     {
         try
         {
-            _recentRepositories = await History.GetRecentAsync(_cancellation.Token);
+            _favoriteRepositories = await Repositories.GetFavoritesAsync(_cancellation.Token);
+            _recentRepositories = await Repositories.GetRecentAsync(_cancellation.Token);
+            _knownError = null;
         }
         catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
-            _recentError = ex.Message;
+            _knownError = ex.Message;
         }
         if (!_cancellation.IsCancellationRequested)
         {
@@ -150,10 +175,29 @@ else
         }
     }
 
-    private Task SelectRecentAsync(RecentRepository recent) =>
+    private Task SelectKnownAsync(RepositorySummary known) =>
         SelectAsync(async () => _repositories?.FirstOrDefault(repository =>
-                string.Equals(repository.FullName, recent.FullName, StringComparison.OrdinalIgnoreCase))
-                ?? await GitHub.GetRepositoryAsync(recent.FullName, _cancellation.Token));
+                string.Equals(repository.FullName, known.FullName, StringComparison.OrdinalIgnoreCase))
+                ?? await GitHub.GetRepositoryAsync(known.FullName, _cancellation.Token));
+
+    private bool IsFavorite(GitHubRepository repository) =>
+        _favoriteRepositories.Any(favorite => string.Equals(favorite.FullName, repository.FullName, StringComparison.OrdinalIgnoreCase));
+
+    private async Task SetFavoriteAsync(string fullName, bool isFavorite)
+    {
+        try
+        {
+            await Repositories.SetFavoriteAsync(fullName, isFavorite, _cancellation.Token);
+            await LoadKnownAsync();
+        }
+        catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not update favorite '{fullName}': {ex.Message}", Severity.Error);
+        }
+    }
 
     private Task SelectAsync(GitHubRepository repository) => SelectAsync(() => Task.FromResult(repository));
 

@@ -12,9 +12,8 @@ public class Epic
 
     public int Id { get; set; }
 
-    /// <summary>The repository the epic belongs to, as <c>owner/name</c>.</summary>
-    [Required, MaxLength(200)]
-    public string RepositoryFullName { get; set; } = string.Empty;
+    public int RepositoryId { get; set; }
+    public Repository Repository { get; set; } = null!;
 
     [Required, MaxLength(256)]
     public string Title { get; set; } = string.Empty;

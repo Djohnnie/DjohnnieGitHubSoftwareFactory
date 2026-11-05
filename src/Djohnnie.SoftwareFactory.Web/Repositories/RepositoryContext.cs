@@ -9,7 +9,7 @@ namespace Djohnnie.SoftwareFactory.Web.Repositories;
 /// (encrypted) browser local storage, so it survives reloads and new sessions.
 /// </summary>
 public sealed class RepositoryContext(
-    ProtectedLocalStorage storage, ILogger<RepositoryContext> logger, RepositoryHistoryService history)
+    ProtectedLocalStorage storage, ILogger<RepositoryContext> logger, RepositoryService history)
 {
     private const string StorageKey = "dghsf.repository";
     private bool _loaded;

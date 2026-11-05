@@ -40,6 +40,8 @@ public sealed record AiModel
 
     public bool IsEnabled { get; set; } = true;
 
+    public bool IsFavorite { get; set; }
+
     [MaxLength(500)]
     public string? SourceUrl { get; set; }
 

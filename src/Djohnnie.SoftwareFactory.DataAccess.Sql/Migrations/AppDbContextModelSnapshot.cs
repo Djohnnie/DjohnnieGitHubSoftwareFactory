@@ -22,6 +22,33 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Agent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsFavorite")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RepositoryId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RepositoryId", "FileName")
+                        .IsUnique();
+
+                    b.ToTable("Agents");
+                });
+
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentTemplate", b =>
                 {
                     b.Property<int>("Id")
@@ -88,6 +115,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFavorite")
                         .HasColumnType("bit");
 
                     b.Property<string>("ModelId")
@@ -183,10 +213,8 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("RepositoryFullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                    b.Property<int>("RepositoryId")
+                        .HasColumnType("int");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -201,7 +229,7 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RepositoryFullName", "Status");
+                    b.HasIndex("RepositoryId", "Status");
 
                     b.ToTable("Epics");
                 });
@@ -240,20 +268,67 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.ToTable("EpicTemplates");
                 });
 
-            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.RepositoryAccess", b =>
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
                 {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
                     b.Property<string>("FullName")
+                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<DateTimeOffset>("LastAccessedAt")
+                    b.Property<bool>("IsFavorite")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("LastAccessedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.HasKey("FullName");
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FullName")
+                        .IsUnique();
 
                     b.HasIndex("LastAccessedAt");
 
-                    b.ToTable("RepositoryAccesses");
+                    b.ToTable("Repositories");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Agent", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", "Repository")
+                        .WithMany("Agents")
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Repository");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Epic", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", "Repository")
+                        .WithMany("Epics")
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Repository");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
+                {
+                    b.Navigation("Agents");
+
+                    b.Navigation("Epics");
                 });
 #pragma warning restore 612, 618
         }

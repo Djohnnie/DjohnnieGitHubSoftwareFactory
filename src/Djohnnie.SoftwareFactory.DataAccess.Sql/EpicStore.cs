@@ -8,8 +8,7 @@ public sealed class EpicStore(IDbContextFactory<AppDbContext> dbFactory, TimePro
     public async Task<List<Epic>> GetAllAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await db.Epics.AsNoTracking()
-            .Where(e => e.RepositoryFullName == repositoryFullName)
+        var entities = await Query(db.Epics.AsNoTracking(), repositoryFullName)
             .OrderBy(e => e.Status).ThenByDescending(e => e.UpdatedAt)
             .ToListAsync(cancellationToken);
         return entities.Select(e => e.ToContract()).ToList();
@@ -18,8 +17,8 @@ public sealed class EpicStore(IDbContextFactory<AppDbContext> dbFactory, TimePro
     public async Task<Epic?> GetAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await db.Epics.AsNoTracking()
-            .SingleOrDefaultAsync(e => e.Id == id && e.RepositoryFullName == repositoryFullName, cancellationToken);
+        var entity = await Query(db.Epics.AsNoTracking(), repositoryFullName)
+            .SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
         return entity?.ToContract();
     }
 
@@ -28,7 +27,11 @@ public sealed class EpicStore(IDbContextFactory<AppDbContext> dbFactory, TimePro
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
         var entity = epic.Id == 0
-            ? new Entities.Epic { RepositoryFullName = epic.RepositoryFullName, CreatedAt = now }
+            ? new Entities.Epic
+            {
+                Repository = await RepositoryStore.GetOrAddAsync(db, epic.RepositoryFullName, cancellationToken),
+                CreatedAt = now
+            }
             : await FindAsync(db, epic.RepositoryFullName, epic.Id, cancellationToken);
 
         if (entity.Status == WorkItemStatus.Draft)
@@ -57,7 +60,7 @@ public sealed class EpicStore(IDbContextFactory<AppDbContext> dbFactory, TimePro
     public async Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await db.Epics.SingleOrDefaultAsync(e => e.Id == id && e.RepositoryFullName == repositoryFullName, cancellationToken);
+        var entity = await Query(db.Epics, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
         if (entity is not null)
         {
             db.Epics.Remove(entity);
@@ -87,8 +90,15 @@ public sealed class EpicStore(IDbContextFactory<AppDbContext> dbFactory, TimePro
         return entity.ToContract();
     }
 
+    /// <summary>The epics of one repository, with the repository loaded (needed to map to the contract).</summary>
+    private static IQueryable<Entities.Epic> Query(IQueryable<Entities.Epic> epics, string repositoryFullName)
+    {
+        var normalized = Entities.Repository.Normalize(repositoryFullName);
+        return epics.Include(e => e.Repository).Where(e => e.Repository.FullName == normalized);
+    }
+
     private static async Task<Entities.Epic> FindAsync(AppDbContext db, string repositoryFullName, int id, CancellationToken cancellationToken) =>
-        await db.Epics.SingleOrDefaultAsync(e => e.Id == id && e.RepositoryFullName == repositoryFullName, cancellationToken)
+        await Query(db.Epics, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
         ?? throw new InvalidOperationException("The epic no longer exists.");
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

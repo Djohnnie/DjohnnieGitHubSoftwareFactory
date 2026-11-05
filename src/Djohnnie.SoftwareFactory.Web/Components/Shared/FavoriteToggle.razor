@@ -1,0 +1,39 @@
+@*
+    A star button that marks something as favorite. Clicks do not reach the parent (e.g. a clickable table row).
+*@
+<span class="favorite-toggle" @onclick:stopPropagation="true">
+    <MudIconButton Variant="Variant.Text" Size="Size"
+                   Icon="@(Value ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
+                   Color="@(Value ? Color.Warning : Color.Default)" Disabled="_saving || Disabled"
+                   OnClick="ToggleAsync" aria-pressed="@(Value ? "true" : "false")"
+                   aria-label="@(Value ? $"Remove {Name} from favorites" : $"Add {Name} to favorites")"
+                   title="@(Value ? "Remove from favorites" : "Add to favorites")" />
+</span>
+
+@code {
+    [Parameter] public bool Value { get; set; }
+
+    /// <summary>Saves the new value; the toggle is disabled while it runs.</summary>
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+
+    /// <summary>What is being marked, for the accessible label.</summary>
+    [Parameter] public string Name { get; set; } = string.Empty;
+
+    [Parameter] public Size Size { get; set; } = Size.Medium;
+    [Parameter] public bool Disabled { get; set; }
+
+    private bool _saving;
+
+    private async Task ToggleAsync()
+    {
+        _saving = true;
+        try
+        {
+            await ValueChanged.InvokeAsync(!Value);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
