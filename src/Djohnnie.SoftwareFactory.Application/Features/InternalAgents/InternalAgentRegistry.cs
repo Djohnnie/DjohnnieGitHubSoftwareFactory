@@ -1,4 +1,5 @@
 using Djohnnie.SoftwareFactory.Agents;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
@@ -23,7 +24,7 @@ public sealed class InternalAgentRegistry(IInternalAgentStore store)
     /// <summary>The agent with its stored prompt, or with its default prompt when it is not stored (yet).</summary>
     public async Task<InternalAgent> GetAsync(string key, CancellationToken cancellationToken = default)
     {
-        var defaults = InternalAgentDefaults.Find(key) ?? throw new InvalidOperationException($"Unknown internal agent '{key}'.");
+        var defaults = InternalAgentDefaults.Find(key) ?? throw new DomainRuleException($"Unknown internal agent '{key}'.");
         return Merge(defaults, await store.GetAsync(defaults.Key, cancellationToken));
     }
 

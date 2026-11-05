@@ -9,6 +9,7 @@ public sealed class SaveWorkItemValidator : AbstractValidator<SaveWorkItemComman
     public SaveWorkItemValidator()
     {
         RuleFor(request => request.Dto).NotNull().SetValidator(new ContractValidator<WorkItem>());
+        RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
         RuleFor(request => request.Dto.Id).GreaterThanOrEqualTo(0);
         RuleFor(request => request.Dto.Type).IsInEnum();
         RuleFor(request => request.Dto.ParentId).GreaterThan(0).When(request => request.Dto.ParentId is not null);

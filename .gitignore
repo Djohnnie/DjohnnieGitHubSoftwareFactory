@@ -427,5 +427,5 @@ FodyWeavers.xsd
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
 
-# Personal development settings (copy appsettings.Development.example.json)
+# Personal development settings (see README.md)
 **/appsettings.Development.json

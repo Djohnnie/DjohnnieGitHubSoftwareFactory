@@ -1,5 +1,6 @@
-using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 namespace Djohnnie.SoftwareFactory.Web.Repositories;
@@ -9,7 +10,7 @@ namespace Djohnnie.SoftwareFactory.Web.Repositories;
 /// (encrypted) browser local storage, so it survives reloads and new sessions.
 /// </summary>
 public sealed class RepositoryContext(
-    ProtectedLocalStorage storage, ILogger<RepositoryContext> logger, RepositoryService history)
+    ProtectedLocalStorage storage, ILogger<RepositoryContext> logger, RepositoryService history, GitHubService gitHub)
 {
     private const string StorageKey = "dghsf.repository";
     private bool _loaded;
@@ -51,6 +52,50 @@ public sealed class RepositoryContext(
         }
 
         _loaded = true;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Replaces the restored repository with GitHub's current data (e.g. a changed default branch, visibility or name),
+    /// since the copy in local storage is only as fresh as the last selection. Keeps the stored copy when GitHub can't be reached.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        if (Current is not { } restored)
+        {
+            return;
+        }
+
+        GitHubRepository fresh;
+        try
+        {
+            fresh = await gitHub.GetRepositoryAsync(restored.FullName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not refresh repository {Repository}; the stored copy is used.", restored.FullName);
+            return;
+        }
+
+        // Another repository may have been selected in the meantime.
+        if (!ReferenceEquals(Current, restored) || fresh == restored)
+        {
+            return;
+        }
+
+        Current = fresh;
+        try
+        {
+            await storage.SetAsync(StorageKey, fresh);
+            if (!string.Equals(fresh.FullName, restored.FullName, StringComparison.OrdinalIgnoreCase))
+            {
+                await history.RecordAccessAsync(fresh.FullName);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not store the refreshed repository {Repository}.", fresh.FullName);
+        }
         Changed?.Invoke();
     }
 

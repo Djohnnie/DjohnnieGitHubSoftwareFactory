@@ -76,7 +76,7 @@ public class CopilotInstructionsTests : BunitContext
         Assert.Equal("A tiny calculator written in Rust.", results[1]);
         Assert.Equal("Updated: instructions file.", results[2]);
         Assert.Equal("# Copilot instructions\n\n- Build with `cargo build`.\n", cut.FindComponent<MarkdownEditor>().Instance.Value);
-        Assert.Empty(_gitHub.Requests.Where(r => r.Method == HttpMethod.Put));
+        Assert.DoesNotContain(_gitHub.Requests, r => r.Method == HttpMethod.Put);
 
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save & commit")).Click());
 
@@ -100,7 +100,7 @@ public class CopilotInstructionsTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Saving creates it", cut.Markup));
 
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save & commit")).Click());
-        Assert.Empty(_gitHub.Requests.Where(r => r.Method == HttpMethod.Put));
+        Assert.DoesNotContain(_gitHub.Requests, r => r.Method == HttpMethod.Put);
 
         await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("# Instructions\n\nUse tabs."));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save & commit")).Click());

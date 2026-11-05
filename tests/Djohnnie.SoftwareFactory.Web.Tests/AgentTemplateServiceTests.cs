@@ -5,6 +5,7 @@ using System.Text.Json;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AgentTemplates;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -44,7 +45,7 @@ public class AgentTemplateServiceTests : IDisposable
 
         Assert.Equal("reviewer", template.Name);
         Assert.Equal("---\ndescription: Reviews code.\n---\n\nReview carefully.\n", template.Content);
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<DomainRuleException>(() =>
             _service.SaveAsync(0, "reviewer", new AgentDefinition { Name = "Other", Description = "Other." }, TestContext.Current.CancellationToken));
         Assert.Contains("already uses the file name 'reviewer'", error.Message);
 

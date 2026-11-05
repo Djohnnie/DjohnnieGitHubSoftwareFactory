@@ -168,6 +168,26 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.ToTable("AiModels");
                 });
 
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AuthSession", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("Ticket")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.HasKey("Key");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("AuthSessions");
+                });
+
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgent", b =>
                 {
                     b.Property<int>("Id")
@@ -259,6 +279,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("AcceptIssueSince")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset?>("AcceptStartedAt")
                         .IsConcurrencyToken()

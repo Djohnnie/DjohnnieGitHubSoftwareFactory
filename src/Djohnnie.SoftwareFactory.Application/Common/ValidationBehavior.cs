@@ -1,6 +1,6 @@
-using Djohnnie.SoftwareFactory.Contracts;
 using FluentValidation;
 using MediatR;
+using Djohnnie.SoftwareFactory.Contracts;
 
 namespace Djohnnie.SoftwareFactory.Application.Common;
 

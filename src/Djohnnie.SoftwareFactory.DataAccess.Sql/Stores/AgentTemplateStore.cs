@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentTemplates;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,14 +25,14 @@ public sealed class AgentTemplateStore(IDbContextFactory<AppDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (await db.AgentTemplates.AnyAsync(t => t.Id != value.Id && t.FileName == value.FileName, cancellationToken))
         {
-            throw new InvalidOperationException($"Another template already uses the file name '{value.FileName}'.");
+            throw new DomainRuleException($"Another template already uses the file name '{value.FileName}'.");
         }
 
         var now = timeProvider.GetUtcNow();
         var template = value.Id == 0
             ? new Entities.AgentTemplate { CreatedAt = now }
             : await db.AgentTemplates.SingleOrDefaultAsync(t => t.Id == value.Id, cancellationToken)
-                ?? throw new InvalidOperationException("The template no longer exists.");
+                ?? throw new DomainRuleException("The template no longer exists.");
         template.FileName = value.FileName;
         template.Name = value.Name;
         template.Description = value.Description;

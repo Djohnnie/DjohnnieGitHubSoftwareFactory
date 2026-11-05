@@ -167,6 +167,10 @@
         Repository.Changed += OnRepositoryChanged;
         await Repository.LoadAsync();
         _loaded = true;
+
+        // Show the restored repository right away, then bring it up to date with GitHub.
+        StateHasChanged();
+        await Repository.RefreshAsync();
     }
 
     private async Task SwitchRepositoryAsync()

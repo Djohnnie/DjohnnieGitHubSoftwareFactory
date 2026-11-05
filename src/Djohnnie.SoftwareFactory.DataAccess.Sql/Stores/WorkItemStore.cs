@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,7 +53,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         else if (!entity.Type.CanBeAssigned || entity.Status != WorkItemStatus.Accepted)
         {
             var state = entity.Type.CanBeAssigned ? "assigned" : "accepted";
-            throw new InvalidOperationException($"This {Name(entity.Type)} is already {state} and can no longer be changed.");
+            throw new DomainRuleException($"This {Name(entity.Type)} is already {state} and can no longer be changed.");
         }
 
         // Epics and features only give structure; they are never assigned to an agent.
@@ -83,28 +84,34 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         if (children > 0)
         {
             var noun = children == 1 ? "child item" : "child items";
-            throw new InvalidOperationException($"'{entity.Title}' still has {children} {noun}. Delete them or move them to another parent first.");
+            throw new DomainRuleException($"'{entity.Title}' still has {children} {noun}. Delete them or move them to another parent first.");
         }
         db.WorkItems.Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken)
+    public async Task<DateTimeOffset?> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
         if (entity.Status != WorkItemStatus.Draft)
         {
-            throw new InvalidOperationException($"Only a draft {Name(entity.Type)} can be accepted.");
+            throw new DomainRuleException($"Only a draft {Name(entity.Type)} can be accepted.");
         }
 
         var now = timeProvider.GetUtcNow();
-        if (entity.AcceptStartedAt is { } started && started != Entities.WorkItem.InterruptedAccept && now - started < claimTimeout)
+        if (entity.AcceptStartedAt is { } started)
         {
-            throw BeingAccepted(entity.Type);
+            if (now - started < claimTimeout)
+            {
+                throw BeingAccepted(entity.Type);
+            }
+
+            // An expired claim: that attempt died without ending, so it may have created the issue.
+            entity.AcceptIssueSince = entity.AcceptIssueSince is { } since && since < started ? since : started;
         }
 
-        var issueMayExist = entity.AcceptStartedAt is not null;
+        var issueSince = entity.AcceptIssueSince;
         entity.AcceptStartedAt = now;
         try
         {
@@ -115,22 +122,24 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         {
             throw BeingAccepted(entity.Type);
         }
-        return issueMayExist;
+        return issueSince;
     }
 
     public async Task EndFailedAcceptAsync(string repositoryFullName, int id, bool issueMayExist, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
-        if (entity.Status != WorkItemStatus.Draft || entity.AcceptStartedAt is null)
+        if (entity.Status != WorkItemStatus.Draft || entity.AcceptStartedAt is not { } started)
         {
             return;
         }
 
-        // Once an issue may exist, keep remembering that until an attempt finishes.
-        entity.AcceptStartedAt = issueMayExist || entity.AcceptStartedAt == Entities.WorkItem.InterruptedAccept
-            ? Entities.WorkItem.InterruptedAccept
-            : null;
+        // Keep the earliest attempt that may have created the issue until an attempt finishes.
+        if (issueMayExist && (entity.AcceptIssueSince is null || started < entity.AcceptIssueSince))
+        {
+            entity.AcceptIssueSince = started;
+        }
+        entity.AcceptStartedAt = null;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -140,10 +149,11 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
         if (entity.Status != WorkItemStatus.Draft)
         {
-            throw new InvalidOperationException($"This {Name(entity.Type)} was already accepted.");
+            throw new DomainRuleException($"This {Name(entity.Type)} was already accepted.");
         }
         entity.Status = WorkItemStatus.Accepted;
         entity.AcceptStartedAt = null;
+        entity.AcceptIssueSince = null;
         entity.IssueId = issueId;
         entity.IssueNumber = issueNumber;
         entity.IssueUrl = issueUrl;
@@ -176,7 +186,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         {
             if (entity.Type.RequiresParent)
             {
-                throw new InvalidOperationException($"A {Name(entity.Type)} must be part of {ParentNames(entity.Type)}.");
+                throw new DomainRuleException($"A {Name(entity.Type)} must be part of {ParentNames(entity.Type)}.");
             }
             entity.Parent = null;
             entity.ParentId = null;
@@ -184,10 +194,10 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         }
 
         var parent = await Query(db.WorkItems, repositoryFullName).SingleOrDefaultAsync(e => e.Id == parentId, cancellationToken)
-            ?? throw new InvalidOperationException("The chosen parent no longer exists in this repository.");
+            ?? throw new DomainRuleException("The chosen parent no longer exists in this repository.");
         if (!entity.Type.CanHaveParent(parent.Type))
         {
-            throw new InvalidOperationException($"A {Name(entity.Type)} can only be part of {ParentNames(entity.Type)}, not of {WithArticle(parent.Type)}.");
+            throw new DomainRuleException($"A {Name(entity.Type)} can only be part of {ParentNames(entity.Type)}, not of {WithArticle(parent.Type)}.");
         }
         entity.Parent = parent;
         entity.ParentId = parent.Id;
@@ -203,12 +213,12 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     private static async Task<Entities.WorkItem> FindAsync(AppDbContext db, string repositoryFullName, int id, CancellationToken cancellationToken)
     {
         return await Query(db.WorkItems, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("The work item no longer exists.");
+            ?? throw new DomainRuleException("The work item no longer exists.");
     }
 
-    private static InvalidOperationException BeingAccepted(WorkItemType type)
+    private static DomainRuleException BeingAccepted(WorkItemType type)
     {
-        return new InvalidOperationException($"This {Name(type)} is being accepted right now. Reload in a moment.");
+        return new DomainRuleException($"This {Name(type)} is being accepted right now. Reload in a moment.");
     }
 
     private static string Name(WorkItemType type)

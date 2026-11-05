@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,7 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
         var template = value.Id == 0
             ? new Entities.WorkItemTemplate { Type = value.Type, CreatedAt = now }
             : await db.WorkItemTemplates.SingleOrDefaultAsync(t => t.Id == value.Id, cancellationToken)
-                ?? throw new InvalidOperationException("The template no longer exists.");
+                ?? throw new DomainRuleException("The template no longer exists.");
         template.Name = value.Name.Trim();
         template.TitleTemplate = value.TitleTemplate.Trim();
         template.Description = value.Description;

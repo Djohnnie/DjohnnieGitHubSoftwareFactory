@@ -130,7 +130,7 @@ else if (_agent is not null)
             _stored = await Agents.GetAsync(Key);
             _agent = _stored.Copy();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException)
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException)
         {
             _error = "This internal agent does not exist.";
         }
@@ -160,7 +160,7 @@ else if (_agent is not null)
             _agent = _stored.Copy();
             Snackbar.Add($"Saved {_agent.Name}. New conversations use the updated prompt.", Severity.Success);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
         }
@@ -186,7 +186,7 @@ else if (_agent is not null)
             _agent = _stored.Copy();
             Snackbar.Add($"{_agent.Name} uses the default prompt again.", Severity.Success);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             Snackbar.Add($"Could not reset: {ex.Message}", Severity.Error);
         }

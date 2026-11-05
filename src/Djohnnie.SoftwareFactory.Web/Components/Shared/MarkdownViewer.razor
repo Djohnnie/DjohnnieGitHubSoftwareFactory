@@ -1,0 +1,72 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<MarkdownViewer> Logger
+
+@* Read-only Markdown with the same rendering as MarkdownEditor (Toast UI's viewer, created by MarkdownEditor.razor.js). *@
+<div @ref="_host" class="markdown-viewer"></div>
+
+@code {
+    private ElementReference _host;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _viewer;
+    private string? _shown;
+
+    [Parameter] public string? Value { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_viewer is not null && Value != _shown)
+        {
+            _shown = Value;
+            try
+            {
+                await _viewer.InvokeVoidAsync("setMarkdown", Value ?? string.Empty);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/MarkdownEditor.razor.js");
+            _shown = Value;
+            _viewer = await _module.InvokeAsync<IJSObjectReference>("createViewer", _host, Value ?? string.Empty);
+            await OnParametersSetAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException ex)
+        {
+            Logger.LogWarning(ex, "Creating the Markdown viewer failed.");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_viewer is not null)
+            {
+                await _viewer.InvokeVoidAsync("destroy");
+                await _viewer.DisposeAsync();
+            }
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

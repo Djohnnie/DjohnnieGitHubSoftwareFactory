@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Application.Common;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using FluentValidation;
 
@@ -11,6 +12,6 @@ public sealed class ApplyTemplateValidator : AbstractValidator<ApplyTemplateComm
         RuleFor(request => request.Dto.FileName).Must(name => AgentDefinition.IsValidFileName(name?.Trim()))
             .WithMessage("A valid agent file name is required.");
         RuleFor(request => request.Dto.Repositories).NotNull();
-        RuleForEach(request => request.Dto.Repositories).NotEmpty();
+        RuleForEach(request => request.Dto.Repositories).ValidRepositoryFullName();
     }
 }

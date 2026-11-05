@@ -27,6 +27,7 @@ public static class DependencyInjection
             services.TryAddScoped<IRepositoryStore, RepositoryStore>();
             services.TryAddScoped<IAgentStore, AgentStore>();
             services.TryAddScoped<IInternalAgentStore, InternalAgentStore>();
+            services.TryAddScoped<IAuthSessionStore, AuthSessionStore>();
             return services;
         }
     }

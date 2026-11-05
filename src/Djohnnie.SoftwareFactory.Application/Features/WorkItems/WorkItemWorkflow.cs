@@ -1,5 +1,6 @@
 using System.Net;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
@@ -20,19 +21,19 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
         var name = item.Type.DisplayName.ToLowerInvariant();
         if (item.Status != WorkItemStatus.Draft)
         {
-            throw new InvalidOperationException($"Only a draft {name} can be accepted.");
+            throw new DomainRuleException($"Only a draft {name} can be accepted.");
         }
         if (string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.Description))
         {
-            throw new InvalidOperationException($"A {name} needs a title and a description before it can be accepted.");
+            throw new DomainRuleException($"A {name} needs a title and a description before it can be accepted.");
         }
         if (item.Type.RequiresParent && item.ParentId is null)
         {
-            throw new InvalidOperationException($"Choose the parent of this {name} before accepting it.");
+            throw new DomainRuleException($"Choose the parent of this {name} before accepting it.");
         }
 
         // Claim the draft first, so concurrent accepts can't both create an issue.
-        var issueMayExist = await store.BeginAcceptAsync(repositoryFullName, id, AcceptClaimTimeout, cancellationToken);
+        var issueSince = await store.BeginAcceptAsync(repositoryFullName, id, AcceptClaimTimeout, cancellationToken);
         var label = item.Type.Label;
         var creating = false;
         GitHubIssue issue;
@@ -41,7 +42,9 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
             await gitHub.EnsureLabelAsync(repositoryFullName, label, item.Type.LabelColor, $"{item.Type.DisplayName} planned in DGHSF", cancellationToken);
 
             // An earlier attempt that didn't finish may have created the issue already: reuse it instead of making a duplicate.
-            var existing = issueMayExist ? await gitHub.FindIssueByMarkerAsync(repositoryFullName, label, Marker(item), cancellationToken) : null;
+            var existing = issueSince is { } since
+                ? await gitHub.FindIssueByMarkerAsync(repositoryFullName, label, Marker(item), LookupSince(since), cancellationToken)
+                : null;
             creating = existing is null;
             issue = existing ?? await gitHub.CreateIssueAsync(repositoryFullName, item.Title.Trim(), IssueBody(item), [label], cancellationToken);
         }
@@ -75,11 +78,11 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
         var item = await FindAsync(repositoryFullName, id, cancellationToken);
         if (!item.Type.CanBeAssigned)
         {
-            throw new InvalidOperationException($"{item.Type.PluralName} are not assigned to an agent; only user stories, bugs and tasks are.");
+            throw new DomainRuleException($"{item.Type.PluralName} are not assigned to an agent; only user stories, bugs and tasks are.");
         }
         if (item.Status != WorkItemStatus.Accepted || item.IssueNumber is null)
         {
-            throw new InvalidOperationException("Only accepted items that are not assigned yet can be assigned.");
+            throw new DomainRuleException("Only accepted items that are not assigned yet can be assigned.");
         }
         return await TryAssignAsync(item, cancellationToken);
     }
@@ -90,15 +93,27 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
     /// </summary>
     public static readonly TimeSpan AcceptClaimTimeout = TimeSpan.FromMinutes(5);
 
+    /// <summary>Margin for a difference between this server's clock and GitHub's when looking for issues updated since a time.</summary>
+    private static readonly TimeSpan GitHubClockSkew = TimeSpan.FromMinutes(10);
+
+    /// <summary>The time to look for issues from: a little earlier than <paramref name="since"/>, never before 1970 (e.g. for <see cref="DateTimeOffset.MinValue"/>).</summary>
+    private static DateTimeOffset LookupSince(DateTimeOffset since)
+    {
+        return since - DateTimeOffset.UnixEpoch > GitHubClockSkew ? since - GitHubClockSkew : DateTimeOffset.UnixEpoch;
+    }
+
     public static string IssueBody(WorkItem item)
     {
         return $"{item.Description.Trim()}\n\n{Marker(item)}\n";
     }
 
-    /// <summary>The hidden marker in the issue body that identifies the work item.</summary>
+    /// <summary>
+    /// The hidden marker in the issue body that identifies the work item. Besides the id it holds the creation time, so
+    /// items of different DGHSF databases (e.g. development and production) working on one repository never share a marker.
+    /// </summary>
     public static string Marker(WorkItem item)
     {
-        return $"<!-- dghsf:{item.Type.Label}:{item.Id} -->";
+        return $"<!-- dghsf:{item.Type.Label}:{item.Id}:{item.CreatedAt.ToUnixTimeMilliseconds()} -->";
     }
 
     /// <summary>GitHub refused the request (4xx), so it certainly didn't create the issue.</summary>
@@ -192,6 +207,6 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
     private async Task<WorkItem> FindAsync(string repositoryFullName, int id, CancellationToken cancellationToken)
     {
         return await store.GetAsync(repositoryFullName, id, cancellationToken)
-            ?? throw new InvalidOperationException("The work item no longer exists.");
+            ?? throw new DomainRuleException("The work item no longer exists.");
     }
 }

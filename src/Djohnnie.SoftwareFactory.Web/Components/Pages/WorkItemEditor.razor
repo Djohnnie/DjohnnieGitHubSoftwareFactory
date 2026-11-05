@@ -9,7 +9,6 @@
 @page "/tasks/new"
 @page "/tasks/{Id:int}"
 @implements IDisposable
-@using ToastUI
 @inject WorkItemService WorkItemService
 @inject WorkItemTemplateService Templates
 @inject AiModelService ModelService
@@ -90,7 +89,7 @@ else if (_item is not null)
                         }
                         else
                         {
-                            <Viewer Value="@(_item.Description ?? string.Empty)" />
+                            <MarkdownViewer Value="@_item.Description" />
                         }
                     </MudPaper>
 

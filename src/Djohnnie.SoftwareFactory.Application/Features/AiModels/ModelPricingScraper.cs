@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.AiModels;
@@ -21,14 +22,14 @@ public partial class ModelPricingScraper(HttpClient httpClient)
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"Fetching {uri} failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
+            throw new DomainRuleException($"Fetching {uri} failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
         }
 
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
         var models = Parse(html, uri.ToString());
         if (models.Count == 0)
         {
-            throw new InvalidOperationException("No model pricing tables were found on that page.");
+            throw new DomainRuleException("No model pricing tables were found on that page.");
         }
         return models;
     }

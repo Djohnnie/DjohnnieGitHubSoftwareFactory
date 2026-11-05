@@ -172,7 +172,7 @@ public sealed class CopilotInstructionsFormTools(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return $"Could not read '{file}' (is it a directory?): {ex.Message}";
+            return $"Could not read '{file}': {ex.Message}";
         }
     }
 

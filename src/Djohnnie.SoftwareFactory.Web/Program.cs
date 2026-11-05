@@ -19,8 +19,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddMudServices(options =>
     options.SnackbarConfiguration.SnackbarVariant = MudBlazor.Variant.Outlined);
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<MemoryCacheTicketStore>();
+builder.Services.AddSingleton<SqlTicketStore>();
 builder.Services.AddScoped<RepositoryContext>();
 builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.AddSoftwareFactory(builder.Configuration);
@@ -46,7 +45,7 @@ builder.Services
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan = SqlTicketStore.Lifetime;
     })
     .AddGitHub(options =>
     {
@@ -85,9 +84,9 @@ builder.Services
         };
     });
 
-// The ticket (including the GitHub access token) stays server-side; the cookie only holds a session key.
+// The ticket (including the GitHub access token) stays server-side in SQL (encrypted); the cookie only holds a session key.
 builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
-    .Configure<MemoryCacheTicketStore>((options, store) => options.SessionStore = store);
+    .Configure<SqlTicketStore>((options, store) => options.SessionStore = store);
 
 builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());

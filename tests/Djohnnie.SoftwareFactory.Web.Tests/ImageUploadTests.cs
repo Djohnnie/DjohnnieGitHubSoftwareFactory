@@ -1,11 +1,9 @@
-using System.Reflection;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.JSInterop;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
 
@@ -40,7 +38,7 @@ public class ImageUploadTests : IDisposable
     [Fact]
     public async Task Upload_StoresUnderRandomNameWithDetectedFormat()
     {
-        var image = await _service.UploadImageAsync("My Screenshot (2).jpeg", Png);
+        var image = await _service.UploadImageAsync("My Screenshot (2).jpeg", Png, TestContext.Current.CancellationToken);
 
         var (name, content, contentType) = Assert.Single(_storage.Stored);
         Assert.Matches(@"^\d{4}/\d{2}/[0-9a-f]{32}-my-screenshot-2\.png$", name);
@@ -52,7 +50,7 @@ public class ImageUploadTests : IDisposable
     [Fact]
     public async Task Upload_RejectsNonImages()
     {
-        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("evil.svg", "<svg onload=alert(1)>"u8.ToArray()));
+        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("evil.svg", "<svg onload=alert(1)>"u8.ToArray(), TestContext.Current.CancellationToken));
 
         Assert.Contains("Only PNG, JPEG, GIF and WebP", error.Message);
         Assert.Empty(_storage.Stored);
@@ -64,7 +62,7 @@ public class ImageUploadTests : IDisposable
         var content = new byte[1024 * 1024 + 1];
         Png.CopyTo(content, 0);
 
-        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("big.png", content));
+        var error = await Assert.ThrowsAsync<ValidationFailedException>(() => _service.UploadImageAsync("big.png", content, TestContext.Current.CancellationToken));
 
         Assert.Contains("at most 1 MB", error.Message);
         Assert.Empty(_storage.Stored);
@@ -84,16 +82,6 @@ public class ImageUploadTests : IDisposable
     {
         Assert.False(new ImageUploadOptions().IsConfigured);
         Assert.True(_service.IsEnabled);
-    }
-
-    // MarkdownEditor installs its image hook on this private field of the ToastUIEditor package; guard upgrades.
-    [Fact]
-    public void ToastUIEditor_ExposesItsInteropObject()
-    {
-        var field = typeof(ToastUI.Editor).GetField("_instance", BindingFlags.Instance | BindingFlags.NonPublic);
-
-        Assert.NotNull(field);
-        Assert.True(typeof(IJSObjectReference).IsAssignableFrom(field.FieldType));
     }
 
     private sealed class FakeImageStorage : IImageStorage

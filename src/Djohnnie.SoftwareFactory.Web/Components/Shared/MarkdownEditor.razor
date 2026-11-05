@@ -1,6 +1,4 @@
-@using System.Reflection
 @using Djohnnie.SoftwareFactory.Application.Features.Uploads
-@using ToastUI
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject ImageUploadService ImageUploads
@@ -8,14 +6,13 @@
 @inject ILogger<MarkdownEditor> Logger
 
 @*
-    WYSIWYG Markdown editor (Toast UI Editor), with a switch to raw Markdown at the bottom.
-    The Toast UI wrapper's own Value is HTML while in WYSIWYG mode, so this component always
-    reads the Markdown back from the editor and only exposes Markdown through Value.
-    Pasted, dropped or picked images are uploaded to the image storage (when AllowImages is set and
-    storage is configured) and linked by URL, instead of Toast UI's default base64 data URIs.
+    WYSIWYG Markdown editor (Toast UI Editor), with a switch to raw Markdown at the bottom. MarkdownEditor.razor.js
+    creates the editor through Toast UI's public API and always reports Markdown (also in WYSIWYG mode).
+    Pasted, dropped or picked images are uploaded to the image storage (when AllowImages is set and storage is
+    configured) and linked by URL, instead of Toast UI's default base64 data URIs.
 *@
 <div class="markdown-editor">
-    <Editor @ref="_editor" @bind-Value="_editorValue" Options="_options" Placeholder="@Placeholder" Change="OnChangeAsync" Blur="OnBlurAsync" Load="OnLoadAsync" />
+    <div @ref="_host"></div>
     @if (MaxLength is { } max)
     {
         <MudText Typo="Typo.caption" Align="Align.End" Color="@((Value?.Length ?? 0) > max ? Color.Error : Color.Secondary)" Class="d-block mt-1">
@@ -25,16 +22,13 @@
 </div>
 
 @code {
-    // The ToastUIEditor package (1.1.1) does not expose its JS object nor implement EditorOptions.Hooks,
-    // so the image hook is installed on its private interop object.
-    private static readonly FieldInfo? EditorInstanceField = typeof(Editor).GetField("_instance", BindingFlags.Instance | BindingFlags.NonPublic);
-
-    private Editor? _editor;
-    private string? _editorValue;
-    private string? _markdown;
-    private EditorOptions _options = default!;
+    private ElementReference _host;
     private IJSObjectReference? _module;
+    private IJSObjectReference? _editor;
     private DotNetObjectReference<MarkdownEditor>? _selfReference;
+
+    /// <summary>The Markdown the editor shows; compared with <see cref="Value"/> to tell outside changes from typing.</summary>
+    private string? _markdown;
 
     /// <summary>The Markdown content.</summary>
     [Parameter] public string? Value { get; set; }
@@ -60,38 +54,60 @@
     /// </summary>
     [Parameter] public bool RawMarkdown { get; set; }
 
-    protected override void OnInitialized()
-    {
-        _editorValue = _markdown = Value;
-        _options = new EditorOptions
-        {
-            Height = Height,
-            MinHeight = "200px",
-            InitialEditType = RawMarkdown ? EditorType.Markdown : EditorType.WYSIWYG,
-            PreviewStyle = RawMarkdown ? PreviewStyle.Vertical : PreviewStyle.Tab,
-            UsageStatistics = false,
-            Autofocus = false
-        };
-    }
-
     // The value was changed from outside the editor (e.g. by DGHSF Copilot): push it into the editor.
     protected override async Task OnParametersSetAsync()
     {
         if (_editor is not null && Value != _markdown)
         {
             _markdown = Value;
-            await _editor.SetMarkdown(Value ?? string.Empty, false);
+            try
+            {
+                await _editor.InvokeVoidAsync("setMarkdown", Value ?? string.Empty);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
         }
     }
 
-    private async Task OnChangeAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_editor is null)
+        if (!firstRender)
         {
             return;
         }
 
-        var markdown = await _editor.GetMarkdown();
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/MarkdownEditor.razor.js");
+            _selfReference = DotNetObjectReference.Create(this);
+            _markdown = Value;
+            _editor = await _module.InvokeAsync<IJSObjectReference>("create", _host, _selfReference, new
+            {
+                Value,
+                Placeholder,
+                Height,
+                MinHeight = "200px",
+                RawMarkdown,
+                AllowImages = AllowImages && ImageUploads.IsEnabled,
+                ImageUploads.MaxImageSize
+            });
+
+            // The value may have changed while the editor was being created.
+            await OnParametersSetAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException ex)
+        {
+            Logger.LogWarning(ex, "Creating the Markdown editor failed.");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnEditorChange(string markdown)
+    {
         _markdown = markdown;
         if (markdown != Value)
         {
@@ -100,50 +116,11 @@
         }
     }
 
-    private async Task OnBlurAsync()
+    [JSInvokable]
+    public async Task OnEditorBlur(string markdown)
     {
-        await OnChangeAsync();
+        await OnEditorChange(markdown);
         await OnBlur.InvokeAsync();
-    }
-
-    private async Task OnLoadAsync()
-    {
-        try
-        {
-            // Toast UI raises "load" while it is being created, before the wrapper has stored its JS object.
-            var instance = await WaitForEditorInstanceAsync();
-            if (instance is null)
-            {
-                Logger.LogWarning("The Toast UI editor object was not found; image handling is not configured.");
-                return;
-            }
-
-            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/MarkdownEditor.razor.js");
-            _selfReference ??= DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("configureImages", instance, _selfReference, AllowImages && ImageUploads.IsEnabled, ImageUploads.MaxImageSize);
-        }
-        catch (JSDisconnectedException)
-        {
-        }
-        catch (Exception ex) when (ex is JSException or InvalidOperationException)
-        {
-            Logger.LogWarning(ex, "Configuring image handling of the Markdown editor failed.");
-        }
-    }
-
-    private async Task<IJSObjectReference?> WaitForEditorInstanceAsync()
-    {
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            if (EditorInstanceField?.GetValue(_editor) is IJSObjectReference instance)
-            {
-                return instance;
-            }
-
-            await Task.Delay(20);
-        }
-
-        return null;
     }
 
     [JSInvokable]
@@ -158,7 +135,7 @@
         try
         {
             await using var stream = await image.OpenReadStreamAsync(ImageUploads.MaxImageSize);
-            using var buffer = new MemoryStream((int)Math.Min(size, ImageUploads.MaxImageSize));
+            using var buffer = new MemoryStream((int)Math.Clamp(size, 0, ImageUploads.MaxImageSize));
             await stream.CopyToAsync(buffer);
             var uploaded = await ImageUploads.UploadImageAsync(fileName, buffer.ToArray());
             return uploaded.Url;
@@ -166,7 +143,9 @@
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Uploading image {FileName} failed.", fileName);
-            ReportImageError(ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException ? ex.Message : "Uploading the image failed.");
+            ReportImageError(ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException
+                ? ex.Message
+                : "Uploading the image failed.");
             return null;
         }
     }
@@ -179,16 +158,21 @@
 
     public async ValueTask DisposeAsync()
     {
-        _selfReference?.Dispose();
-        if (_module is not null)
+        try
         {
-            try
+            if (_editor is not null)
+            {
+                await _editor.InvokeVoidAsync("destroy");
+                await _editor.DisposeAsync();
+            }
+            if (_module is not null)
             {
                 await _module.DisposeAsync();
             }
-            catch (JSDisconnectedException)
-            {
-            }
         }
+        catch (JSDisconnectedException)
+        {
+        }
+        _selfReference?.Dispose();
     }
 }

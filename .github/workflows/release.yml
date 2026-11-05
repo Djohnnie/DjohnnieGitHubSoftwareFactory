@@ -23,6 +23,21 @@ jobs:
   build:
     name: Build and test
     runs-on: ubuntu-latest
+    services:
+      # A throwaway SQL Server for the tests that need real SQL Server behavior (SqlServerDatabase in the tests).
+      # The password only exists inside this job's container.
+      sql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: Dghsf-Tests-2026!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Dghsf-Tests-2026!' -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v5
 
@@ -36,9 +51,12 @@ jobs:
           dotnet tool restore
 
       - name: Build
-        run: dotnet build Djohnnie.SoftwareFactory.slnx --configuration Release --no-restore
+        # Warnings fail the build in CI (locally they stay warnings, so work in progress still builds).
+        run: dotnet build Djohnnie.SoftwareFactory.slnx --configuration Release --no-restore -p:TreatWarningsAsErrors=true
 
       - name: Test
+        env:
+          DGHSF_TEST_SQL_SERVER: Server=localhost,1433;User ID=sa;Password=Dghsf-Tests-2026!;TrustServerCertificate=True
         run: dotnet test ${{ env.TEST_PROJECT }} --configuration Release --no-build
 
       - name: Check for missing migrations

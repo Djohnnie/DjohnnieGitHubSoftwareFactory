@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,7 +24,7 @@ public sealed class InternalAgentStore(IDbContextFactory<AppDbContext> dbFactory
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.InternalAgents.SingleOrDefaultAsync(a => a.Key == value.Key, cancellationToken)
-            ?? throw new InvalidOperationException($"The internal agent '{value.Key}' does not exist.");
+            ?? throw new DomainRuleException($"The internal agent '{value.Key}' does not exist.");
         agent.Instructions = value.Instructions.Replace("\r\n", "\n").Trim();
         agent.IsEnabled = value.IsEnabled;
         agent.UpdatedAt = timeProvider.GetUtcNow();

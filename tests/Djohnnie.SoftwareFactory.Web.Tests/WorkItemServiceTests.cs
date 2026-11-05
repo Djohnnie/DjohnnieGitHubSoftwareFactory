@@ -54,6 +54,25 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Empty(WorkItemType.Task.ChildTypes);
     }
 
+    [Theory]
+    [InlineData("owner/repo/../../user")]
+    [InlineData("../user")]
+    [InlineData("owner/..")]
+    [InlineData("owner")]
+    [InlineData("owner/repo?per_page=1")]
+    public async Task InvalidRepositoryNames_AreRefusedBeforeGitHubOrTheDatabaseIsUsed(string name)
+    {
+        var gitHub = _services.GetRequiredService<GitHubService>();
+
+        await Assert.ThrowsAsync<ValidationFailedException>(() => _service.GetAllAsync(name, cancellationToken: _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => _service.AcceptAsync(name, 1, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.GetFileAsync(name, "README.md", _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.GetDirectoryAsync(name, "", _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.PutFileAsync(name, "README.md", "content", "message", null, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.GetCustomAgentsAsync(name, _cancellationToken));
+        Assert.Empty(_gitHub.Requests);
+    }
+
     [Fact]
     public async Task Accept_WhileAnotherAcceptIsGoingOn_IsRefusedWithoutCreatingAnIssue()
     {
@@ -61,7 +80,7 @@ public partial class WorkItemServiceTests : IDisposable
         var store = _services.GetRequiredService<IWorkItemStore>();
         await store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+        var error = await Assert.ThrowsAsync<DomainRuleException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
 
         Assert.Contains("being accepted", error.Message);
         Assert.Empty(_gitHub.CreatedIssues);
@@ -104,8 +123,8 @@ public partial class WorkItemServiceTests : IDisposable
         await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
         var store = _services.GetRequiredService<IWorkItemStore>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.MarkAcceptedAsync(Repo, bug.Id, 1, 1, "https://example.com", _cancellationToken));
+        await Assert.ThrowsAsync<DomainRuleException>(() => store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken));
+        await Assert.ThrowsAsync<DomainRuleException>(() => store.MarkAcceptedAsync(Repo, bug.Id, 1, 1, "https://example.com", _cancellationToken));
         Assert.Single(_gitHub.CreatedIssues);
     }
 
@@ -141,7 +160,7 @@ public partial class WorkItemServiceTests : IDisposable
             .Select(r => JsonDocument.Parse(r.Body!).RootElement).ToList();
         Assert.Equal(["epic", "feature", "story"], issues.Select(i => i.GetProperty("labels").EnumerateArray().Single().GetString()));
         Assert.Equal("Sign in with a passkey", issues[2].GetProperty("title").GetString());
-        Assert.Contains($"<!-- dghsf:story:{story.Id} -->", issues[2].GetProperty("body").GetString());
+        Assert.Contains(WorkItemWorkflow.Marker(story), issues[2].GetProperty("body").GetString());
         Assert.Equal(["epic", "feature", "story"], _gitHub.CreatedLabels);
 
         // The feature (#43, id 1043) is a sub-issue of the epic (#42), the story (#44, id 1044) of the feature.
@@ -216,7 +235,7 @@ public partial class WorkItemServiceTests : IDisposable
         var epic = await SaveAsync(WorkItemType.Epic, "Epic");
         await _service.AcceptAsync(Repo, epic.Id, _cancellationToken);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AssignAgentAsync(Repo, epic.Id, _cancellationToken));
+        var error = await Assert.ThrowsAsync<DomainRuleException>(() => _service.AssignAgentAsync(Repo, epic.Id, _cancellationToken));
 
         Assert.Contains("only user stories, bugs and tasks", error.Message);
         Assert.DoesNotContain(_gitHub.Requests, r => r.Path.EndsWith("/assignees"));
@@ -227,7 +246,7 @@ public partial class WorkItemServiceTests : IDisposable
     {
         var bug = await _service.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Bug, Title = "Bug" }, _cancellationToken);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+        await Assert.ThrowsAsync<DomainRuleException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
         Assert.Empty(_gitHub.Requests);
     }
 
@@ -250,7 +269,7 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Equal("gpt-5", stored.Model);
 
         var acceptedEpic = (await _service.AcceptAsync(Repo, epic.Id, _cancellationToken)).WorkItem;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SaveAsync(acceptedEpic, _cancellationToken));
+        await Assert.ThrowsAsync<DomainRuleException>(() => _service.SaveAsync(acceptedEpic, _cancellationToken));
     }
 
     [Fact]
@@ -267,11 +286,11 @@ public partial class WorkItemServiceTests : IDisposable
 
         var missingParent = await Assert.ThrowsAsync<ValidationFailedException>(() => SaveAsync(WorkItemType.Feature, "Orphan"));
         Assert.Equal("A feature needs a parent.", missingParent.Message);
-        var wrongParent = await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Story, "Story", epic.Id));
+        var wrongParent = await Assert.ThrowsAsync<DomainRuleException>(() => SaveAsync(WorkItemType.Story, "Story", epic.Id));
         Assert.Equal("A user story can only be part of a feature, not of an epic.", wrongParent.Message);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Task, "Task", bug.Id));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Epic, "Epic", epic.Id));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(WorkItemType.Feature, "Feature", otherEpic.Id));
+        await Assert.ThrowsAsync<DomainRuleException>(() => SaveAsync(WorkItemType.Task, "Task", bug.Id));
+        await Assert.ThrowsAsync<DomainRuleException>(() => SaveAsync(WorkItemType.Epic, "Epic", epic.Id));
+        await Assert.ThrowsAsync<DomainRuleException>(() => SaveAsync(WorkItemType.Feature, "Feature", otherEpic.Id));
 
         // The type of an existing item never changes.
         var changed = await _service.SaveAsync(bug with { Type = WorkItemType.Task }, _cancellationToken);
@@ -284,7 +303,7 @@ public partial class WorkItemServiceTests : IDisposable
         var epic = await SaveAsync(WorkItemType.Epic, "Epic");
         var feature = await SaveAsync(WorkItemType.Feature, "Feature", epic.Id);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.DeleteAsync(Repo, epic.Id, _cancellationToken));
+        var error = await Assert.ThrowsAsync<DomainRuleException>(() => _service.DeleteAsync(Repo, epic.Id, _cancellationToken));
         Assert.Contains("still has 1 child item", error.Message);
 
         await _service.DeleteAsync(Repo, feature.Id, _cancellationToken);

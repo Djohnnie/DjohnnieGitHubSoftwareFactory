@@ -7,7 +7,9 @@ public sealed record FileResponse(
     [property: JsonPropertyName("path")] string Path,
     [property: JsonPropertyName("sha")] string Sha,
     [property: JsonPropertyName("content")] string? Content,
-    [property: JsonPropertyName("html_url")] string? HtmlUrl);
+    [property: JsonPropertyName("html_url")] string? HtmlUrl,
+    [property: JsonPropertyName("type")] string? Type = null,
+    [property: JsonPropertyName("encoding")] string? Encoding = "base64");
 
 public sealed record PutFileRequest(
     [property: JsonPropertyName("message")] string Message,

@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
+using MudBlazor.Extensions;
 using MudBlazor.Services;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
@@ -178,7 +179,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         var cut = Render<WorkItemEditor>();
 
         var parent = cut.FindComponent<MudSelect<int?>>();
-        Assert.Equal(feature.Id, parent.Instance.Value);
+        Assert.Equal(feature.Id, parent.Instance.GetState(x => x.Value));
         Assert.True(parent.Instance.Required);
         Assert.Single(cut.FindComponents<AgentPicker>());
         Assert.Contains("Accept &amp; assign", cut.Markup);

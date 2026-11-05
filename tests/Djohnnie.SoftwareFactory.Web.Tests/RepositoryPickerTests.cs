@@ -158,7 +158,8 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
         var restored = new RepositoryContext(
             Services.GetRequiredService<ProtectedLocalStorage>(),
             Services.GetRequiredService<ILogger<RepositoryContext>>(),
-            Services.GetRequiredService<RepositoryService>());
+            Services.GetRequiredService<RepositoryService>(),
+            Services.GetRequiredService<GitHubService>());
 
         await restored.LoadAsync();
 
@@ -166,6 +167,34 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
         var recent = Assert.Single(await Services.GetRequiredService<RepositoryService>()
             .GetRecentAsync(Xunit.TestContext.Current.CancellationToken));
         Assert.True(recent.LastAccessedAt > previousAccess);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, true)]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    public async Task RestoredRepository_IsRefreshedFromGitHub_OrKeptWhenGitHubFails(HttpStatusCode status, bool refreshed)
+    {
+        // The stored copy is stale: the default branch was renamed and the repository made private since.
+        var stale = Repository with { DefaultBranch = "master", Private = true };
+        await Services.GetRequiredService<RepositoryContext>().SelectAsync(stale);
+        var encryptedSelection = (string)JSInterop.Invocations["localStorage.setItem"].Single().Arguments[1]!;
+        JSInterop.Setup<string>("localStorage.getItem", "dghsf.repository").SetResult(encryptedSelection);
+        _gitHub.RecentStatus = status;
+        var restored = new RepositoryContext(
+            Services.GetRequiredService<ProtectedLocalStorage>(),
+            Services.GetRequiredService<ILogger<RepositoryContext>>(),
+            Services.GetRequiredService<RepositoryService>(),
+            Services.GetRequiredService<GitHubService>());
+        var changes = 0;
+        restored.Changed += () => changes++;
+        await restored.LoadAsync();
+        Assert.Equal(stale, restored.Current);
+
+        await restored.RefreshAsync();
+
+        Assert.Equal(refreshed ? Repository : stale, restored.Current);
+        Assert.Equal(refreshed ? 2 : 1, changes);
+        Assert.Equal(refreshed ? 2 : 1, JSInterop.Invocations["localStorage.setItem"].Count);
     }
 
     [Fact]

@@ -35,6 +35,43 @@ public class GitHubApiClientTests
         Assert.Single(handler.Requests);
     }
 
+    [Fact]
+    public async Task GetFile_DecodesBase64Content()
+    {
+        var handler = new Handler(_ => Json($$"""{"path":"README.md","sha":"abc","type":"file","encoding":"base64","content":"{{Convert.ToBase64String("Hello"u8.ToArray())}}\n"}"""));
+
+        var file = await Client(handler).GetFileAsync("owner/repo", "README.md", _cancellationToken);
+
+        Assert.Equal("Hello", file!.Content);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetFile_OverOneMegabyte_FetchesTheRawContent()
+    {
+        var handler = new Handler(request => request.Headers.Accept.ToString().Contains("raw")
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("Large content") }
+            : Json("""{"path":"big.json","sha":"abc","type":"file","encoding":"none","content":""}"""));
+
+        var file = await Client(handler).GetFileAsync("owner/repo", "big.json", _cancellationToken);
+
+        Assert.Equal("Large content", file!.Content);
+        Assert.Equal("application/vnd.github.raw+json", handler.AcceptHeaders[1]);
+    }
+
+    [Theory]
+    [InlineData("""[{"name":"a.md","path":"docs/a.md","sha":"1","type":"file"}]""", "is a directory")]
+    [InlineData("""{"path":"docs","sha":"1","type":"submodule"}""", "is a submodule")]
+    [InlineData("""{"path":"link","sha":"1","type":"symlink","target":"README.md"}""", "is a symlink")]
+    public async Task GetFile_ForSomethingElseThanAFile_ExplainsWhat(string response, string expected)
+    {
+        var handler = new Handler(_ => Json(response));
+
+        var error = await Assert.ThrowsAsync<GitHubApiException>(() => Client(handler).GetFileAsync("owner/repo", "docs", _cancellationToken));
+
+        Assert.Contains(expected, error.Message);
+    }
+
     [Theory]
     [InlineData("../../../user")]
     [InlineData("docs/../../../other/private/contents/secret.txt")]
@@ -115,10 +152,12 @@ public class GitHubApiClientTests
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<Uri> Requests { get; } = [];
+        public List<string> AcceptHeaders { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request.RequestUri!);
+            AcceptHeaders.Add(request.Headers.Accept.ToString());
             return Task.FromResult(respond(request));
         }
     }

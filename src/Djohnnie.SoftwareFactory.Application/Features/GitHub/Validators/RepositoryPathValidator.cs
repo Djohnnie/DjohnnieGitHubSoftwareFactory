@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Application.Common;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using FluentValidation;
 
@@ -7,7 +8,7 @@ public sealed class RepositoryPathValidator : AbstractValidator<RepositoryPathRe
 {
     public RepositoryPathValidator()
     {
-        RuleFor(request => request.RepositoryFullName).NotEmpty();
+        RuleFor(request => request.RepositoryFullName).ValidRepositoryFullName();
         RuleFor(request => request.Path).NotEmpty();
     }
 }

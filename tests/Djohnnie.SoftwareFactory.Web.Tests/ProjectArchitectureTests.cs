@@ -45,7 +45,8 @@ public class ProjectArchitectureTests
                 "20261102125044_AddRepositoryAccesses", "20261102133114_AddEpicTemplates",
                 "20261105083736_AddRepositoriesAgentsAndFavorites", "20261105095015_AddWorkItemHierarchy",
                 "20261105104758_AddInternalAgents",
-                "20261105123925_AddWorkItemAcceptClaim"],
+                "20261105123925_AddWorkItemAcceptClaim", "20261105131621_AddWorkItemAcceptIssueSince",
+                "20261105131859_AddAuthSessions"],
             db.Database.GetMigrations());
         Assert.All(db.Model.GetEntityTypes(), entity =>
         {

@@ -273,7 +273,7 @@
             _selected = _scraped.Where(m => ChangeOf(m) != "Unchanged").ToHashSet();
             Snackbar.Add($"Found {_scraped.Count} models.", Severity.Info);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is ArgumentException or Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or HttpRequestException or TaskCanceledException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }

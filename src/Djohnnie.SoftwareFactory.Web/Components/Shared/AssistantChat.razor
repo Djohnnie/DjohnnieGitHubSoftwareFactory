@@ -52,9 +52,14 @@ else
                                 {
                                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                                 }
-                                else
+                                else if (message.FromUser || message.IsError)
                                 {
                                     @message.Text
+                                }
+                                else
+                                {
+                                    @* Copilot replies are Markdown; ChatMarkdown escapes raw HTML and keeps only safe links. *@
+                                    <div class="chat-markdown">@((MarkupString)ChatMarkdown.ToHtml(message.Text))</div>
                                 }
                             </div>
                         }

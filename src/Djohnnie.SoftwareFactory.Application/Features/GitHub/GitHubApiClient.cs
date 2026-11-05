@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Api = Djohnnie.SoftwareFactory.Contracts.GitHub.Api;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
@@ -60,21 +62,46 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
     }
 
     /// <summary>Gets a file from the default branch, or <c>null</c> when it does not exist.</summary>
+    /// <exception cref="GitHubApiException">The path is a directory, symlink or submodule, or GitHub refused the request.</exception>
     public async Task<GitHubFile?> GetFileAsync(string repositoryFullName, string path, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Get, ContentsUrl(repositoryFullName, path), null, cancellationToken);
+        var url = ContentsUrl(repositoryFullName, path);
+        using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
 
         await EnsureSuccessAsync(response, cancellationToken);
-        var file = await response.Content.ReadFromJsonAsync<Api.FileResponse>(cancellationToken)
-            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            // The contents API lists a directory instead of returning a file.
+            throw new GitHubApiException(HttpStatusCode.UnprocessableEntity, $"'{path}' is a directory, not a file.");
+        }
 
-        var bytes = Convert.FromBase64String(file.Content?.Replace("\n", string.Empty) ?? string.Empty);
-        return new GitHubFile(file.Path, file.Sha, Encoding.UTF8.GetString(bytes), file.HtmlUrl);
+        var file = document.RootElement.Deserialize<Api.FileResponse>()
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+        if (file.Type is { } type && type != "file")
+        {
+            throw new GitHubApiException(HttpStatusCode.UnprocessableEntity, $"'{path}' is a {type}, not a file.");
+        }
+
+        var content = file.Encoding == "base64" && file.Content is not null
+            ? Encoding.UTF8.GetString(Convert.FromBase64String(file.Content.Replace("\n", string.Empty)))
+            // GitHub leaves out the content of files over 1 MB (encoding "none"); the raw media type returns up to 100 MB.
+            : await GetRawContentAsync(url, cancellationToken);
+        return new GitHubFile(file.Path, file.Sha, content, file.HtmlUrl);
     }
+
+    private async Task<string> GetRawContentAsync(string url, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken, RawMediaType);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    private const string RawMediaType = "application/vnd.github.raw+json";
 
     /// <summary>
     /// Creates or updates a file with a single commit on the default branch.
@@ -132,13 +159,15 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
     }
 
     /// <summary>
-    /// Finds the most recent issue with <paramref name="label"/> whose body contains <paramref name="marker"/>, or <c>null</c>.
-    /// Uses the issues list (immediately consistent, unlike search) and looks at most at the last <see cref="MaxMarkerPages"/> pages.
+    /// Finds the most recent issue with <paramref name="label"/> whose body contains <paramref name="marker"/> among the
+    /// issues created or updated since <paramref name="since"/>, or <c>null</c>. Uses the issues list (immediately
+    /// consistent, unlike search); the time filter keeps it short however many issues the label has.
     /// </summary>
-    public async Task<GitHubIssue?> FindIssueByMarkerAsync(string repositoryFullName, string label, string marker, CancellationToken cancellationToken = default)
+    public async Task<GitHubIssue?> FindIssueByMarkerAsync(string repositoryFullName, string label, string marker, DateTimeOffset since, CancellationToken cancellationToken = default)
     {
-        string? url = $"repos/{repositoryFullName}/issues?labels={Uri.EscapeDataString(label)}&state=all&sort=created&direction=desc&per_page={PageSize}";
-        for (var page = 0; url is not null && page < MaxMarkerPages; page++)
+        string? url = $"repos/{repositoryFullName}/issues?labels={Uri.EscapeDataString(label)}&state=all&sort=created&direction=desc&per_page={PageSize}"
+            + $"&since={Uri.EscapeDataString(since.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}";
+        while (url is not null)
         {
             using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
             await EnsureSuccessAsync(response, cancellationToken);
@@ -153,8 +182,6 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
 
         return null;
     }
-
-    private const int MaxMarkerPages = 10;
 
     public async Task<GitHubIssue> GetIssueAsync(string repositoryFullName, int issueNumber, CancellationToken cancellationToken = default)
     {
@@ -193,10 +220,16 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return issue.Assignees?.Any(a => a.Login.Contains("copilot", StringComparison.OrdinalIgnoreCase)) == true;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken)
+    /// <param name="accept">A media type instead of the client's default <c>application/vnd.github+json</c>.</param>
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken, string? accept = null)
     {
         using var request = new HttpRequestMessage(method, url) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
+        if (accept is not null)
+        {
+            // A header on the request replaces the client's default header of the same name.
+            request.Headers.Accept.ParseAdd(accept);
+        }
         return await httpClient.SendAsync(request, cancellationToken);
     }
 

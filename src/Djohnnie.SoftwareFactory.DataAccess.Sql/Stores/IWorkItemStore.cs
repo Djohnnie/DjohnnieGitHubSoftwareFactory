@@ -19,8 +19,11 @@ public interface IWorkItemStore
     /// Claims a draft for acceptance, so concurrent accepts can't both create a GitHub issue. Refuses when another
     /// acceptance started less than <paramref name="claimTimeout"/> ago.
     /// </summary>
-    /// <returns><c>true</c> when an earlier attempt didn't finish, so its issue may already exist on GitHub.</returns>
-    Task<bool> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken);
+    /// <returns>
+    /// When an earlier attempt that didn't finish started, so its issue may already exist on GitHub (it was created or
+    /// updated since then); <c>null</c> when no such attempt exists.
+    /// </returns>
+    Task<DateTimeOffset?> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken);
 
     /// <summary>Ends a failed acceptance attempt; the item stays a draft.</summary>
     /// <param name="issueMayExist">Whether the issue may have been created anyway, so the next attempt looks for it first.</param>

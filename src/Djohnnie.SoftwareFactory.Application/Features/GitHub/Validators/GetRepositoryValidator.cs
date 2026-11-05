@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Application.Common;
 using FluentValidation;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
@@ -6,7 +7,6 @@ public sealed class GetRepositoryValidator : AbstractValidator<GetRepositoryQuer
 {
     public GetRepositoryValidator()
     {
-        RuleFor(request => request.Dto.RepositoryFullName).NotEmpty().MaximumLength(200)
-            .Matches(@"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$");
+        RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
     }
 }

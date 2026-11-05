@@ -3,6 +3,7 @@ using Djohnnie.SoftwareFactory.Application.Common;
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
+using Djohnnie.SoftwareFactory.Application.Features.AuthSessions;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
 using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
@@ -43,6 +44,7 @@ public static class DependencyInjection
             services.AddScoped<WorkItemTemplateService>();
             services.AddScoped<GitHubService>();
             services.AddScoped<RepositoryService>();
+            services.AddScoped<AuthSessionService>();
             services.AddScoped<AgentService>();
             services.AddScoped<AssistantService>();
             services.AddScoped<InternalAgentRegistry>();

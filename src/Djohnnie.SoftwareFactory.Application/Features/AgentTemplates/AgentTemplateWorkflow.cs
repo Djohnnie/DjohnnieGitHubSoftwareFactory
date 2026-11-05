@@ -1,5 +1,6 @@
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AgentTemplates;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
@@ -10,18 +11,18 @@ public class AgentTemplateWorkflow(IAgentTemplateStore store, GitHubApiClient gi
 {
     /// <summary>Creates (<paramref name="id"/> 0) or updates a template from an agent definition.</summary>
     /// <exception cref="FormatException">The agent cannot be serialized (for example invalid MCP server YAML).</exception>
-    /// <exception cref="InvalidOperationException">The file name is invalid or already used by another template.</exception>
+    /// <exception cref="DomainRuleException">The file name is invalid or already used by another template.</exception>
     public async Task<AgentTemplate> SaveAsync(int id, string fileName, AgentDefinition agent, CancellationToken cancellationToken = default)
     {
         fileName = fileName.Trim();
         if (!AgentDefinition.IsValidFileName(fileName))
         {
-            throw new InvalidOperationException($"'{fileName}' is not a valid agent file name.");
+            throw new DomainRuleException($"'{fileName}' is not a valid agent file name.");
         }
 
         if (agent.Prompt.Length > AgentDefinition.MaxPromptLength)
         {
-            throw new InvalidOperationException($"The instructions are longer than {AgentDefinition.MaxPromptLength:N0} characters.");
+            throw new DomainRuleException($"The instructions are longer than {AgentDefinition.MaxPromptLength:N0} characters.");
         }
 
         var content = AgentFileSerializer.Serialize(agent);
@@ -49,7 +50,7 @@ public class AgentTemplateWorkflow(IAgentTemplateStore store, GitHubApiClient gi
         fileName = fileName.Trim();
         if (!AgentDefinition.IsValidFileName(fileName))
         {
-            throw new InvalidOperationException($"'{fileName}' is not a valid agent file name.");
+            throw new DomainRuleException($"'{fileName}' is not a valid agent file name.");
         }
 
         var path = AgentDefinition.GetPath(fileName);

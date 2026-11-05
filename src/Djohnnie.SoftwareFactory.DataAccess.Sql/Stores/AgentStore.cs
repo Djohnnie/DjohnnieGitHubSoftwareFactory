@@ -15,9 +15,7 @@ public sealed class AgentStore(IDbContextFactory<AppDbContext> dbFactory) : IAge
         var present = fileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var repository = await db.GetOrAddRepositoryAsync(repositoryFullName, cancellationToken);
-        var agents = repository.Id == 0
-            ? []
-            : await db.Agents.Where(a => a.RepositoryId == repository.Id).ToListAsync(cancellationToken);
+        var agents = await db.Agents.Where(a => a.RepositoryId == repository.Id).ToListAsync(cancellationToken);
 
         db.Agents.RemoveRange(agents.Where(a => !present.Contains(a.FileName)));
         foreach (var fileName in present.Where(f => !agents.Any(a => string.Equals(a.FileName, f, StringComparison.OrdinalIgnoreCase))))
@@ -34,9 +32,7 @@ public sealed class AgentStore(IDbContextFactory<AppDbContext> dbFactory) : IAge
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var repository = await db.GetOrAddRepositoryAsync(repositoryFullName, cancellationToken);
-        var agent = repository.Id == 0
-            ? null
-            : await db.Agents.SingleOrDefaultAsync(a => a.RepositoryId == repository.Id && a.FileName == fileName, cancellationToken);
+        var agent = await db.Agents.SingleOrDefaultAsync(a => a.RepositoryId == repository.Id && a.FileName == fileName, cancellationToken);
         if (agent is null)
         {
             agent = new Agent { Repository = repository, FileName = fileName };

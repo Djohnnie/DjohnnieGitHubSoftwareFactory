@@ -55,7 +55,7 @@ public class WorkItemTemplateTests : BunitContext
         await service.DeleteAsync(template.Id, TestContext.Current.CancellationToken);
         Assert.Empty(await service.GetAllAsync(WorkItemType.Epic, TestContext.Current.CancellationToken));
         Assert.Null(await service.GetAsync(template.Id, TestContext.Current.CancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(updated, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DomainRuleException>(() => service.SaveAsync(updated, TestContext.Current.CancellationToken));
     }
 
     [Fact]

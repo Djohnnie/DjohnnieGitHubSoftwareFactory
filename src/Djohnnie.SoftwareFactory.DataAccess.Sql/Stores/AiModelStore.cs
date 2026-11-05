@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,7 +29,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (await db.AiModels.AnyAsync(m => m.Id != model.Id && m.Name == model.Name && m.Tier == model.Tier, cancellationToken))
         {
-            throw new InvalidOperationException($"A model '{model.Name}' with tier '{model.Tier}' already exists.");
+            throw new DomainRuleException($"A model '{model.Name}' with tier '{model.Tier}' already exists.");
         }
 
         model.UpdatedAt = timeProvider.GetUtcNow();
