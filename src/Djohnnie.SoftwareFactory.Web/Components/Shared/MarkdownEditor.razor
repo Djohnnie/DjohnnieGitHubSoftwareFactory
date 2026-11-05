@@ -14,10 +14,26 @@
     creates the editor through Toast UI's public API and always reports Markdown (also in WYSIWYG mode).
     Pasted, dropped or picked images are uploaded to the image storage (when AllowImages is set and storage is
     configured) and linked by URL, instead of Toast UI's default base64 data URIs.
-    With Dictation set (and Azure AI Speech configured), a microphone at the end of the toolbar listens until it is
-    clicked again (wwwroot/js/dictation.js); the Description Writer then fits what was said into the description.
+    With Dictation set (and Azure AI Speech configured), a microphone at the top right, next to the Header, listens until
+    it is clicked again (wwwroot/js/dictation.js); the Description Writer then fits what was said into the description.
 *@
 <div class="markdown-editor">
+    @if (Header is not null || CanDictate)
+    {
+        <div class="d-flex align-start gap-2">
+            <div class="flex-grow-1">@Header</div>
+            @if (CanDictate)
+            {
+                <MudTooltip Text="@DictationLabel">
+                    <MudIconButton Icon="@(_dictationState == DictationState.Listening ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic)"
+                                   Color="@(_dictationState == DictationState.Listening ? Color.Error : Color.Default)"
+                                   Class="markdown-editor-mic" aria-label="@DictationLabel"
+                                   aria-pressed="@(_dictationState == DictationState.Listening ? "true" : "false")"
+                                   Disabled="@(_dictationState == DictationState.Writing)" OnClick="ToggleDictation" />
+                </MudTooltip>
+            }
+        </div>
+    }
     <div @ref="_host"></div>
     @if (_dictationState == DictationState.Listening)
     {
@@ -93,14 +109,30 @@
     /// </summary>
     [Parameter] public bool RawMarkdown { get; set; }
 
-    /// <summary>Adds a microphone to the toolbar (when Azure AI Speech is configured); set when the editor is created.</summary>
+    /// <summary>Adds a microphone at the top right, next to the <see cref="Header"/> (when Azure AI Speech is configured).</summary>
     [Parameter] public DescriptionDictation? Dictation { get; set; }
+
+    /// <summary>Shown above the editor, e.g. the heading and help text, with the dictation microphone to its right.</summary>
+    [Parameter] public RenderFragment? Header { get; set; }
 
     private bool CanDictate
     {
         get
         {
             return Dictation is not null && Speech.IsEnabled;
+        }
+    }
+
+    private string DictationLabel
+    {
+        get
+        {
+            return _dictationState switch
+            {
+                DictationState.Listening => "Stop dictating",
+                DictationState.Writing => "Writing the description...",
+                _ => "Dictate the description"
+            };
         }
     }
 
@@ -140,8 +172,7 @@
                 MinHeight = "200px",
                 RawMarkdown,
                 AllowImages = AllowImages && ImageUploads.IsEnabled,
-                ImageUploads.MaxImageSize,
-                Dictation = CanDictate
+                ImageUploads.MaxImageSize
             });
 
             // The value may have changed while the editor was being created.
@@ -207,8 +238,7 @@
         Snackbar.Add(message, Severity.Error);
     }
 
-    /// <summary>The microphone in the toolbar: starts listening, or stops and writes the description.</summary>
-    [JSInvokable]
+    /// <summary>The microphone: starts listening, or stops and writes the description.</summary>
     public async Task ToggleDictation()
     {
         switch (_dictationState)
@@ -255,7 +285,7 @@
         }
 
         _transcript = string.Empty;
-        await SetDictationStateAsync(DictationState.Listening);
+        SetDictationState(DictationState.Listening);
         string? transcript = null;
         try
         {
@@ -295,7 +325,7 @@
 
         if (transcript is null)
         {
-            await SetDictationStateAsync(DictationState.Idle);
+            SetDictationState(DictationState.Idle);
             return;
         }
 
@@ -305,7 +335,7 @@
     /// <summary>Lets the Description Writer fit the transcript into the description, with an Undo in the snackbar.</summary>
     private async Task WriteDescriptionAsync(string transcript)
     {
-        await SetDictationStateAsync(DictationState.Writing);
+        SetDictationState(DictationState.Writing);
         var before = Value ?? string.Empty;
         try
         {
@@ -326,7 +356,7 @@
         }
         finally
         {
-            await SetDictationStateAsync(DictationState.Idle);
+            SetDictationState(DictationState.Idle);
         }
     }
 
@@ -369,20 +399,10 @@
         }
     }
 
-    private async Task SetDictationStateAsync(DictationState state)
+    private void SetDictationState(DictationState state)
     {
         _dictationState = state;
         StateHasChanged();
-        try
-        {
-            if (_editor is not null)
-            {
-                await _editor.InvokeVoidAsync("setDictationState", state.ToString().ToLowerInvariant());
-            }
-        }
-        catch (JSDisconnectedException)
-        {
-        }
     }
 
     public async ValueTask DisposeAsync()

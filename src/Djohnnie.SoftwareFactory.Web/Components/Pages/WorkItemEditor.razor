@@ -81,16 +81,20 @@ else if (_item is not null)
                     </MudPaper>
 
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                        <MudText Typo="Typo.h6">Description</MudText>
                         @if (_item.IsDraft)
                         {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@DescriptionHelp</MudText>
                             <MarkdownEditor Value="@_item.Description" ValueChanged="OnDescriptionChanged" OnBlur="OnFieldBlur" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
                                             Placeholder="@($"Describe the {Name}...")"
-                                            Dictation="@(new DescriptionDictation(Name, _item.Title, SelectedTemplate?.Description))" />
+                                            Dictation="@(new DescriptionDictation(Name, _item.Title, SelectedTemplate?.Description))">
+                                <Header>
+                                    <MudText Typo="Typo.h6">Description</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@DescriptionHelp</MudText>
+                                </Header>
+                            </MarkdownEditor>
                         }
                         else
                         {
+                            <MudText Typo="Typo.h6">Description</MudText>
                             <MarkdownViewer Value="@_item.Description" />
                         }
                     </MudPaper>

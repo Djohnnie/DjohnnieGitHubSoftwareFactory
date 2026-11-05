@@ -90,7 +90,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Empty(cut.FindAll(".mud-appbar nav"));
         if (rendersPage)
         {
-            var links = cut.FindAll(".app-header > .mud-appbar + nav [role='group'] a");
+            var links = cut.FindAll(".app-header > .mud-appbar + .desktop-only > nav [role='group'] a");
             Assert.Equal(new[] { "/agent-templates", "/epic-templates", "/feature-templates", "/story-templates", "/bug-templates", "/task-templates" },
                 links.Select(link => link.GetAttribute("href")));
             Assert.Equal(new[]
@@ -100,7 +100,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
                 },
                 links.Select(link => link.GetAttribute("aria-label")));
             Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
-            var internalAgents = cut.Find(".app-header > .mud-appbar + nav > a[href='/internal-agents']");
+            var internalAgents = cut.Find(".app-header > .mud-appbar + .desktop-only > nav > a[href='/internal-agents']");
             Assert.Equal("Internal agents", internalAgents.TextContent.Trim());
             Assert.Contains("Select repository", cut.Find(".mud-appbar").TextContent);
         }
@@ -139,10 +139,10 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Equal("repo", header.QuerySelector(".current-repo-name")!.TextContent);
         Assert.Contains("owner /", header.TextContent);
         Assert.Empty(header.QuerySelectorAll("nav"));
-        var navigation = cut.Find(".app-header > .mud-appbar + nav[aria-label='Main navigation']");
+        var navigation = cut.Find(".app-header > .mud-appbar + .desktop-only > nav[aria-label='Main navigation']");
         Assert.Equal(new[]
             {
-                "/", "/agents", "/agent-templates", "/copilot-instructions", "/epics", "/epic-templates", "/features", "/feature-templates",
+                "/", "/copilot-instructions", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
                 "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/models", "/internal-agents"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));

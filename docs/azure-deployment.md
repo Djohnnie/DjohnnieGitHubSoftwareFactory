@@ -73,7 +73,7 @@ Use `--public-access blob`, not `container`, so the container cannot be listed. 
 
 ## Dictation
 
-The microphones in the title fields and in the description editor toolbars (work items and work item templates) use Azure AI Speech speech-to-text. The browser streams the microphone directly to Azure with the Speech SDK for JavaScript (served from `wwwroot/lib`). The server only exchanges the Speech key for a 10-minute authorization token (`sts/v1.0/issueToken`), so the key never reaches the browser. One Speech resource is enough; the free tier (F0) covers 5 audio hours a month:
+The microphones in the title fields and at the top right of the description editors (work items and work item templates) use Azure AI Speech speech-to-text. The browser streams the microphone directly to Azure with the Speech SDK for JavaScript (served from `wwwroot/lib`). The server only exchanges the Speech key for a 10-minute authorization token (`sts/v1.0/issueToken`), so the key never reaches the browser. One Speech resource is enough; the free tier (F0) covers 5 audio hours a month:
 
 ```powershell
 az cognitiveservices account create -n <speech-resource> -g <resource-group> --kind SpeechServices --sku F0 -l westeurope --yes

@@ -319,9 +319,9 @@ h1:focus {
         content: "An error has occurred."
     }
 
-/* The microphone of a DictationTextField (adornment) or a MarkdownEditor (toolbar) while it listens. */
+/* The microphone of a DictationTextField (adornment) or a MarkdownEditor (top right) while it listens. */
 .dictation-listening .mud-input-adornment-end .mud-icon-button,
-.markdown-editor-dictate[data-state="listening"] {
+.markdown-editor-mic[aria-pressed="true"] {
     animation: dictation-pulse 1.2s ease-in-out infinite;
 }
 
@@ -337,41 +337,16 @@ h1:focus {
 
 @media (prefers-reduced-motion: reduce) {
     .dictation-listening .mud-input-adornment-end .mud-icon-button,
-    .markdown-editor-dictate[data-state="listening"] {
+    .markdown-editor-mic[aria-pressed="true"] {
         animation: none;
         outline: 2px solid var(--mud-palette-error);
     }
 }
 
-/* The dictation microphone at the end of the MarkdownEditor toolbar, sized like Toast UI's own toolbar buttons. */
-.markdown-editor-dictate {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    margin: 7px 5px;
-    padding: 0;
-    border: 1px solid transparent;
-    border-radius: 50%;
-    background: transparent;
-    color: #555;
-    cursor: pointer;
+/* The MarkdownEditor's dictation microphone, tucked into the top right corner of the box around the editor. */
+.markdown-editor-mic {
+    margin: -8px -8px 0 0;
 }
-
-    .markdown-editor-dictate:hover:not(:disabled) {
-        border-color: #e4e7ee;
-        background-color: #fff;
-    }
-
-    .markdown-editor-dictate[data-state="listening"] {
-        color: var(--mud-palette-error);
-    }
-
-    .markdown-editor-dictate:disabled {
-        cursor: default;
-        opacity: 0.5;
-    }
 
 /* What has been dictated so far, or the Description Writer at work, under the editor. */
 .markdown-editor-dictation {

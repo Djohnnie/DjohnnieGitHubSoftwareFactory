@@ -106,10 +106,12 @@ public class DescriptionDictationTests : BunitContext
             ConfigureSpeech();
         }
 
-        Render<MarkdownEditor>(p => p.Add(e => e.Dictation, dictation ? new DescriptionDictation("bug") : null));
+        var cut = Render<MarkdownEditor>(p => p
+            .Add(e => e.Dictation, dictation ? new DescriptionDictation("bug") : null)
+            .Add(e => e.Header, "<h6 id='heading'>Description</h6>"));
 
-        var options = Assert.Single(_module.Invocations["create"]).Arguments[2]!;
-        Assert.Equal(expected, options.GetType().GetProperty("Dictation")!.GetValue(options));
+        Assert.NotNull(cut.Find("#heading"));
+        Assert.Equal(expected, cut.FindAll("button.markdown-editor-mic[aria-label='Dictate the description']").Count == 1);
     }
 
     [Fact]
@@ -125,8 +127,9 @@ public class DescriptionDictationTests : BunitContext
             .Add(e => e.ValueChanged, v => { value = v; })
             .Add(e => e.Dictation, new DescriptionDictation("user story", "Login", Skeleton)));
 
-        var dictating = cut.InvokeAsync(() => cut.Instance.ToggleDictation());
+        cut.Find("button.markdown-editor-mic").Click();
         cut.WaitForAssertion(() => Assert.Contains("Listening...", cut.Markup));
+        Assert.Equal("Stop dictating", cut.Find("button.markdown-editor-mic[aria-pressed='true']").GetAttribute("aria-label"));
         var invocation = Assert.Single(_dictation.Invocations["recognizeContinuous"]);
         Assert.Equal("token-1", invocation.Arguments[1]);
         Assert.Equal(MarkdownEditor.MaxDictationSeconds, invocation.Arguments[4]);
@@ -135,11 +138,10 @@ public class DescriptionDictationTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Users should log in", cut.Markup));
 
         recognition.SetResult(new("recognized", "Users should log in with their GitHub account."));
-        await dictating;
 
-        Assert.Equal(Written, value);
+        cut.WaitForAssertion(() => Assert.Equal(Written, value));
         Assert.Equal(Written, _editor.Invocations["setMarkdown"].Last().Arguments[0]);
-        Assert.Equal(["listening", "writing", "idle"], _editor.Invocations["setDictationState"].Select(i => i.Arguments[0]));
+        cut.WaitForAssertion(() => Assert.Equal("false", cut.Find("button.markdown-editor-mic").GetAttribute("aria-pressed")));
         Assert.DoesNotContain("Listening...", cut.Markup);
 
         snackbars.WaitForAssertion(() => Assert.Contains("Fitted what you said into the description.", snackbars.Markup));
