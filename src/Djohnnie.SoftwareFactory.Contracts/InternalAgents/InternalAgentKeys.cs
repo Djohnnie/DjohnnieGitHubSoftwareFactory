@@ -7,6 +7,7 @@ public static class InternalAgentKeys
 {
     public const string AgentCopilot = "agent-copilot";
     public const string AgentTemplateCopilot = "agent-template-copilot";
+    public const string CopilotInstructionsCopilot = "copilot-instructions-copilot";
     public const string ModelSelector = "model-selector";
     public const string ChatSuggestions = "chat-suggestions";
 

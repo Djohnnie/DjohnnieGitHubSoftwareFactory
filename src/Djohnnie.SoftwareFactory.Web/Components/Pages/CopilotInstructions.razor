@@ -1,0 +1,214 @@
+@page "/copilot-instructions"
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+@inject ISnackbar Snackbar
+
+<PageTitle>Copilot instructions</PageTitle>
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Copilot instructions</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            The repository-wide custom instructions in <code>@CopilotInstructionsFile.Path</code> of <b>@Repository.Current?.FullName</b>.
+            GitHub Copilot adds them to every chat, cloud agent and code review request. Every change is committed directly to the default branch.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        @if (_htmlUrl is not null)
+        {
+            <MudButton Href="@_htmlUrl" Target="_blank" rel="noopener" Variant="Variant.Text" Color="Color.Primary"
+                       StartIcon="@Icons.Custom.Brands.GitHub">View on GitHub</MudButton>
+        }
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync" Disabled="_loading || _saving" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+@if (_loaded)
+{
+    <MudStack Spacing="4">
+        <AssistantChat CopilotKey="@InternalAgentKeys.CopilotInstructionsCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")"
+                       Tools="_assistantTools" Placeholder="Tell me what Copilot should know about this repository"
+                       Subtitle="@(Exists ? "Ask me to check or improve the instructions; I can read the repository and will update the editor." : "I'll explore the repository, ask what I can't find out and write the instructions in the editor.")"
+                       Suggestions="@(Exists ? ImproveSuggestions : NewSuggestions)" />
+
+        @if (!Exists)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Icon="@Icons.Material.Filled.NoteAdd">
+                @Repository.Current?.FullName doesn't have a <code>@CopilotInstructionsFile.Path</code> yet. Saving creates it.
+            </MudAlert>
+        }
+
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText Typo="Typo.h6">@CopilotInstructionsFile.Path</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                Markdown with build and test commands, the architecture and the conventions Copilot should follow.
+            </MudText>
+            <MarkdownEditor @bind-Value="_content" RawMarkdown="true" Height="600px"
+                            Placeholder="Write the instructions in Markdown, or ask the Copilot above to write them." />
+            <MudText Typo="Typo.caption" Align="Align.End" Class="d-block mt-1"
+                     Color="@(Length > CopilotInstructionsFile.CodeReviewLimit ? Color.Warning : Color.Secondary)">
+                @Length characters@(Length > CopilotInstructionsFile.CodeReviewLimit ? $" (Copilot code review only reads the first {CopilotInstructionsFile.CodeReviewLimit})" : string.Empty)
+            </MudText>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Commit</MudText>
+            <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message" Placeholder="@DefaultCommitMessage"
+                          HelperText="@($"Committed directly to {Repository.Current?.DefaultBranch ?? "the default branch"}.")" />
+            <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                @if (IsDirty)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Unsaved changes</MudText>
+                }
+                <MudButton Variant="Variant.Outlined" OnClick="ReloadAsync" Disabled="_saving || !IsDirty">Discard changes</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                           StartIcon="@Icons.Material.Filled.Save">
+                    @if (_saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save &amp; commit
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    private static readonly string[] NewSuggestions =
+    [
+        "Explore the repository and write the instructions",
+        "Write instructions focused on how to build and test",
+        "Document the architecture and the conventions"
+    ];
+
+    private static readonly string[] ImproveSuggestions =
+    [
+        "Check the instructions against the current code",
+        "Make the instructions shorter and more specific",
+        "Add the conventions you find in the code"
+    ];
+
+    private AssistantTools? _assistantTools;
+    private string? _content;
+    private string _original = string.Empty;
+    private string? _sha;
+    private string? _htmlUrl;
+    private string? _commitMessage;
+    private bool _loading = true;
+    private bool _loaded;
+    private bool _saving;
+    private string? _error;
+
+    private bool Exists => _sha is not null;
+
+    private int Length => Normalize(_content).Length;
+
+    private bool IsDirty => Normalize(_content) != _original;
+
+    private string DefaultCommitMessage => Exists ? "Update Copilot instructions" : "Add Copilot instructions";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _assistantTools = AssistantForms.ForCopilotInstructions(
+            () => new(Repository.Current!.FullName, CopilotInstructionsFile.Path, Exists, _content ?? string.Empty),
+            content => _content = content,
+            ListDirectoryAsync,
+            ReadFileAsync,
+            change => InvokeAsync(() => { change(); StateHasChanged(); }));
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var file = await GitHub.GetFileAsync(Repository.Current!.FullName, CopilotInstructionsFile.Path);
+            _sha = file?.Sha;
+            _htmlUrl = file?.HtmlUrl;
+            _original = Normalize(file?.Content);
+            _content = _original;
+            _loaded = true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not load {CopilotInstructionsFile.Path}: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>Loads the file again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<IReadOnlyList<RepositoryEntry>> ListDirectoryAsync(string path, CancellationToken cancellationToken)
+    {
+        var items = await GitHub.GetDirectoryAsync(Repository.Current!.FullName, path, cancellationToken);
+        return items.Select(i => new RepositoryEntry(i.Path, i.Type)).ToList();
+    }
+
+    private async Task<string?> ReadFileAsync(string path, CancellationToken cancellationToken)
+    {
+        return (await GitHub.GetFileAsync(Repository.Current!.FullName, path, cancellationToken))?.Content;
+    }
+
+    private async Task SaveAsync()
+    {
+        var content = Normalize(_content);
+        if (content.Length == 0)
+        {
+            Snackbar.Add("The instructions are empty. Write some instructions before you save.", Severity.Warning);
+            return;
+        }
+        if (Exists && !IsDirty)
+        {
+            Snackbar.Add("Nothing changed since the last commit.", Severity.Info);
+            return;
+        }
+
+        var repo = Repository.Current!.FullName;
+        var message = string.IsNullOrWhiteSpace(_commitMessage) ? DefaultCommitMessage : _commitMessage.Trim();
+        _error = null;
+        _saving = true;
+        try
+        {
+            var result = await GitHub.PutFileAsync(repo, CopilotInstructionsFile.Path, content + "\n", message, _sha);
+            _sha = result.ContentSha ?? _sha;
+            _htmlUrl ??= $"{Repository.Current.HtmlUrl}/blob/{Repository.Current.DefaultBranch}/{CopilotInstructionsFile.Path}";
+            _original = content;
+            _commitMessage = null;
+            Snackbar.Add($"Saved {CopilotInstructionsFile.Path} and committed {Agents.Short(result.CommitSha)} to {repo}.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not save {CopilotInstructionsFile.Path}: {ex.Message} If the file was changed on GitHub in the meantime, copy your changes and reload.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Compares and commits the content with Unix line endings and one trailing newline.</summary>
+    private static string Normalize(string? content)
+    {
+        return (content ?? string.Empty).Replace("\r\n", "\n").Trim();
+    }
+}

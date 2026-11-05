@@ -44,12 +44,12 @@ public class InternalAgentTests : BunitContext
     }
 
     [Fact]
-    public void Defaults_HaveACopilotPerWorkItemTypeTemplateAndAgentPage_AndTwoBackgroundAgents()
+    public void Defaults_HaveACopilotPerWorkItemTypeTemplateAgentAndInstructionsPage_AndTwoBackgroundAgents()
     {
         var keys = InternalAgentDefaults.All.Select(a => a.Key).ToList();
 
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.Equal(14, keys.Count);
+        Assert.Equal(15, keys.Count);
         foreach (var type in WorkItemTypeRules.All)
         {
             Assert.Contains("`update_work_item_form`", InternalAgentDefaults.Find(InternalAgentKeys.ForWorkItem(type))!.Instructions);
@@ -197,7 +197,7 @@ public class InternalAgentTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Model Selector", cut.Markup));
 
         var copilots = cut.Find("[aria-label='Copilots']");
-        Assert.Equal(12, copilots.QuerySelectorAll("tbody tr").Length);
+        Assert.Equal(13, copilots.QuerySelectorAll("tbody tr").Length);
         Assert.Contains("Epic Template Copilot", copilots.TextContent);
         var background = cut.Find("[aria-label='Background agents']");
         Assert.Contains("Chat Suggestions", background.TextContent);

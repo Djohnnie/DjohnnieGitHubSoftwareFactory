@@ -45,3 +45,14 @@ public sealed record WorkItemTemplateFormSnapshot(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("titleExample")] string TitleExample,
     [property: JsonPropertyName("descriptionSkeleton")] string DescriptionSkeleton);
+
+/// <remarks><c>exists</c> is <c>false</c> while the file hasn't been committed to the repository yet.</remarks>
+public sealed record CopilotInstructionsFormSnapshot(
+    [property: JsonPropertyName("repository")] string Repository,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("exists")] bool Exists,
+    [property: JsonPropertyName("content")] string Content);
+
+public sealed record RepositoryEntry(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("type")] string Type);

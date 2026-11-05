@@ -142,7 +142,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         var navigation = cut.Find(".app-header > .mud-appbar + nav[aria-label='Main navigation']");
         Assert.Equal(new[]
             {
-                "/", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
+                "/", "/agents", "/agent-templates", "/copilot-instructions", "/epics", "/epic-templates", "/features", "/feature-templates",
                 "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/models", "/internal-agents"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));

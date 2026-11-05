@@ -1,6 +1,7 @@
 using AgentInfrastructure = Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
+using Djohnnie.SoftwareFactory.Contracts.Assistant;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 
@@ -31,6 +32,15 @@ public static class AssistantForms
         Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi)
     {
         return new(new AgentInfrastructure.WorkItemFormTools(getItem, models, loadAgents, onUi).AsTools());
+    }
+
+    /// <summary>Tools for the Copilot instructions editor, including read-only access to the repository's files.</summary>
+    public static AssistantTools ForCopilotInstructions(
+        Func<CopilotInstructionsFormSnapshot> getForm, Action<string> setContent,
+        Func<string, CancellationToken, Task<IReadOnlyList<RepositoryEntry>>> listDirectory,
+        Func<string, CancellationToken, Task<string?>> readFile, Func<Action, Task> onUi)
+    {
+        return new(new AgentInfrastructure.CopilotInstructionsFormTools(getForm, setContent, listDirectory, readFile, onUi).AsTools());
     }
 
     public static AssistantTools ForWorkItemTemplate(Func<WorkItemTemplate> getTemplate, Func<Action, Task> onUi)

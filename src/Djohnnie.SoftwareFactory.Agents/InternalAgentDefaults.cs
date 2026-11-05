@@ -40,6 +40,9 @@ public static class InternalAgentDefaults
         agents.Add(Copilot(InternalAgentKeys.AgentTemplateCopilot, "Agent Template Copilot",
             "Helps to create or improve a reusable custom agent template that can be applied to several repositories.",
             AgentFormTools.TemplateInstructions));
+        agents.Add(Copilot(InternalAgentKeys.CopilotInstructionsCopilot, "Copilot Instructions Copilot",
+            "Explores the selected repository and helps to write or improve its .github/copilot-instructions.md file.",
+            CopilotInstructionsFormTools.Instructions));
         agents.Add(Background(InternalAgentKeys.ModelSelector, "Model Selector",
             "Estimates the complexity of a user story, bug or task and suggests a fitting enabled model for the Copilot cloud agent. " +
             "Runs 3 seconds after the description stops changing; the suggestion is shown as a chip under the model selection.",

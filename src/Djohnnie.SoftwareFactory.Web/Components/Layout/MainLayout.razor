@@ -79,6 +79,11 @@
                                        Size="Size.Small" Class="header-link" aria-label="Manage agent templates" />
                     </MudTooltip>
                 </div>
+                @if (Repository.Current is not null)
+                {
+                    <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                               StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+                }
                 @foreach (var type in WorkItemTypeRules.All)
                 {
                     var plural = type.PluralName;

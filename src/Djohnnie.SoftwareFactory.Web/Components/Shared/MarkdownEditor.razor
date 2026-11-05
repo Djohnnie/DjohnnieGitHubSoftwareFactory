@@ -54,6 +54,12 @@
     /// <summary>Allows uploading images (when image storage is configured); otherwise the editor refuses images.</summary>
     [Parameter] public bool AllowImages { get; set; }
 
+    /// <summary>
+    /// Starts in the raw Markdown mode with a side-by-side preview instead of WYSIWYG, e.g. for files in a repository,
+    /// where the WYSIWYG round trip would reformat the existing Markdown.
+    /// </summary>
+    [Parameter] public bool RawMarkdown { get; set; }
+
     protected override void OnInitialized()
     {
         _editorValue = _markdown = Value;
@@ -61,8 +67,8 @@
         {
             Height = Height,
             MinHeight = "200px",
-            InitialEditType = EditorType.WYSIWYG,
-            PreviewStyle = PreviewStyle.Tab,
+            InitialEditType = RawMarkdown ? EditorType.Markdown : EditorType.WYSIWYG,
+            PreviewStyle = RawMarkdown ? PreviewStyle.Vertical : PreviewStyle.Tab,
             UsageStatistics = false,
             Autofocus = false
         };
