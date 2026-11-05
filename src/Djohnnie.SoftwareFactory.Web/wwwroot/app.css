@@ -9,7 +9,7 @@ h1:focus {
     z-index: var(--mud-zindex-appbar);
 }
 
-.app-navigation {
+.app-navigation-horizontal {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -20,7 +20,8 @@ h1:focus {
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
-.app-header .header-link {
+.app-header .header-link,
+.app-drawer .header-link {
     text-transform: none;
     text-decoration: underline;
     text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
@@ -33,20 +34,126 @@ h1:focus {
     align-items: center;
 }
 
+.navigation-label {
+    padding: 0 0.75rem;
+}
+
 .navigation-separator {
     color: var(--mud-palette-text-secondary);
     padding: 0 0.25rem;
 }
 
 .app-header .header-link:hover,
-.app-header .header-link:focus-visible {
+.app-header .header-link:focus-visible,
+.app-drawer .header-link:hover,
+.app-drawer .header-link:focus-visible {
     text-decoration-color: currentColor;
     background-color: color-mix(in srgb, currentColor 10%, transparent);
 }
 
-.app-header .header-link:focus-visible {
+.app-header .header-link:focus-visible,
+.app-drawer .header-link:focus-visible {
     outline: 2px solid currentColor;
     outline-offset: 2px;
+}
+
+/* Mobile navigation panel */
+.app-drawer {
+    --mud-drawer-width-left: min(300px, 85vw);
+    color: var(--mud-palette-text-primary);
+}
+
+.app-drawer-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+.app-drawer-header {
+    display: flex;
+    align-items: center;
+    min-height: var(--mud-appbar-height);
+    padding: 0 0.5rem 0 1rem;
+    background-color: var(--mud-palette-appbar-background);
+    color: var(--mud-palette-appbar-text);
+}
+
+.app-drawer-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+}
+
+.app-drawer-repo {
+    padding-top: 1rem;
+}
+
+.app-drawer-repo-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.app-navigation-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.app-navigation-vertical > .mud-button-root {
+    justify-content: flex-start;
+    width: 100%;
+}
+
+.app-drawer-user {
+    margin-top: auto;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.mobile-only {
+    display: none !important;
+}
+
+@media (max-width: 959.98px) {
+    .desktop-only {
+        display: none !important;
+    }
+
+    .mobile-only {
+        display: inline-flex !important;
+    }
+
+    .current-repo {
+        min-width: 0;
+        margin-left: 0.75rem;
+    }
+
+    .current-repo-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .app-header .brand span {
+        display: none;
+    }
+}
+
+@media (max-width: 599.98px) {
+    .current-repo .current-repo-owner {
+        display: none;
+    }
+}
+
+@media (min-width: 960px) {
+    /* The panel is mobile-only: hide it (and its backdrop) if it was left open when the window grew. */
+    .app-drawer,
+    .mud-drawer-overlay {
+        display: none !important;
+    }
 }
 
 .mud-dialog,
@@ -129,7 +236,13 @@ h1:focus {
 }
 
 .overview-tile .mud-card-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
     padding: 1rem;
+}
+
+.overview-tile .mud-card-actions > .mud-button-root {
+    margin-left: 0;
 }
 
 .overview-tile .mud-button-root {

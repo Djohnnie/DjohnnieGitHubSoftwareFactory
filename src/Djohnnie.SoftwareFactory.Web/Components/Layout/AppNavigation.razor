@@ -1,0 +1,114 @@
+@* The main navigation links: a horizontal bar below the app bar on desktop, a vertical list in the navigation panel on mobile. *@
+
+@if (Vertical)
+{
+    <nav class="app-navigation app-navigation-vertical" aria-label="Main navigation">
+        @if (HasRepository)
+        {
+            <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
+            <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+            <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
+
+            <MudDivider Class="my-1" />
+
+            @foreach (var type in WorkItemTypeRules.All)
+            {
+                <MudButton Href="@WorkItemRoutes.ListPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                           StartIcon="@WorkItemRoutes.Icon(type)">@type.PluralName</MudButton>
+            }
+
+            <MudDivider Class="my-1" />
+        }
+
+        @foreach (var type in WorkItemTypeRules.All)
+        {
+            <MudButton Href="@WorkItemRoutes.TemplatesPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.LibraryBooks">@($"{TemplatesName(type)} templates")</MudButton>
+        }
+
+        <MudDivider Class="my-1" />
+
+        @if (HasRepository)
+        {
+            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+        }
+        <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                   StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
+    </nav>
+}
+else
+{
+    <nav class="app-navigation app-navigation-horizontal" aria-label="Main navigation">
+        @if (HasRepository)
+        {
+            <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
+            <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+        }
+        <div class="navigation-group" role="group" aria-label="Agents and templates">
+            @if (HasRepository)
+            {
+                <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
+            }
+            else
+            {
+                <span class="navigation-label">Agents</span>
+            }
+            @TemplatesIconLink("/agent-templates", "Manage agent templates")
+        </div>
+        @foreach (var type in WorkItemTypeRules.All)
+        {
+            var plural = type.PluralName;
+            var templatesLabel = $"Manage {type.DisplayName.ToLowerInvariant()} templates";
+            <div class="navigation-group" role="group" aria-label="@($"{plural} and templates")">
+                @if (HasRepository)
+                {
+                    <MudButton Href="@WorkItemRoutes.ListPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                               StartIcon="@WorkItemRoutes.Icon(type)">@plural</MudButton>
+                }
+                else
+                {
+                    <span class="navigation-label">@plural</span>
+                }
+                @TemplatesIconLink(WorkItemRoutes.TemplatesPath(type), templatesLabel)
+            </div>
+        }
+        @if (HasRepository)
+        {
+            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+        }
+        <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                   StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
+    </nav>
+}
+
+@code {
+    /// <summary>Whether a repository is selected; without one, only the repository-independent pages are linked.</summary>
+    [Parameter] public bool HasRepository { get; set; }
+
+    /// <summary>Renders the links as a vertical list (navigation panel) instead of a horizontal bar.</summary>
+    [Parameter] public bool Vertical { get; set; }
+
+    // Short names keep the panel labels compact ("Story templates" rather than "User story templates").
+    private static string TemplatesName(WorkItemType type)
+    {
+        if (type == WorkItemType.Story)
+        {
+            return "Story";
+        }
+
+        return type.DisplayName;
+    }
+
+    private RenderFragment TemplatesIconLink(string href, string label)
+    {
+        return @<text>
+            <span class="navigation-separator" aria-hidden="true">/</span>
+            <MudTooltip Text="@label">
+                <MudIconButton Href="@href" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
+                               Size="Size.Small" Class="header-link" aria-label="@label" />
+            </MudTooltip>
+        </text>;
+    }
+}

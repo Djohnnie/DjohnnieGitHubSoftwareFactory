@@ -13,6 +13,8 @@
 <MudLayout>
     <div class="app-header">
         <MudAppBar Elevation="0" Dense="false" Fixed="false">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" Class="header-link mobile-only mr-1"
+                           aria-label="Open navigation" aria-expanded="@(_navigationOpen ? "true" : "false")" OnClick="ToggleNavigation" />
             <a href="/" class="brand">
                 <img src="logo.svg" alt="" width="28" height="28" />
                 <span>DGHSF</span>
@@ -20,15 +22,15 @@
 
             @if (Repository.Current is { } repo)
             {
-                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider" />
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider desktop-only" />
                 <div class="current-repo">
                     <MudAvatar Size="Size.Small"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
                     <div class="current-repo-text">
                         <span class="current-repo-owner">@repo.Owner.Login /</span>
                         <a href="@repo.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@repo.Name</a>
                     </div>
-                    <MudIcon Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="ml-1 appbar-muted" />
-                    <MudTooltip Text="Switch repository">
+                    <MudIcon Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="ml-1 appbar-muted desktop-only" />
+                    <MudTooltip Text="Switch repository" RootClass="desktop-only">
                         <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link ml-3"
                                    StartIcon="@Icons.Material.Filled.SwapHoriz" OnClick="SwitchRepositoryAsync">Switch</MudButton>
                     </MudTooltip>
@@ -36,8 +38,8 @@
             }
             else if (_loaded && IsRepositoryIndependent)
             {
-                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider" />
-                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link"
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider desktop-only" />
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link desktop-only"
                            StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="SwitchRepositoryAsync">Select repository</MudButton>
             }
 
@@ -45,7 +47,7 @@
 
             <AuthorizeView>
                 <Authorized>
-                    <form method="post" action="/auth/logout" class="logout">
+                    <form method="post" action="/auth/logout" class="logout desktop-only">
                         <AntiforgeryToken />
                         <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" />
                         <a href="@($"https://github.com/{Uri.EscapeDataString(context.User.Identity?.Name ?? string.Empty)}")"
@@ -57,63 +59,70 @@
             </AuthorizeView>
         </MudAppBar>
 
-        @if (Repository.Current is not null || (_loaded && IsRepositoryIndependent))
+        @if (ShowNavigation)
         {
-            <nav class="app-navigation" aria-label="Main navigation">
-                @if (Repository.Current is not null)
-                {
-                    <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
-                }
-                <div class="navigation-group" role="group" aria-label="Agents and templates">
-                    @if (Repository.Current is not null)
-                    {
-                        <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
-                    }
-                    else
-                    {
-                        <span class="px-3">Agents</span>
-                    }
-                    <span class="navigation-separator" aria-hidden="true">/</span>
-                    <MudTooltip Text="Manage agent templates">
-                        <MudIconButton Href="/agent-templates" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
-                                       Size="Size.Small" Class="header-link" aria-label="Manage agent templates" />
-                    </MudTooltip>
-                </div>
-                @if (Repository.Current is not null)
-                {
-                    <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                               StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
-                }
-                @foreach (var type in WorkItemTypeRules.All)
-                {
-                    var plural = type.PluralName;
-                    var templatesLabel = $"Manage {type.DisplayName.ToLowerInvariant()} templates";
-                    <div class="navigation-group" role="group" aria-label="@($"{plural} and templates")">
-                        @if (Repository.Current is not null)
-                        {
-                            <MudButton Href="@WorkItemRoutes.ListPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                                       StartIcon="@WorkItemRoutes.Icon(type)">@plural</MudButton>
-                        }
-                        else
-                        {
-                            <span class="px-3">@plural</span>
-                        }
-                        <span class="navigation-separator" aria-hidden="true">/</span>
-                        <MudTooltip Text="@templatesLabel">
-                            <MudIconButton Href="@WorkItemRoutes.TemplatesPath(type)" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
-                                           Size="Size.Small" Class="header-link" aria-label="@templatesLabel" />
-                        </MudTooltip>
-                    </div>
-                }
-                @if (Repository.Current is not null)
-                {
-                    <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
-                }
-                <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                           StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
-            </nav>
+            <div class="desktop-only">
+                <AppNavigation HasRepository="@(Repository.Current is not null)" />
+            </div>
         }
     </div>
+
+    @* Mobile: the navigation, repository switch and sign out move into a panel behind the hamburger button. *@
+    <MudDrawer @bind-Open="_navigationOpen" Variant="DrawerVariant.Temporary" Anchor="Anchor.Start" Elevation="2" Class="app-drawer">
+        <div class="app-drawer-content">
+            <div class="app-drawer-header">
+                <a href="/" class="brand">
+                    <img src="logo.svg" alt="" width="28" height="28" />
+                    <span>DGHSF</span>
+                </a>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" Class="header-link"
+                               aria-label="Close navigation" OnClick="CloseNavigation" />
+            </div>
+
+            @if (Repository.Current is { } drawerRepo)
+            {
+                <div class="app-drawer-section app-drawer-repo">
+                    <MudAvatar Size="Size.Small"><MudImage Src="@drawerRepo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+                    <div class="app-drawer-repo-text">
+                        <span class="current-repo-owner">@drawerRepo.Owner.Login /</span>
+                        <a href="@drawerRepo.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@drawerRepo.Name</a>
+                    </div>
+                    <MudIcon Icon="@(drawerRepo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="appbar-muted" />
+                </div>
+                <div class="app-drawer-section">
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link"
+                               StartIcon="@Icons.Material.Filled.SwapHoriz" OnClick="SwitchRepositoryAsync">Switch repository</MudButton>
+                </div>
+            }
+            else if (_loaded)
+            {
+                <div class="app-drawer-section">
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link"
+                               StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="SwitchRepositoryAsync">Select repository</MudButton>
+                </div>
+            }
+
+            @if (ShowNavigation)
+            {
+                <AppNavigation HasRepository="@(Repository.Current is not null)" Vertical="true" />
+            }
+
+            <AuthorizeView>
+                <Authorized>
+                    <form method="post" action="/auth/logout" class="app-drawer-section app-drawer-user">
+                        <AntiforgeryToken />
+                        <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" />
+                        <a href="@($"https://github.com/{Uri.EscapeDataString(context.User.Identity?.Name ?? string.Empty)}")"
+                           target="_blank" rel="noopener" class="current-user-name" title="Open GitHub profile">@context.User.Identity?.Name</a>
+                        <MudSpacer />
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small" Class="header-link"
+                                   StartIcon="@Icons.Material.Filled.Logout">Sign out</MudButton>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </MudDrawer>
 
     <MudMainContent Class="pt-0">
         <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
@@ -158,13 +167,23 @@
     [CascadingParameter] private RouteData? RouteData { get; set; }
 
     private bool _loaded;
+    private bool _navigationOpen;
 
     private bool IsRepositoryIndependent =>
         RouteData?.PageType.IsDefined(typeof(RepositoryIndependentAttribute), inherit: false) == true;
 
+    private bool ShowNavigation
+    {
+        get
+        {
+            return Repository.Current is not null || (_loaded && IsRepositoryIndependent);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         Repository.Changed += OnRepositoryChanged;
+        Navigation.LocationChanged += OnLocationChanged;
         await Repository.LoadAsync();
         _loaded = true;
 
@@ -173,8 +192,29 @@
         await Repository.RefreshAsync();
     }
 
+    private void ToggleNavigation()
+    {
+        _navigationOpen = !_navigationOpen;
+    }
+
+    private void CloseNavigation()
+    {
+        _navigationOpen = false;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        // Picking a link in the navigation panel closes it.
+        if (_navigationOpen)
+        {
+            _navigationOpen = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
     private async Task SwitchRepositoryAsync()
     {
+        _navigationOpen = false;
         var parameters = new DialogParameters<RepositoryPickerDialog>
         {
             { d => d.SelectedFullName, Repository.Current?.FullName }
@@ -224,5 +264,6 @@
     public void Dispose()
     {
         Repository.Changed -= OnRepositoryChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

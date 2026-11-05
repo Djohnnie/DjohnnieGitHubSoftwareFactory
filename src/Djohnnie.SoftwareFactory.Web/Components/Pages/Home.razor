@@ -34,41 +34,56 @@
     </MudStack>
 
     <MudGrid>
-        <MudItem xs="12" sm="6" md="4">
-            <MudCard Outlined="true" Elevation="0" Class="overview-tile">
-                <MudCardHeader>
-                    <CardHeaderAvatar><MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" /></CardHeaderAvatar>
-                    <CardHeaderContent><MudText Typo="Typo.h6">Custom agents</MudText></CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body2">Create, edit and delete the Copilot agent profiles in <code>.github/agents</code>.</MudText>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Text" Href="/agents" Color="Color.Primary">Manage agents</MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+        @Tile(Icons.Material.Filled.IntegrationInstructions, "Copilot instructions",
+              @<text>Edit the repository-wide custom instructions in <code>@CopilotInstructionsFile.Path</code> that Copilot adds to every chat, cloud agent and code review.</text>,
+              "/copilot-instructions", "Edit instructions")
+        @Tile(Icons.Material.Filled.SmartToy, "Custom agents",
+              @<text>Create, edit and delete the Copilot agent profiles in <code>.github/agents</code>.</text>,
+              "/agents", "Manage agents", "/agent-templates")
+
+        <MudItem xs="12"><MudDivider /></MudItem>
+
         @foreach (var type in WorkItemTypeRules.All)
         {
-            <MudItem xs="12" sm="6" md="4">
-                <MudCard Outlined="true" Elevation="0" Class="overview-tile">
-                    <MudCardHeader>
-                        <CardHeaderAvatar><MudIcon Icon="@WorkItemRoutes.Icon(type)" Color="Color.Primary" /></CardHeaderAvatar>
-                        <CardHeaderContent><MudText Typo="Typo.h6">@type.PluralName</MudText></CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2">@TileText(type)</MudText>
-                    </MudCardContent>
-                    <MudCardActions>
-                        <MudButton Variant="Variant.Text" Href="@WorkItemRoutes.ListPath(type)" Color="Color.Primary">Manage @type.PluralName.ToLowerInvariant()</MudButton>
-                    </MudCardActions>
-                </MudCard>
-            </MudItem>
+            @Tile(WorkItemRoutes.Icon(type), type.PluralName, @<text>@TileText(type)</text>,
+                  WorkItemRoutes.ListPath(type), $"Manage {type.PluralName.ToLowerInvariant()}", WorkItemRoutes.TemplatesPath(type))
         }
+
+        <MudItem xs="12"><MudDivider /></MudItem>
+
+        @Tile(Icons.Material.Filled.Psychology, "Internal agents",
+              @<text>Tune the system prompts of DGHSF's own copilots and background agents, shared across repositories.</text>,
+              "/internal-agents", "Manage internal agents")
+        @Tile(Icons.Material.Filled.Memory, "Models",
+              @<text>Choose the AI models available to custom agents and keep their prices per 1M tokens up to date.</text>,
+              "/models", "Manage models")
     </MudGrid>
 }
 
 @code {
+    private static RenderFragment Tile(string icon, string title, RenderFragment text, string href, string label, string? templatesHref = null)
+    {
+        return @<MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true" Elevation="0" Class="overview-tile">
+                <MudCardHeader>
+                    <CardHeaderAvatar><MudIcon Icon="@icon" Color="Color.Primary" /></CardHeaderAvatar>
+                    <CardHeaderContent><MudText Typo="Typo.h6">@title</MudText></CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">@text</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Href="@href" Color="Color.Primary">@label</MudButton>
+                    @if (templatesHref is not null)
+                    {
+                        <MudButton Variant="Variant.Text" Href="@templatesHref" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.LibraryBooks">Templates</MudButton>
+                    }
+                </MudCardActions>
+            </MudCard>
+        </MudItem>;
+    }
+
     private static string TileText(WorkItemType type)
     {
         return type switch
