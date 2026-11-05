@@ -13,7 +13,13 @@ using Djohnnie.SoftwareFactory.Web.Auth;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
 using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Server;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -43,6 +49,9 @@ public class CopilotInstructionsTests : BunitContext
         Services.AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(dbOptions));
         Services.AddSingleton(TimeProvider.System);
         Services.AddApplication();
+        // No real GitHub MCP server in tests; GitHubMcp_ToolsArePinnedToTheSelectedRepository points it to a local one.
+        Services.Configure<GitHubMcpOptions>(o => o.Enabled = false);
+        Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
         Services.AddSingleton(_ => new AssistantAgentFactory(_chatClient, NullLoggerFactory.Instance));
         Services.AddScoped(sp => new GitHubApiClient(
             new HttpClient(_gitHub) { BaseAddress = new Uri("https://api.github.com/") },
@@ -88,6 +97,84 @@ public class CopilotInstructionsTests : BunitContext
         Assert.Equal($"sha-{FilePath}", body.RootElement.GetProperty("sha").GetString());
         Assert.Equal("# Copilot instructions\n\n- Build with `cargo build`.\n",
             Encoding.UTF8.GetString(Convert.FromBase64String(body.RootElement.GetProperty("content").GetString()!)));
+    }
+
+    [Fact]
+    public async Task GitHubMcp_ToolsArePinnedToTheSelectedRepository()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Xunit.TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        var headers = new List<(string? Authorization, string? ReadOnly, string? Toolsets)>();
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddMcpServer().WithHttpTransport(o => o.Stateless = true).WithTools(
+        [
+            McpServerTool.Create((string owner, string repo) =>
+            {
+                return $"{owner}/{repo}: abc1234 Fix the build";
+            }, new McpServerToolCreateOptions { Name = "list_commits", ReadOnly = true }),
+            McpServerTool.Create((string query) =>
+            {
+                return $"searched {query}";
+            }, new McpServerToolCreateOptions { Name = "search_code", ReadOnly = true }),
+            McpServerTool.Create((string owner, string repo, string title) =>
+            {
+                return title;
+            }, new McpServerToolCreateOptions { Name = "create_issue", ReadOnly = false }),
+            McpServerTool.Create(() =>
+            {
+                return "me";
+            }, new McpServerToolCreateOptions { Name = "get_me", ReadOnly = true })
+        ]);
+        await using var app = builder.Build();
+        app.Use(async (context, next) =>
+        {
+            lock (headers)
+            {
+                headers.Add((context.Request.Headers.Authorization, context.Request.Headers["X-MCP-Readonly"], context.Request.Headers["X-MCP-Toolsets"]));
+            }
+            await next();
+        });
+        app.MapMcp("/mcp");
+        await app.StartAsync(timeout.Token);
+        var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        Services.Configure<GitHubMcpOptions>(o =>
+        {
+            o.Enabled = true;
+            o.Endpoint = $"{address}/mcp";
+        });
+
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        _chatClient = new ScriptedChatClient(
+            ScriptedChatClient.ToolCall("list_commits", new Dictionary<string, object?> { ["owner"] = "someone-else", ["repo"] = "secret" }),
+            ScriptedChatClient.ToolCall("search_code", new Dictionary<string, object?> { ["query"] = "HttpClient repo:someone-else/secret" }),
+            ScriptedChatClient.Text("The last commit fixed the build."));
+        Render<MudPopoverProvider>();
+        var cut = Render<CopilotInstructions>();
+        cut.WaitForAssertion(() => Assert.Contains("commits, issues, pull requests", cut.Markup), TimeSpan.FromSeconds(10));
+
+        var chatInput = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Tell me what Copilot should know about this repository").Find("input");
+        chatInput.Input("What changed recently?");
+        await cut.InvokeAsync(() => chatInput.KeyDown("Enter"));
+
+        cut.WaitForAssertion(() => Assert.Contains("The last commit fixed the build.", cut.Markup), TimeSpan.FromSeconds(10));
+        var tools = _chatClient.Options[0]!.Tools!.OfType<AIFunctionDeclaration>().ToList();
+        Assert.Contains(tools, t => t.Name == "list_commits");
+        Assert.Contains(tools, t => t.Name == "search_code");
+        Assert.DoesNotContain(tools, t => t.Name is "create_issue" or "get_me");
+        Assert.False(tools.Single(t => t.Name == "list_commits").JsonSchema.GetProperty("properties").TryGetProperty("owner", out _));
+
+        var results = _chatClient.Requests[2].SelectMany(m => m.Contents).OfType<FunctionResultContent>().Select(r => r.Result?.ToString()).ToList();
+        Assert.Contains("owner/repo: abc1234 Fix the build", results[0]);
+        Assert.Contains("searched repo:owner/repo HttpClient", results[1]);
+        Assert.All(headers, h =>
+        {
+            Assert.Equal("Bearer token", h.Authorization);
+            Assert.Equal("true", h.ReadOnly);
+            Assert.Equal("repos,issues,pull_requests,actions", h.Toolsets);
+        });
     }
 
     [Fact]

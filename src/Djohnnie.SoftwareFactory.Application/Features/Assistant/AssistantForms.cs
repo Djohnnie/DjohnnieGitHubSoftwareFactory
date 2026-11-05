@@ -1,4 +1,5 @@
 using AgentInfrastructure = Djohnnie.SoftwareFactory.Agents;
+using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
@@ -34,13 +35,18 @@ public static class AssistantForms
         return new(new AgentInfrastructure.WorkItemFormTools(getItem, models, loadAgents, onUi).AsTools());
     }
 
-    /// <summary>Tools for the Copilot instructions editor, including read-only access to the repository's files.</summary>
+    /// <summary>
+    /// Tools for the Copilot instructions editor, including read-only access to the repository's files and, when
+    /// connected, the GitHub MCP tools pinned to the repository (commits, issues, pull requests, workflow runs, ...).
+    /// </summary>
     public static AssistantTools ForCopilotInstructions(
         Func<CopilotInstructionsFormSnapshot> getForm, Action<string> setContent,
         Func<string, CancellationToken, Task<IReadOnlyList<RepositoryEntry>>> listDirectory,
-        Func<string, CancellationToken, Task<string?>> readFile, Func<Action, Task> onUi)
+        Func<string, CancellationToken, Task<string?>> readFile, Func<Action, Task> onUi,
+        RepositoryGitHubTools? gitHubTools = null)
     {
-        return new(new AgentInfrastructure.CopilotInstructionsFormTools(getForm, setContent, listDirectory, readFile, onUi).AsTools());
+        return new(new AgentInfrastructure.CopilotInstructionsFormTools(getForm, setContent, listDirectory, readFile, onUi,
+            gitHubTools?.Session.Tools).AsTools());
     }
 
     public static AssistantTools ForWorkItemTemplate(Func<WorkItemTemplate> getTemplate, Func<Action, Task> onUi)

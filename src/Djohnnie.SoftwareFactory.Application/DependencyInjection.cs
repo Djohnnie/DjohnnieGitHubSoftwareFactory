@@ -53,6 +53,9 @@ public static class DependencyInjection
             // AddAssistantAgents replaces this unconfigured factory with the one for the OpenAI settings.
             services.TryAddSingleton(sp => new AssistantAgentFactory(null, sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance));
             services.TryAddSingleton<BackgroundAgents>();
+            services.AddOptions<GitHubMcpOptions>();
+            services.TryAddSingleton<GitHubMcpConnector>();
+            services.AddScoped<GitHubMcpService>();
             services.AddScoped<ImageUploadService>();
             var imageUploads = services.AddOptions<ImageUploadOptions>();
             if (configuration is not null)

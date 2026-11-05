@@ -1,5 +1,7 @@
 @page "/copilot-instructions"
+@implements IAsyncDisposable
 @inject GitHubService GitHub
+@inject GitHubMcpService GitHubMcp
 @inject RepositoryContext Repository
 @inject ISnackbar Snackbar
 
@@ -36,10 +38,12 @@
 @if (_loaded)
 {
     <MudStack Spacing="4">
-        <AssistantChat CopilotKey="@InternalAgentKeys.CopilotInstructionsCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")"
-                       Tools="_assistantTools" Placeholder="Tell me what Copilot should know about this repository"
-                       Subtitle="@(Exists ? "Ask me to check or improve the instructions; I can read the repository and will update the editor." : "I'll explore the repository, ask what I can't find out and write the instructions in the editor.")"
-                       Suggestions="@(Exists ? ImproveSuggestions : NewSuggestions)" />
+        @if (_assistantTools is not null)
+        {
+            <AssistantChat CopilotKey="@InternalAgentKeys.CopilotInstructionsCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")"
+                           Tools="_assistantTools" Placeholder="Tell me what Copilot should know about this repository"
+                           Subtitle="@ChatSubtitle" Suggestions="@(Exists ? ImproveSuggestions : NewSuggestions)" />
+        }
 
         @if (!Exists)
         {
@@ -100,6 +104,9 @@
     ];
 
     private AssistantTools? _assistantTools;
+    private RepositoryGitHubTools? _gitHubTools;
+    private readonly CancellationTokenSource _disposed = new();
+    private bool _isDisposed;
     private string? _content;
     private string _original = string.Empty;
     private string? _sha;
@@ -116,17 +123,53 @@
 
     private bool IsDirty => Normalize(_content) != _original;
 
-    private string DefaultCommitMessage => Exists ? "Update Copilot instructions" : "Add Copilot instructions";
+    private string ChatSubtitle
+    {
+        get
+        {
+            var reads = _gitHubTools is not null
+                ? "the repository and its commits, issues, pull requests and workflow runs"
+                : "the repository";
+            return Exists
+                ? $"Ask me to check or improve the instructions; I can read {reads} and will update the editor."
+                : $"I'll explore {reads}, ask what I can't find out and write the instructions in the editor.";
+        }
+    }
+
+    private string DefaultCommitMessage =>Exists ? "Update Copilot instructions" : "Add Copilot instructions";
 
     protected override async Task OnInitializedAsync()
     {
+        // Connect to the GitHub MCP server while the file loads; without it the Copilot only has its own tools.
+        var gitHubTools = ConnectGitHubAsync();
+        await LoadAsync();
+        _gitHubTools = await gitHubTools;
+        if (_isDisposed && _gitHubTools is not null)
+        {
+            // The page closed while connecting.
+            await _gitHubTools.DisposeAsync();
+            _gitHubTools = null;
+            return;
+        }
         _assistantTools = AssistantForms.ForCopilotInstructions(
             () => new(Repository.Current!.FullName, CopilotInstructionsFile.Path, Exists, _content ?? string.Empty),
             content => _content = content,
             ListDirectoryAsync,
             ReadFileAsync,
-            change => InvokeAsync(() => { change(); StateHasChanged(); }));
-        await LoadAsync();
+            change => InvokeAsync(() => { change(); StateHasChanged(); }),
+            _gitHubTools);
+    }
+
+    private async Task<RepositoryGitHubTools?> ConnectGitHubAsync()
+    {
+        try
+        {
+            return await GitHubMcp.ConnectAsync(Repository.Current!.FullName, _disposed.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     private async Task LoadAsync()
@@ -203,6 +246,17 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _isDisposed = true;
+        _disposed.Cancel();
+        if (_gitHubTools is not null)
+        {
+            await _gitHubTools.DisposeAsync();
+            _gitHubTools = null;
         }
     }
 

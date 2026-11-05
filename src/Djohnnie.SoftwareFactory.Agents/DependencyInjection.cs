@@ -12,6 +12,7 @@ public static class DependencyInjection
         public IServiceCollection AddAssistantAgents(IConfiguration configuration)
         {
             services.Configure<OpenAIOptions>(configuration.GetSection(OpenAIOptions.SectionName));
+            services.Configure<GitHubMcpOptions>(configuration.GetSection(GitHubMcpOptions.SectionName));
             services.AddSingleton(sp => new AssistantAgentFactory(
                 AssistantAgentFactory.CreateChatClient(sp.GetRequiredService<IOptions<OpenAIOptions>>().Value),
                 sp.GetRequiredService<ILoggerFactory>()));

@@ -14,12 +14,14 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// <param name="listDirectory">Lists a directory of the repository (empty path = root) on the default branch.</param>
 /// <param name="readFile">Reads a file of the repository on the default branch, or <c>null</c> when it does not exist.</param>
 /// <param name="onUi">Runs a change on the UI thread and re-renders the page.</param>
+/// <param name="gitHubTools">Read-only GitHub MCP tools pinned to the repository, or <c>null</c> when not connected.</param>
 public sealed class CopilotInstructionsFormTools(
     Func<CopilotInstructionsFormSnapshot> getForm,
     Action<string> setContent,
     Func<string, CancellationToken, Task<IReadOnlyList<RepositoryEntry>>> listDirectory,
     Func<string, CancellationToken, Task<string?>> readFile,
-    Func<Action, Task> onUi)
+    Func<Action, Task> onUi,
+    IReadOnlyList<AITool>? gitHubTools = null)
 {
     /// <summary>Files longer than this are cut off, so a single file doesn't flood the conversation.</summary>
     public const int MaxFileLength = 20_000;
@@ -40,6 +42,10 @@ public sealed class CopilotInstructionsFormTools(
            (`*.sln`/`*.slnx`, `*.csproj`, `package.json`, `pyproject.toml`, `Makefile`, ...), CI workflows in `.github/workflows`,
            linter or formatter settings (`.editorconfig`, ...) and a few representative source and test files.
            Only read what you need; don't read every file.
+           When GitHub tools are available (commits, issues, pull requests, workflow runs, code search, ...), they are
+           already scoped to this repository: don't pass an owner or repo. Use them when the user asks about the
+           repository's history or activity, or to find conventions and recurring problems (for example review comments
+           on pull requests or failing workflow runs) that should go into the instructions.
         3. If something important can't be derived from the repository, ask at most 3 short, numbered follow-up questions at a
            time (for example: conventions that aren't visible in the code, or what Copilot keeps getting wrong). Don't ask about
            things you can find out or reasonably decide yourself.
@@ -63,13 +69,16 @@ public sealed class CopilotInstructionsFormTools(
 
     public AssistantTools AsTools()
     {
-        return new(
+        List<AITool> tools =
         [
             AIFunctionFactory.Create(GetFileAsync, "get_instructions_file"),
             AIFunctionFactory.Create(UpdateFileAsync, "update_instructions_file"),
             AIFunctionFactory.Create(ListRepositoryFilesAsync, "list_repository_files"),
             AIFunctionFactory.Create(ReadRepositoryFileAsync, "read_repository_file")
-        ], async () => await GetFileAsync());
+        ];
+        var names = tools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        tools.AddRange((gitHubTools ?? []).Where(t => names.Add(t.Name)));
+        return new(tools, async () => await GetFileAsync());
     }
 
     [Description("Gets the current content of the Copilot instructions file in the editor, and whether the file already exists in the repository.")]
