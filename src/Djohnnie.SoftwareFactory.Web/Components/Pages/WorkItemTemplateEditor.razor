@@ -38,15 +38,16 @@ else if (_template is not null)
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MudTextField Variant="Variant.Outlined" @bind-Value="_template.Name" Label="Template name" Required="true"
                               MaxLength="200" Immediate="true" />
-                <MudTextField Variant="Variant.Outlined" @bind-Value="_template.TitleTemplate" Label="Title example" Required="true"
-                              MaxLength="256" Immediate="true" HelperText="@($"Shown as a placeholder for the {Name} title, not saved as its actual title.")" />
+                <DictationTextField @bind-Value="_template.TitleTemplate" Label="Title example" Required="true"
+                                    MaxLength="256" HelperText="@($"Shown as a placeholder for the {Name} title, not saved as its actual title.")" />
             </MudPaper>
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MudText Typo="Typo.h6">Description skeleton</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                     Markdown proposed when creating a new @Name, for example @SkeletonExample.
                 </MudText>
-                <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true" />
+                <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
+                                Dictation="@(new DescriptionDictation($"{Name} template skeleton", _template.TitleTemplate))" />
             </MudPaper>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
                 Stored in DGHSF, not in a repository. Saving does not change existing @_type.PluralName.ToLowerInvariant().

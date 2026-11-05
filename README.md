@@ -55,6 +55,11 @@ Create `src/Djohnnie.SoftwareFactory.Web/appsettings.Development.json`. It is gi
   },
   "ImageUploads": {
     "ConnectionString": "<optional: Azure Storage connection string for images in Markdown editors>"
+  },
+  "Speech": {
+    "Region": "<optional: Azure AI Speech region, e.g. westeurope, to dictate titles>",
+    "ApiKey": "<Speech resource key>",
+    "Language": "en-US"
   }
 }
 ```
@@ -65,7 +70,7 @@ Then run:
 dotnet run --project src/Djohnnie.SoftwareFactory.Web --launch-profile https
 ```
 
-In Development, the app applies the EF Core migrations at startup to the database in `ConnectionStrings:Database`. Point it at a local database, not production. Without the `OpenAI` settings the app still works, but the Copilot chats show a setup hint.
+In Development, the app applies the EF Core migrations at startup to the database in `ConnectionStrings:Database`. Point it at a local database, not production. Without the `OpenAI` settings the app still works, but the Copilot chats show a setup hint. Without the `Speech` settings the microphone buttons next to the title fields are hidden.
 
 ## Tests
 

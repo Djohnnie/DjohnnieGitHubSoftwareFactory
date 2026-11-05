@@ -111,9 +111,12 @@ else if (_agent is not null)
 
     private string EnabledHelp => _agent!.Kind == InternalAgentKind.Copilot
         ? "A disabled Copilot is hidden from its page."
-        : _agent.Key == InternalAgentKeys.ModelSelector
-            ? "When disabled, the assignment settings show no model suggestion."
-            : "When disabled, Copilot chats show their built-in example suggestions.";
+        : _agent.Key switch
+        {
+            InternalAgentKeys.ModelSelector => "When disabled, the assignment settings show no model suggestion.",
+            InternalAgentKeys.DescriptionWriter => "When disabled, a dictated description is added as it was recognized, at the end of the description.",
+            _ => "When disabled, Copilot chats show their built-in example suggestions."
+        };
 
     protected override async Task OnParametersSetAsync()
     {

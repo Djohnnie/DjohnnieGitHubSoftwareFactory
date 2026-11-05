@@ -83,20 +83,14 @@ else
                 </div>
             }
 
-            <MudStack Row="true" AlignItems="AlignItems.End" Class="mt-2">
-                <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true" Disabled="_busy || _copilot is null"
-                              OnKeyDown="OnKeyDownAsync" />
-                @if (_busy)
-                {
-                    <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Stop" Color="Color.Error" OnClick="Cancel" title="Stop" />
-                }
-                else
-                {
-                    <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
-                                   Disabled="string.IsNullOrWhiteSpace(_input) || _copilot is null"
-                                   OnClick="() => SendAsync(_input)" title="Send (Enter)" />
-                }
-            </MudStack>
+            @* Read-only rather than disabled while busy, so the Stop adornment stays clickable. *@
+            <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true" Class="mt-2"
+                          ReadOnly="_busy" Disabled="_copilot is null" OnKeyDown="OnKeyDownAsync"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_busy ? Icons.Material.Filled.Stop : Icons.Material.Filled.Send)"
+                          AdornmentColor="@(_busy ? Color.Error : string.IsNullOrWhiteSpace(_input) ? Color.Default : Color.Primary)"
+                          AdornmentAriaLabel="@(_busy ? "Stop" : "Send (Enter)")"
+                          OnAdornmentClick="OnAdornmentClickAsync" />
         }
     </MudPaper>
 }
@@ -261,6 +255,18 @@ else
             _busy = false;
             _cancellation.Dispose();
             _cancellation = null;
+        }
+    }
+
+    private async Task OnAdornmentClickAsync()
+    {
+        if (_busy)
+        {
+            Cancel();
+        }
+        else
+        {
+            await SendAsync(_input);
         }
     }
 

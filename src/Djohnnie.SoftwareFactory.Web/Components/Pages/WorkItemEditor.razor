@@ -73,10 +73,11 @@ else if (_item is not null)
                         </MudAlert>
                     }
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                        <MudTextField Variant="Variant.Outlined" @bind-Value="_item.Title" Label="Title" Required="true" RequiredError="A title is required."
-                                      MaxLength="256" ReadOnly="!_item.IsDraft" Immediate="true" OnBlur="OnFieldBlur"
-                                      Placeholder="@SelectedTemplate?.TitleTemplate"
-                                      HelperText="Becomes the title of the GitHub issue." />
+                        @* Dictating a title is like typing one and leaving the field: the chat suggestions follow it. *@
+                        <DictationTextField @bind-Value="_item.Title" Label="Title" Required="true" RequiredError="A title is required."
+                                            MaxLength="256" ReadOnly="!_item.IsDraft" OnBlur="OnFieldBlur" OnDictated="OnFieldBlur"
+                                            Placeholder="@SelectedTemplate?.TitleTemplate"
+                                            HelperText="Becomes the title of the GitHub issue." />
                     </MudPaper>
 
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
@@ -85,7 +86,8 @@ else if (_item is not null)
                         {
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@DescriptionHelp</MudText>
                             <MarkdownEditor Value="@_item.Description" ValueChanged="OnDescriptionChanged" OnBlur="OnFieldBlur" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
-                                            Placeholder="@($"Describe the {Name}...")" />
+                                            Placeholder="@($"Describe the {Name}...")"
+                                            Dictation="@(new DescriptionDictation(Name, _item.Title, SelectedTemplate?.Description))" />
                         }
                         else
                         {

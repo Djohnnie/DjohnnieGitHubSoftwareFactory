@@ -10,6 +10,7 @@ public static class InternalAgentKeys
     public const string CopilotInstructionsCopilot = "copilot-instructions-copilot";
     public const string ModelSelector = "model-selector";
     public const string ChatSuggestions = "chat-suggestions";
+    public const string DescriptionWriter = "description-writer";
 
     /// <summary>The Copilot of the work item pages of a type, e.g. <c>story-copilot</c>.</summary>
     public static string ForWorkItem(WorkItemType type)

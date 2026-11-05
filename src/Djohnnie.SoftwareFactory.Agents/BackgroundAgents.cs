@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts.Speech;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Microsoft.Agents.AI;
 
@@ -96,6 +97,32 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             .ToList();
     }
 
+    /// <summary>Merges a dictated text into the description; <c>null</c> when the agent returns nothing usable.</summary>
+    /// <param name="agent">The Description Writer agent.</param>
+    public async Task<string?> WriteDescriptionAsync(InternalAgent agent, WriteDictatedDescriptionRequest request, CancellationToken cancellationToken = default)
+    {
+        var input = new
+        {
+            For = request.Subject,
+            request.Title,
+            CurrentDescription = request.Description ?? string.Empty,
+            TemplateSkeleton = request.Template,
+            Transcript = request.Transcript.Trim()
+        };
+        var message = $"""
+            Merge what was said into the {request.Subject} description.
+
+            ```json
+            {JsonSerializer.Serialize(input, JsonOptions)}
+            ```
+            """;
+
+        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+            .RunAsync<DescriptionWriterOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var description = response.Result?.Description?.Trim();
+        return string.IsNullOrEmpty(description) ? null : description;
+    }
+
     private static string Clean(string? suggestion)
     {
         var value = (suggestion ?? string.Empty).Trim().Trim('"', '\'').TrimEnd('.').Trim();
@@ -112,6 +139,10 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
         [property: Description("The id of the chosen model, exactly as listed.")] string ModelId,
         [property: Description("The estimated complexity: low, medium or high.")] string? Complexity,
         [property: Description("One short sentence that explains the choice.")] string? Reason);
+
+    [Description("The description with the dictated text merged in.")]
+    internal sealed record DescriptionWriterOutput(
+        [property: Description("The complete new description as Markdown.")] string? Description);
 
     [Description("Suggestion chips for a Copilot chat.")]
     internal sealed record SuggestionsOutput(

@@ -10,6 +10,7 @@ using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Application.Features.Speech;
 using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using FluentValidation;
@@ -64,6 +65,18 @@ public static class DependencyInjection
             }
 
             services.TryAddSingleton<IImageStorage, AzureBlobImageStorage>();
+            services.AddScoped<SpeechService>();
+            var speech = services.AddOptions<SpeechOptions>();
+            if (configuration is not null)
+            {
+                speech.Bind(configuration.GetSection(SpeechOptions.SectionName));
+            }
+
+            services.TryAddSingleton<ISpeechTokenIssuer, AzureSpeechTokenIssuer>();
+            services.AddHttpClient(AzureSpeechTokenIssuer.HttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
             services.AddHttpClient<ModelPricingScraper>(client =>
             {
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");

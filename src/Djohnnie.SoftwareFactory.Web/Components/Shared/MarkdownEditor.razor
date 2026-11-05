@@ -1,7 +1,11 @@
+@using Djohnnie.SoftwareFactory.Application.Features.Speech
 @using Djohnnie.SoftwareFactory.Application.Features.Uploads
+@using Djohnnie.SoftwareFactory.Contracts
+@using Djohnnie.SoftwareFactory.Contracts.Speech
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject ImageUploadService ImageUploads
+@inject SpeechService Speech
 @inject ISnackbar Snackbar
 @inject ILogger<MarkdownEditor> Logger
 
@@ -10,9 +14,29 @@
     creates the editor through Toast UI's public API and always reports Markdown (also in WYSIWYG mode).
     Pasted, dropped or picked images are uploaded to the image storage (when AllowImages is set and storage is
     configured) and linked by URL, instead of Toast UI's default base64 data URIs.
+    With Dictation set (and Azure AI Speech configured), a microphone at the end of the toolbar listens until it is
+    clicked again (wwwroot/js/dictation.js); the Description Writer then fits what was said into the description.
 *@
 <div class="markdown-editor">
     <div @ref="_host"></div>
+    @if (_dictationState == DictationState.Listening)
+    {
+        <div class="markdown-editor-dictation" role="status" aria-live="polite">
+            <MudIcon Icon="@Icons.Material.Filled.Mic" Color="Color.Error" Size="Size.Small" Class="dictation-pulse" />
+            <MudText Typo="Typo.body2" Class="flex-grow-1" Color="@(_transcript.Length == 0 ? Color.Secondary : Color.Default)">
+                @(_transcript.Length == 0 ? "Listening... say what the description should contain. Click the microphone again when you're done." : _transcript)
+            </MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="CancelDictationAsync">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="StopDictationAsync">Done</MudButton>
+        </div>
+    }
+    else if (_dictationState == DictationState.Writing)
+    {
+        <div class="markdown-editor-dictation" role="status" aria-live="polite">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Fitting what you said into the description...</MudText>
+        </div>
+    }
     @if (MaxLength is { } max)
     {
         <MudText Typo="Typo.caption" Align="Align.End" Color="@((Value?.Length ?? 0) > max ? Color.Error : Color.Secondary)" Class="d-block mt-1">
@@ -22,10 +46,25 @@
 </div>
 
 @code {
+    private enum DictationState
+    {
+        Idle,
+        Listening,
+        Writing
+    }
+
+    /// <summary>The longest a dictation listens before it stops by itself.</summary>
+    public const int MaxDictationSeconds = 600;
+    private const string DictationModulePath = "./js/dictation.js";
+
     private ElementReference _host;
     private IJSObjectReference? _module;
     private IJSObjectReference? _editor;
+    private IJSObjectReference? _dictationModule;
     private DotNetObjectReference<MarkdownEditor>? _selfReference;
+    private DictationState _dictationState;
+    private string _transcript = string.Empty;
+    private bool _disposed;
 
     /// <summary>The Markdown the editor shows; compared with <see cref="Value"/> to tell outside changes from typing.</summary>
     private string? _markdown;
@@ -53,6 +92,17 @@
     /// where the WYSIWYG round trip would reformat the existing Markdown.
     /// </summary>
     [Parameter] public bool RawMarkdown { get; set; }
+
+    /// <summary>Adds a microphone to the toolbar (when Azure AI Speech is configured); set when the editor is created.</summary>
+    [Parameter] public DescriptionDictation? Dictation { get; set; }
+
+    private bool CanDictate
+    {
+        get
+        {
+            return Dictation is not null && Speech.IsEnabled;
+        }
+    }
 
     // The value was changed from outside the editor (e.g. by DGHSF Copilot): push it into the editor.
     protected override async Task OnParametersSetAsync()
@@ -90,7 +140,8 @@
                 MinHeight = "200px",
                 RawMarkdown,
                 AllowImages = AllowImages && ImageUploads.IsEnabled,
-                ImageUploads.MaxImageSize
+                ImageUploads.MaxImageSize,
+                Dictation = CanDictate
             });
 
             // The value may have changed while the editor was being created.
@@ -156,10 +207,194 @@
         Snackbar.Add(message, Severity.Error);
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>The microphone in the toolbar: starts listening, or stops and writes the description.</summary>
+    [JSInvokable]
+    public async Task ToggleDictation()
+    {
+        switch (_dictationState)
+        {
+            case DictationState.Idle:
+                await DictateAsync();
+                break;
+            case DictationState.Listening:
+                await StopDictationAsync();
+                break;
+        }
+    }
+
+    [JSInvokable]
+    public void OnDictationProgress(string text)
+    {
+        if (_dictationState == DictationState.Listening)
+        {
+            _transcript = text;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>A fresh token for a dictation that lasts longer than its token.</summary>
+    [JSInvokable]
+    public async Task<string?> GetSpeechToken()
     {
         try
         {
+            return (await Speech.GetTokenAsync()).Token;
+        }
+        catch (Exception ex) when (ex is DomainRuleException or HttpRequestException)
+        {
+            Logger.LogWarning(ex, "Could not renew the Azure AI Speech token.");
+            return null;
+        }
+    }
+
+    private async Task DictateAsync()
+    {
+        if (!CanDictate || _selfReference is null)
+        {
+            return;
+        }
+
+        _transcript = string.Empty;
+        await SetDictationStateAsync(DictationState.Listening);
+        string? transcript = null;
+        try
+        {
+            var token = await Speech.GetTokenAsync();
+            _dictationModule ??= await JS.InvokeAsync<IJSObjectReference>("import", DictationModulePath);
+            var result = await _dictationModule.InvokeAsync<DictationTextField.DictationResult>("recognizeContinuous",
+                TimeSpan.FromSeconds(MaxDictationSeconds + 60), _selfReference, token.Token, token.Region, token.Languages, MaxDictationSeconds);
+            switch (result.Status)
+            {
+                case "recognized" when !string.IsNullOrWhiteSpace(result.Text):
+                    transcript = result.Text.Trim();
+                    break;
+                case "recognized":
+                case "nomatch":
+                    Snackbar.Add("No speech was recognized. Check your microphone and try again.", Severity.Warning);
+                    break;
+                case "error":
+                    Logger.LogWarning("Dictation failed: {Error}", result.Error);
+                    Snackbar.Add($"Dictation failed: {result.Error}", Severity.Error);
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is DomainRuleException or HttpRequestException)
+        {
+            Logger.LogWarning(ex, "Could not get an Azure AI Speech token.");
+            Snackbar.Add($"Dictation is unavailable: {ex.Message}", Severity.Error);
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException)
+        {
+            Logger.LogWarning(ex, "Dictation failed.");
+            Snackbar.Add("Dictation failed. Allow microphone access for this site and try again.", Severity.Error);
+        }
+
+        if (transcript is null)
+        {
+            await SetDictationStateAsync(DictationState.Idle);
+            return;
+        }
+
+        await WriteDescriptionAsync(transcript);
+    }
+
+    /// <summary>Lets the Description Writer fit the transcript into the description, with an Undo in the snackbar.</summary>
+    private async Task WriteDescriptionAsync(string transcript)
+    {
+        await SetDictationStateAsync(DictationState.Writing);
+        var before = Value ?? string.Empty;
+        try
+        {
+            var result = await Speech.WriteDescriptionAsync(new WriteDictatedDescriptionRequest(
+                transcript, Dictation!.Subject, Dictation.Title, before, Dictation.Template));
+            await ReplaceAsync(result.Description);
+            Snackbar.Add(result.Written ? "Fitted what you said into the description." : "Added what you said at the end of the description.",
+                result.Written ? Severity.Success : Severity.Info, options =>
+                {
+                    options.Action = "Undo";
+                    options.ActionColor = Color.Primary;
+                    options.OnClick = _ => ReplaceAsync(before);
+                });
+        }
+        catch (Exception ex) when (ex is ValidationFailedException or DomainRuleException)
+        {
+            Snackbar.Add($"Could not add what you said: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            await SetDictationStateAsync(DictationState.Idle);
+        }
+    }
+
+    /// <summary>Replaces the description as if it was edited: in the editor and through ValueChanged and OnBlur.</summary>
+    private async Task ReplaceAsync(string markdown)
+    {
+        // E.g. Undo in the snackbar after leaving the page.
+        if (_disposed)
+        {
+            return;
+        }
+
+        Value = markdown;
+        await OnParametersSetAsync();
+        await ValueChanged.InvokeAsync(markdown);
+        await OnBlur.InvokeAsync();
+    }
+
+    private async Task StopDictationAsync()
+    {
+        await InvokeDictationAsync("stop");
+    }
+
+    private async Task CancelDictationAsync()
+    {
+        await InvokeDictationAsync("cancel");
+    }
+
+    private async Task InvokeDictationAsync(string identifier)
+    {
+        try
+        {
+            if (_dictationModule is not null)
+            {
+                await _dictationModule.InvokeVoidAsync(identifier);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task SetDictationStateAsync(DictationState state)
+    {
+        _dictationState = state;
+        StateHasChanged();
+        try
+        {
+            if (_editor is not null)
+            {
+                await _editor.InvokeVoidAsync("setDictationState", state.ToString().ToLowerInvariant());
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        try
+        {
+            if (_dictationModule is not null)
+            {
+                await _dictationModule.InvokeVoidAsync("cancel");
+                await _dictationModule.DisposeAsync();
+            }
             if (_editor is not null)
             {
                 await _editor.InvokeVoidAsync("destroy");

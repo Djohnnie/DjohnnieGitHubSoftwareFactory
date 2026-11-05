@@ -1,0 +1,159 @@
+@using Djohnnie.SoftwareFactory.Application.Features.Speech
+@using Djohnnie.SoftwareFactory.Contracts
+@implements IAsyncDisposable
+@inject SpeechService Speech
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject ILogger<DictationTextField> Logger
+
+@*
+    A text field with a microphone adornment: listens until the speaker pauses and replaces the value with what was said.
+    wwwroot/js/dictation.js recognizes the speech in the browser, directly with Azure AI Speech, using a short-lived
+    token from SpeechService (the Speech key stays on the server). Without Azure AI Speech, or read-only, it is a plain
+    text field.
+*@
+<MudTextField T="string" Variant="Variant.Outlined" Value="Value" ValueChanged="ValueChanged" Label="@Label" Placeholder="@Placeholder"
+              HelperText="@HelperText" Required="Required" RequiredError="@RequiredError" MaxLength="MaxLength" ReadOnly="ReadOnly"
+              Immediate="true" OnBlur="OnBlur" Class="@(_listening ? "dictation-listening" : null)"
+              Adornment="@(CanDictate ? Adornment.End : Adornment.None)"
+              AdornmentIcon="@(_listening ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic)"
+              AdornmentColor="@(_listening ? Color.Error : Color.Default)"
+              AdornmentAriaLabel="@(_listening ? "Stop dictating" : $"Dictate the {SpokenLabel}")"
+              OnAdornmentClick="ToggleAsync" />
+
+@code {
+    private const string ModulePath = "./js/dictation.js";
+
+    private IJSObjectReference? _module;
+    private bool _listening;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public string RequiredError { get; set; } = "Required";
+    [Parameter] public int MaxLength { get; set; } = 524288;
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback<FocusEventArgs> OnBlur { get; set; }
+
+    /// <summary>What is dictated, for the adornment's accessible name, e.g. "title". Defaults to the label in lowercase.</summary>
+    [Parameter] public string? DictationLabel { get; set; }
+
+    /// <summary>Raised with the dictated text after it replaced the value.</summary>
+    [Parameter] public EventCallback<string> OnDictated { get; set; }
+
+    private bool CanDictate
+    {
+        get
+        {
+            return Speech.IsEnabled && !ReadOnly;
+        }
+    }
+
+    private string SpokenLabel
+    {
+        get
+        {
+            return DictationLabel ?? Label?.ToLowerInvariant() ?? "text";
+        }
+    }
+
+    /// <summary>Turns recognized speech into a title: Azure punctuates sentences, but a title has no closing period.</summary>
+    public static string ToTitle(string? text, int? maxLength = null)
+    {
+        var title = (text ?? string.Empty).Trim().TrimEnd('.').TrimEnd();
+        if (maxLength is { } max && title.Length > max)
+        {
+            title = title[..max].TrimEnd();
+        }
+
+        return title;
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (_listening)
+        {
+            await CancelAsync();
+            return;
+        }
+
+        _listening = true;
+        try
+        {
+            var token = await Speech.GetTokenAsync();
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            var result = await _module.InvokeAsync<DictationResult>("recognizeOnce", TimeSpan.FromMinutes(1), token.Token, token.Region, token.Languages);
+            switch (result.Status)
+            {
+                case "recognized" when ToTitle(result.Text, MaxLength) is { Length: > 0 } title:
+                    Value = title;
+                    await ValueChanged.InvokeAsync(title);
+                    await OnDictated.InvokeAsync(title);
+                    break;
+                case "recognized":
+                case "nomatch":
+                    Snackbar.Add("No speech was recognized. Check your microphone and try again.", Severity.Warning);
+                    break;
+                case "error":
+                    Logger.LogWarning("Dictation failed: {Error}", result.Error);
+                    Snackbar.Add($"Dictation failed: {result.Error}", Severity.Error);
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is DomainRuleException or HttpRequestException)
+        {
+            Logger.LogWarning(ex, "Could not get an Azure AI Speech token.");
+            Snackbar.Add($"Dictation is unavailable: {ex.Message}", Severity.Error);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException)
+        {
+            Logger.LogWarning(ex, "Dictation failed.");
+            Snackbar.Add("Dictation failed. Allow microphone access for this site and try again.", Severity.Error);
+        }
+        finally
+        {
+            _listening = false;
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("cancel");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("cancel");
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>What <c>recognizeOnce</c> in wwwroot/js/dictation.js resolves with.</summary>
+    public sealed record DictationResult(string Status, string? Text = null, string? Error = null);
+}
