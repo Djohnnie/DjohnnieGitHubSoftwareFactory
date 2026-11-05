@@ -64,7 +64,7 @@
                 {
                     <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
                 }
-                <div class="navigation-split" role="group" aria-label="Agents and templates">
+                <div class="navigation-group" role="group" aria-label="Agents and templates">
                     @if (Repository.Current is not null)
                     {
                         <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
@@ -73,12 +73,13 @@
                     {
                         <span class="px-3">Agents</span>
                     }
-                    <MudTooltip Text="Agent templates">
-                        <MudIconButton Href="/agent-templates" Variant="Variant.Text" Color="Color.Inherit" Icon="@Icons.Material.Filled.ContentCopy"
-                                       Class="header-link navigation-template" aria-label="Agent templates" />
+                    <span class="navigation-separator" aria-hidden="true">/</span>
+                    <MudTooltip Text="Manage agent templates">
+                        <MudIconButton Href="/agent-templates" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
+                                       Size="Size.Small" Class="header-link" aria-label="Manage agent templates" />
                     </MudTooltip>
                 </div>
-                <div class="navigation-split" role="group" aria-label="Epics and templates">
+                <div class="navigation-group" role="group" aria-label="Epics and templates">
                     @if (Repository.Current is not null)
                     {
                         <MudButton Href="/epics" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Flag">Epics</MudButton>
@@ -87,9 +88,10 @@
                     {
                         <span class="px-3">Epics</span>
                     }
-                    <MudTooltip Text="Epic templates">
-                        <MudIconButton Href="/epic-templates" Variant="Variant.Text" Color="Color.Inherit" Icon="@Icons.Material.Filled.ContentCopy"
-                                       Class="header-link navigation-template" aria-label="Epic templates" />
+                    <span class="navigation-separator" aria-hidden="true">/</span>
+                    <MudTooltip Text="Manage epic templates">
+                        <MudIconButton Href="/epic-templates" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
+                                       Size="Size.Small" Class="header-link" aria-label="Manage epic templates" />
                     </MudTooltip>
                 </div>
                 @if (Repository.Current is not null)

@@ -8,17 +8,18 @@
 
 <PageTitle>Custom agents</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+<MudStack Class="mb-4">
     <div>
         <MudText Typo="Typo.h4">Custom agents</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             Agent profiles in <code>@AgentDefinition.Directory</code> of <b>@Repository.Current?.FullName</b>. Every change is committed directly to the default branch.
         </MudText>
     </div>
-    <MudStack Row="true">
-        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
-        <MudButton Href="/agent-templates" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy">From template</MudButton>
-        <MudButton Href="/agents/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New agent</MudButton>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="/agent-templates" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy">From template</MudButton>
+        <MudButton Href="/agents/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New agent</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
 
@@ -27,7 +28,7 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" T="AgentRow" Items="_agents" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+<MudTable Outlined="true" Striped="true" T="AgentRow" Items="_agents" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
     <HeaderContent>
         <MudTh>Agent</MudTh>
         <MudTh>File</MudTh>
@@ -55,18 +56,18 @@
         </MudTd>
         <MudTd DataLabel="Model">@(string.IsNullOrEmpty(context.Agent?.Model) ? "default" : context.Agent.Model)</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" Href="@($"/agents/edit/{Uri.EscapeDataString(context.Item.Name)}")"
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Href="@($"/agents/edit/{Uri.EscapeDataString(context.Item.Name)}")"
                            Disabled="context.ParseError is not null" title="Edit" />
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => SaveAsTemplateAsync(context)"
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => SaveAsTemplateAsync(context)"
                            Disabled="context.Agent is null" title="Save as template" />
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <MudStack AlignItems="AlignItems.Center" Class="pa-6">
             <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Large" Color="Color.Secondary" />
             <MudText>This repository has no custom agents yet.</MudText>
-            <MudButton Href="/agents/new" Variant="Variant.Outlined" Color="Color.Primary">Create the first agent</MudButton>
+            <MudButton Href="/agents/new" Variant="Variant.Text" Color="Color.Primary">Create the first agent</MudButton>
         </MudStack>
     </NoRecordsContent>
 </MudTable>

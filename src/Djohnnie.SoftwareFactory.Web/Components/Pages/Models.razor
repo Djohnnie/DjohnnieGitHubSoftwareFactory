@@ -6,18 +6,19 @@
 
 <PageTitle>Models</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+<MudStack Class="mb-4">
     <div>
         <MudText Typo="Typo.h4">Models</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             AI models available to custom agents, with their price in USD per 1M tokens. Shared by all repositories.
         </MudText>
     </div>
-    <MudStack Row="true">
-        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudDownload"
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudDownload"
                    OnClick="() => _importOpen = !_importOpen">Import from GitHub docs</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="() => EditAsync(null)">New model</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="() => EditAsync(null)">New model</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
 
@@ -48,7 +49,7 @@
 
         @if (_scraped is not null)
         {
-            <MudTable Outlined="true" T="AiModel" Items="_scraped" MultiSelection="true" @bind-SelectedItems="_selected" Dense="true" Hover="true"
+            <MudTable Outlined="true" Striped="true" T="AiModel" Items="_scraped" MultiSelection="true" @bind-SelectedItems="_selected" Dense="true" Hover="true"
                       Elevation="0" Class="mt-4" Height="400px" FixedHeader="true">
                 <HeaderContent>
                     <MudTh>Model</MudTh>
@@ -90,10 +91,10 @@
     </MudPaper>
 }
 
-<MudTable Outlined="true" T="AiModel" Items="_models" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0"
+<MudTable Outlined="true" Striped="true" T="AiModel" Items="_models" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0"
           GroupBy="_groupByProvider" GroupHeaderStyle="background-color: var(--mud-palette-background-gray)">
     <ToolBarContent>
-        <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search models" Adornment="Adornment.Start" Immediate="true"
+        <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="Search models" Adornment="Adornment.Start" Immediate="true"
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
         <MudSpacer />
         <MudSwitch @bind-Value="_onlyEnabled" Color="Color.Primary" Label="Enabled only" />
@@ -129,8 +130,8 @@
         <MudTd Style="text-align:right; white-space:nowrap">
             <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                 <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="v => SetEnabledAsync(context, v)" Color="Color.Primary" />
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" OnClick="() => EditAsync(context)" title="Edit" />
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" OnClick="() => EditAsync(context)" title="Edit" />
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
             </MudStack>
         </MudTd>
     </RowTemplate>
@@ -138,7 +139,7 @@
         <MudStack AlignItems="AlignItems.Center" Class="pa-6">
             <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="Color.Secondary" />
             <MudText>No models yet. Import them from the GitHub docs or add one manually.</MudText>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => _importOpen = true">Import from GitHub docs</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="() => _importOpen = true">Import from GitHub docs</MudButton>
         </MudStack>
     </NoRecordsContent>
 </MudTable>

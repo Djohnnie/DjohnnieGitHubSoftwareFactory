@@ -15,7 +15,7 @@ h1:focus {
     justify-content: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background-color: color-mix(in srgb, var(--mud-palette-appbar-background) 20%, var(--mud-palette-background));
+    background-color: color-mix(in srgb, #eaeef2 20%, var(--mud-palette-background));
     color: var(--mud-palette-text-primary);
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
@@ -28,23 +28,14 @@ h1:focus {
     cursor: pointer;
 }
 
-.navigation-split {
+.navigation-group {
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: var(--mud-default-borderradius);
 }
 
-.navigation-split > .mud-button-root {
-    border-radius: var(--mud-default-borderradius) 0 0 var(--mud-default-borderradius);
-}
-
-.navigation-split .navigation-template {
-    border-radius: 0 var(--mud-default-borderradius) var(--mud-default-borderradius) 0;
-}
-
-.navigation-split > .mud-tooltip-root {
-    border-left: 1px solid var(--mud-palette-lines-default);
+.navigation-separator {
+    color: var(--mud-palette-text-secondary);
+    padding: 0 0.25rem;
 }
 
 .app-header .header-link:hover,
@@ -123,12 +114,49 @@ h1:focus {
     text-align: center;
 }
 
+/* Overview */
+.overview-tile {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1rem;
+}
+
+.overview-tile .mud-card-content {
+    flex-grow: 1;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.6;
+}
+
+.overview-tile .mud-card-actions {
+    padding: 1rem;
+}
+
+.overview-tile .mud-button-root {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
 /* Tables */
+.mud-table .mud-table-toolbar {
+    height: auto;
+    min-height: 80px;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    gap: 1rem;
+}
+
+.mud-table .mud-icon-button {
+    border-radius: 50%;
+}
+
 .cursor-pointer {
     cursor: pointer;
 }
 
 .selected-row {
+    --mud-palette-table-striped: rgba(45, 164, 78, 0.08);
     background: rgba(45, 164, 78, 0.08);
 }
 

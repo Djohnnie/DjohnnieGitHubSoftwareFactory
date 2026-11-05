@@ -85,7 +85,8 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         {
             var links = cut.FindAll(".app-header > .mud-appbar + nav a");
             Assert.Equal(new[] { "/agent-templates", "/epic-templates" }, links.Select(link => link.GetAttribute("href")));
-            Assert.Equal(new[] { "Agent templates", "Epic templates" }, links.Select(link => link.GetAttribute("aria-label")));
+            Assert.Equal(new[] { "Manage agent templates", "Manage epic templates" }, links.Select(link => link.GetAttribute("aria-label")));
+            Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
             Assert.Contains("Select repository", cut.Find(".mud-appbar").TextContent);
         }
         else
@@ -130,6 +131,15 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
             navigation.QuerySelector("[aria-label='Agents and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal(new[] { "/epics", "/epic-templates" },
             navigation.QuerySelector("[aria-label='Epics and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        foreach (var group in navigation.QuerySelectorAll("[role='group']"))
+        {
+            var templatesLink = group.QuerySelectorAll("a").Last();
+            Assert.Empty(templatesLink.TextContent.Trim());
+            Assert.StartsWith("Manage ", templatesLink.GetAttribute("aria-label"));
+            var separator = group.QuerySelector(".navigation-separator")!;
+            Assert.Equal("/", separator.TextContent);
+            Assert.Equal("true", separator.GetAttribute("aria-hidden"));
+        }
         Assert.All(cut.FindComponents<MudButton>(), button =>
         {
             Assert.Equal(Variant.Text, button.Instance.Variant);

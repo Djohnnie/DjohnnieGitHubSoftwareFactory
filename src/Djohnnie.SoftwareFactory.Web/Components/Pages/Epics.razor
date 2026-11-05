@@ -6,7 +6,7 @@
 
 <PageTitle>Epics</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+<MudStack Class="mb-4">
     <div>
         <MudText Typo="Typo.h4">Epics</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
@@ -14,9 +14,10 @@
             labelled <code>@Epic.Label</code> and assigns it to the Copilot cloud agent.
         </MudText>
     </div>
-    <MudStack Row="true">
-        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
-        <MudButton Href="/epics/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New epic</MudButton>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="/epics/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New epic</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
 
@@ -25,9 +26,9 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" T="Epic" Items="_epics" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+<MudTable Outlined="true" Striped="true" T="Epic" Items="_epics" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
     <ToolBarContent>
-        <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search epics" Adornment="Adornment.Start" Immediate="true"
+        <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="Search epics" Adornment="Adornment.Start" Immediate="true"
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
         <MudSpacer />
         <MudSelect Variant="Variant.Outlined" T="WorkItemStatus?" @bind-Value="_status" Label="Status" Dense="true" Clearable="true" Style="max-width:200px">
@@ -63,24 +64,28 @@
         <MudTd Style="text-align:right; white-space:nowrap">
             @if (context.IsDraft)
             {
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RocketLaunch"
-                           Disabled="_busy" OnClick="() => AcceptAsync(context)">Accept</MudButton>
+                <MudTooltip Text="Accept and assign">
+                    <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.RocketLaunch"
+                                   Disabled="_busy" OnClick="() => AcceptAsync(context)" aria-label="Accept and assign" />
+                </MudTooltip>
             }
             else if (context.Status == WorkItemStatus.Accepted)
             {
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.SmartToy"
-                           Disabled="_busy" OnClick="() => AssignAsync(context)">Assign agent</MudButton>
+                <MudTooltip Text="Assign agent">
+                    <MudIconButton Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.SmartToy"
+                                   Disabled="_busy" OnClick="() => AssignAsync(context)" aria-label="Assign agent" />
+                </MudTooltip>
             }
-            <MudIconButton Variant="Variant.Outlined" Icon="@(context.IsDraft ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
+            <MudIconButton Variant="Variant.Text" Icon="@(context.IsDraft ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
                            Href="@($"/epics/{context.Id}")" title="@(context.IsDraft ? "Edit" : "View")" />
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Disabled="_busy" OnClick="() => DeleteAsync(context)" title="Delete" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Disabled="_busy" OnClick="() => DeleteAsync(context)" title="Delete" />
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <MudStack AlignItems="AlignItems.Center" Class="pa-6">
             <MudIcon Icon="@Icons.Material.Filled.Flag" Size="Size.Large" Color="Color.Secondary" />
             <MudText>No epics yet for this repository.</MudText>
-            <MudButton Href="/epics/new" Variant="Variant.Outlined" Color="Color.Primary">Create the first epic</MudButton>
+            <MudButton Href="/epics/new" Variant="Variant.Text" Color="Color.Primary">Create the first epic</MudButton>
         </MudStack>
     </NoRecordsContent>
 </MudTable>

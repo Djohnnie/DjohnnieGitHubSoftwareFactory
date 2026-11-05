@@ -35,7 +35,7 @@
 
     <MudGrid>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Outlined="true" Elevation="0">
+            <MudCard Outlined="true" Elevation="0" Class="overview-tile">
                 <MudCardHeader>
                     <CardHeaderAvatar><MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" /></CardHeaderAvatar>
                     <CardHeaderContent><MudText Typo="Typo.h6">Custom agents</MudText></CardHeaderContent>
@@ -44,12 +44,12 @@
                     <MudText Typo="Typo.body2">Create, edit and delete the Copilot agent profiles in <code>.github/agents</code>.</MudText>
                 </MudCardContent>
                 <MudCardActions>
-                    <MudButton Variant="Variant.Outlined" Href="/agents" Color="Color.Primary">Manage agents</MudButton>
+                    <MudButton Variant="Variant.Text" Href="/agents" Color="Color.Primary">Manage agents</MudButton>
                 </MudCardActions>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Outlined="true" Elevation="0">
+            <MudCard Outlined="true" Elevation="0" Class="overview-tile">
                 <MudCardHeader>
                     <CardHeaderAvatar><MudIcon Icon="@Icons.Material.Filled.Flag" Color="Color.Primary" /></CardHeaderAvatar>
                     <CardHeaderContent><MudText Typo="Typo.h6">Epics</MudText></CardHeaderContent>
@@ -58,7 +58,7 @@
                     <MudText Typo="Typo.body2">Draft epics, then accept them as GitHub issues assigned to the Copilot cloud agent.</MudText>
                 </MudCardContent>
                 <MudCardActions>
-                    <MudButton Variant="Variant.Outlined" Href="/epics" Color="Color.Primary">Manage epics</MudButton>
+                    <MudButton Variant="Variant.Text" Href="/epics" Color="Color.Primary">Manage epics</MudButton>
                 </MudCardActions>
             </MudCard>
         </MudItem>

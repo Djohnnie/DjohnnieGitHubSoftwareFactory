@@ -13,7 +13,8 @@ public static class AppTheme
             Tertiary = "#0969da",
             AppbarBackground = "#24292f",
             AppbarText = "#ffffff",
-            Background = "#f6f8fa"
+            Background = "#f6f8fa",
+            TableStriped = "#f8fafb"
         },
         LayoutProperties = new LayoutProperties
         {

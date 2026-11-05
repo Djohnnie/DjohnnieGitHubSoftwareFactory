@@ -6,16 +6,17 @@
 
 <PageTitle>Epic templates</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+<MudStack Class="mb-4">
     <div>
         <MudText Typo="Typo.h4">Epic templates</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             Reusable title examples and Markdown skeletons, shared across repositories. New epics start with the first template alphabetically.
         </MudText>
     </div>
-    <MudStack Row="true">
-        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
-        <MudButton Href="/epic-templates/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="/epic-templates/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
 
@@ -24,7 +25,7 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" T="EpicTemplate" Items="_templates" Loading="_loading" Hover="true" Elevation="0">
+<MudTable Outlined="true" Striped="true" T="EpicTemplate" Items="_templates" Loading="_loading" Hover="true" Elevation="0">
     <HeaderContent>
         <MudTh>Template</MudTh>
         <MudTh>Title example</MudTh>
@@ -37,11 +38,11 @@
         <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             <MudTooltip Text="Create an epic from this template">
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary"
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary"
                                Href="@($"/epics/new?template={context.Id}")" aria-label="Create epic" />
             </MudTooltip>
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" Href="@($"/epic-templates/edit/{context.Id}")" title="Edit" />
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Href="@($"/epic-templates/edit/{context.Id}")" title="Edit" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>

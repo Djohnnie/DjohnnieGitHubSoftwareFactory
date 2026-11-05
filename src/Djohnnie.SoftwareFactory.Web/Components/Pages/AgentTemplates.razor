@@ -7,16 +7,17 @@
 
 <PageTitle>Agent templates</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+<MudStack Class="mb-4">
     <div>
         <MudText Typo="Typo.h4">Agent templates</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             Reusable custom agents, stored in DGHSF. Use them to create the same agent in one or more repositories.
         </MudText>
     </div>
-    <MudStack Row="true">
-        <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
-        <MudButton Href="/agent-templates/new" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="/agent-templates/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
 
@@ -25,7 +26,7 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" T="TemplateRow" Items="_templates" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+<MudTable Outlined="true" Striped="true" T="TemplateRow" Items="_templates" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
     <HeaderContent>
         <MudTh>Template</MudTh>
         <MudTh>File</MudTh>
@@ -54,23 +55,23 @@
         <MudTd DataLabel="Updated">@context.Template.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             <MudTooltip Text="@(Repository.Current is { } repo ? $"Create an agent in {repo.FullName} from this template" : "Select a repository and create an agent from this template")">
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary" Disabled="context.ParseError is not null"
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary" Disabled="context.ParseError is not null"
                                Href="@($"/agents/new?template={context.Template.Id}")" aria-label="Create agent" />
             </MudTooltip>
             <MudTooltip Text="Commit to several repositories">
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.LibraryAdd" Disabled="context.ParseError is not null"
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.LibraryAdd" Disabled="context.ParseError is not null"
                                OnClick="() => AddToRepositoriesAsync(context.Template)" aria-label="Add to repositories" />
             </MudTooltip>
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit" Href="@($"/agent-templates/edit/{context.Template.Id}")"
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Href="@($"/agent-templates/edit/{context.Template.Id}")"
                            Disabled="context.ParseError is not null" title="Edit" />
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <MudStack AlignItems="AlignItems.Center" Class="pa-6">
             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Secondary" />
             <MudText>There are no agent templates yet. Create one here, or save an existing agent as a template from the Agents page.</MudText>
-            <MudButton Href="/agent-templates/new" Variant="Variant.Outlined" Color="Color.Primary">Create the first template</MudButton>
+            <MudButton Href="/agent-templates/new" Variant="Variant.Text" Color="Color.Primary">Create the first template</MudButton>
         </MudStack>
     </NoRecordsContent>
 </MudTable>

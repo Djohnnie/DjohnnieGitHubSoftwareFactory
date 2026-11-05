@@ -28,11 +28,11 @@
             }
             else
             {
-                <MudTable Outlined="true" T="GitHubRepository" Items="_repositories" Loading="_repositories is null" LoadingProgressColor="Color.Primary"
+                <MudTable Outlined="true" Striped="true" T="GitHubRepository" Items="_repositories" Loading="_repositories is null" LoadingProgressColor="Color.Primary"
                           MultiSelection="true" @bind-SelectedItems="_selected" Filter="Matches" Dense="true" Hover="true" Elevation="0"
                           RowsPerPage="10" Class="mt-2">
                     <ToolBarContent>
-                        <MudTextField Variant="Variant.Outlined" @bind-Value="_search" Placeholder="Search repositories" Adornment="Adornment.Start"
+                        <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="Search repositories" Adornment="Adornment.Start"
                                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Immediate="true" Clearable="true" Class="mt-0" />
                     </ToolBarContent>
                     <HeaderContent>
