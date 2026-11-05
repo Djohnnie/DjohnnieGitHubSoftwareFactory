@@ -2,6 +2,7 @@ using AgentInfrastructure = Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.Assistant;
 
@@ -14,16 +15,9 @@ public sealed record AssistantTools
     }
 }
 
+/// <summary>The form tools of the Copilots; the system prompts are managed as internal agents.</summary>
 public static class AssistantForms
 {
-    public const string AgentInstructions = AgentInfrastructure.AgentFormTools.Instructions;
-    public const string TemplateInstructions = AgentInfrastructure.AgentFormTools.TemplateInstructions;
-
-    public static string WorkItemInstructions(WorkItemType type)
-    {
-        return AgentInfrastructure.WorkItemFormTools.InstructionsFor(type);
-    }
-
     public static AssistantTools ForAgent(
         Func<AgentDefinition> getAgent, Func<string?> getFileName, Action<string>? setFileName,
         IReadOnlyList<AiModel> models, Func<Action, Task> onUi)
@@ -37,5 +31,10 @@ public static class AssistantForms
         Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi)
     {
         return new(new AgentInfrastructure.WorkItemFormTools(getItem, models, loadAgents, onUi).AsTools());
+    }
+
+    public static AssistantTools ForWorkItemTemplate(Func<WorkItemTemplate> getTemplate, Func<Action, Task> onUi)
+    {
+        return new(new AgentInfrastructure.WorkItemTemplateFormTools(getTemplate, onUi).AsTools());
     }
 }

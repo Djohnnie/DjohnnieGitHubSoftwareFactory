@@ -7,30 +7,22 @@ using OpenAI;
 namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>
-/// Creates DGHSF Copilot agents (Microsoft Agent Framework) on top of the configured OpenAI-compatible model.
-/// Every agent shares the generic DGHSF Copilot instructions; pages add their own task instructions and tools.
+/// Creates DGHSF's internal agents (Microsoft Agent Framework) on top of the configured OpenAI-compatible model.
+/// The system prompts come from the internal agents in the database (defaults in <see cref="InternalAgentDefaults"/>).
 /// </summary>
 public sealed class AssistantAgentFactory(IChatClient? chatClient, ILoggerFactory loggerFactory)
 {
     public const string AgentName = "DGHSF Copilot";
 
-    private const string BaseInstructions = """
-        You are DGHSF Copilot, the assistant built into DGHSF (Djohnnie's GitHub Software Factory).
-        DGHSF is a personal web app to manage GitHub Copilot custom agents per repository and to plan work (epics)
-        that is turned into GitHub issues and handed to the Copilot cloud agent.
-        Be concise and practical. Use Markdown for formatting. Never claim that something was saved, committed or
-        created on GitHub: the user always reviews the form and saves it themselves.
-        """;
-
     /// <summary><c>false</c> when the OpenAI model or key is missing.</summary>
     public bool IsConfigured => chatClient is not null;
 
-    public AssistantConversation CreateConversation(string instructions, AssistantTools? tools = null)
+    public AssistantConversation CreateConversation(string name, string instructions, AssistantTools? tools = null)
     {
-        return new(CreateAgent(instructions, tools?.Tools));
+        return new(CreateAgent(name, instructions, tools?.Tools));
     }
 
-    public AIAgent CreateAgent(string instructions, IList<AITool>? tools = null)
+    public AIAgent CreateAgent(string name, string instructions, IList<AITool>? tools = null)
     {
         if (chatClient is null)
         {
@@ -38,7 +30,7 @@ public sealed class AssistantAgentFactory(IChatClient? chatClient, ILoggerFactor
                 $"DGHSF Copilot is not configured. Set {OpenAIOptions.SectionName}:Model and {OpenAIOptions.SectionName}:ApiKey (and optionally {OpenAIOptions.SectionName}:Endpoint).");
         }
 
-        return new ChatClientAgent(chatClient, $"{BaseInstructions}\n\n{instructions}", AgentName, tools: tools, loggerFactory: loggerFactory);
+        return new ChatClientAgent(chatClient, instructions, name, tools: tools, loggerFactory: loggerFactory);
     }
 
     /// <summary>Creates the chat client for the configured endpoint, or <c>null</c> when it is not configured.</summary>

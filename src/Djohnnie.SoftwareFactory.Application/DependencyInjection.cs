@@ -4,6 +4,7 @@ using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
+using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
@@ -14,6 +15,8 @@ using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Djohnnie.SoftwareFactory.Application;
 
@@ -42,6 +45,12 @@ public static class DependencyInjection
             services.AddScoped<RepositoryService>();
             services.AddScoped<AgentService>();
             services.AddScoped<AssistantService>();
+            services.AddScoped<InternalAgentRegistry>();
+            services.AddScoped<InternalAgentService>();
+            services.AddScoped<WorkItemModelSelector>();
+            // AddAssistantAgents replaces this unconfigured factory with the one for the OpenAI settings.
+            services.TryAddSingleton(sp => new AssistantAgentFactory(null, sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance));
+            services.TryAddSingleton<BackgroundAgents>();
             services.AddScoped<ImageUploadService>();
             var imageUploads = services.AddOptions<ImageUploadOptions>();
             if (configuration is not null)
@@ -76,6 +85,13 @@ public static class DependencyInjection
         public Task MigrateApplicationDatabaseAsync(CancellationToken cancellationToken = default)
         {
             return services.MigrateSqlDatabaseAsync(cancellationToken);
+        }
+
+        /// <summary>Adds the data the application needs that is missing, such as the internal agents with their default prompts.</summary>
+        public async Task SeedApplicationDataAsync(CancellationToken cancellationToken = default)
+        {
+            await using var scope = services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<InternalAgentService>().SeedAsync(cancellationToken);
         }
     }
 }

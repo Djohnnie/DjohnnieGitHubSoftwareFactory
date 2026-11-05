@@ -2,6 +2,25 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql;
 
 internal static class ContractMapping
 {
+    extension(Entities.InternalAgent value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.InternalAgents.InternalAgent ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                Key = value.Key,
+                Name = value.Name,
+                Description = value.Description,
+                Kind = value.Kind,
+                Instructions = value.Instructions,
+                IsEnabled = value.IsEnabled,
+                CreatedAt = value.CreatedAt,
+                UpdatedAt = value.UpdatedAt
+            };
+        }
+    }
+
     extension(Entities.WorkItemTemplate value)
     {
         public Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates.WorkItemTemplate ToContract()

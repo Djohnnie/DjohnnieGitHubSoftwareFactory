@@ -64,7 +64,7 @@ public sealed class WorkItemFormTools(
                gives more details.
             {assignment}
             Structure of a good {name} description (Markdown, in English):
-            {Structure(type)}
+            {StructureFor(type)}
             """;
     }
 
@@ -84,7 +84,7 @@ public sealed class WorkItemFormTools(
         };
     }
 
-    private static string Structure(WorkItemType type)
+    internal static string StructureFor(WorkItemType type)
     {
         return type switch
         {
@@ -133,7 +133,7 @@ public sealed class WorkItemFormTools(
             tools.Add(AIFunctionFactory.Create(ListCustomAgentsAsync, "list_custom_agents"));
             tools.Add(AIFunctionFactory.Create(ListModels, "list_models"));
         }
-        return new(tools);
+        return new(tools, async () => await GetFormAsync());
     }
 
     [Description("Gets the current values of the work item form.")]

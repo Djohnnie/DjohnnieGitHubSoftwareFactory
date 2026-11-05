@@ -26,7 +26,7 @@ else if (_agent is not null)
     <AgentForm @ref="_agentForm" Agent="_agent" @bind-FileName="_fileName" HandoffAgents="_otherTemplates"
                FileNameHelperText="@($"Default file name when creating an agent: {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)}")">
         <Header>
-            <AssistantChat Instructions="@AssistantForms.TemplateInstructions" Tools="_assistantTools" Placeholder="Describe the agent you need"
+            <AssistantChat CopilotKey="@InternalAgentKeys.AgentTemplateCopilot" Tools="_assistantTools" Placeholder="Describe the agent you need"
                            Subtitle="@(IsNew ? "Describe the reusable agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this template; I'll update the form.")"
                            Suggestions="@(IsNew ? TemplateSuggestions : [])" />
         </Header>

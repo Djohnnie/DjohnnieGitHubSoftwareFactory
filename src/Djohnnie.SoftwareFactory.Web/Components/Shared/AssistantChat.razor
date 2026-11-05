@@ -1,79 +1,100 @@
 @implements IDisposable
-@inject AssistantService AgentFactory
+@inject AssistantService Assistant
 
 @*
-    A chat with DGHSF Copilot. The page supplies the task instructions and the tools that read and fill its form;
-    the conversation (agent session) lives as long as the component.
+    A chat with one of DGHSF's internal Copilots. The Copilot (system prompt, name, enabled state) is managed on the
+    internal agents page; the page supplies the tools that read and fill its form. The conversation (agent session) lives
+    as long as the component. Before the conversation starts, the Chat Suggestions agent writes suggestion chips in the
+    background; the static suggestions are the fallback.
 *@
-<MudPaper Class="pa-4 assistant-chat" Outlined="true" Elevation="0">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" />
-            <div>
-                <MudText Typo="Typo.h6">@Title</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">@Subtitle</MudText>
-            </div>
-        </MudStack>
-        @if (_messages.Count > 0)
-        {
-            <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RestartAlt" OnClick="Reset" Disabled="_busy" title="Start a new conversation" />
-        }
-    </MudStack>
-
-    @if (!AgentFactory.IsConfigured)
-    {
-        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true" Class="mt-3">
-            DGHSF Copilot is not configured yet. Set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
-            <code>OpenAI:ApiKey</code> (for example with <code>dotnet user-secrets</code>) and restart the app.
-        </MudAlert>
-    }
-    else
-    {
-        @if (_messages.Count > 0)
-        {
-            <div class="chat-log mt-3">
+@if (_copilot is { IsEnabled: false })
+{
+    @* Disabled on the internal agents page. *@
+}
+else
+{
+    <MudPaper Class="pa-4 assistant-chat" Outlined="true" Elevation="0">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" />
                 <div>
-                    @foreach (var message in _messages)
+                    <MudText Typo="Typo.h6">@(Title ?? _copilot?.Name ?? AssistantService.AgentName)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@Subtitle</MudText>
+                </div>
+            </MudStack>
+            @if (_messages.Count > 0)
+            {
+                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RestartAlt" OnClick="Reset" Disabled="_busy" title="Start a new conversation" />
+            }
+        </MudStack>
+
+        @if (!Assistant.IsConfigured)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true" Class="mt-3">
+                DGHSF Copilot is not configured yet. Set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
+                <code>OpenAI:ApiKey</code> (for example with <code>dotnet user-secrets</code>) and restart the app.
+            </MudAlert>
+        }
+        else if (_loadError is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-3">@_loadError</MudAlert>
+        }
+        else
+        {
+            @if (_messages.Count > 0)
+            {
+                <div class="chat-log mt-3">
+                    <div>
+                        @foreach (var message in _messages)
+                        {
+                            <div class="@($"chat-message {(message.FromUser ? "from-user" : "from-assistant")}{(message.IsError ? " is-error" : string.Empty)}")">
+                                @if (message.Text.Length == 0 && _busy)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    @message.Text
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_suggesting)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2 suggestions-loading" aria-live="polite">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Thinking of suggestions…</MudText>
+                </MudStack>
+            }
+            else if (CurrentSuggestions.Count > 0)
+            {
+                <div class="mt-2">
+                    @foreach (var suggestion in CurrentSuggestions)
                     {
-                        <div class="@($"chat-message {(message.FromUser ? "from-user" : "from-assistant")}{(message.IsError ? " is-error" : string.Empty)}")">
-                            @if (message.Text.Length == 0 && _busy)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                            }
-                            else
-                            {
-                                @message.Text
-                            }
-                        </div>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" OnClick="() => SendAsync(suggestion)">@suggestion</MudChip>
                     }
                 </div>
-            </div>
-        }
-        else if (Suggestions.Count > 0)
-        {
-            <div class="mt-2">
-                @foreach (var suggestion in Suggestions)
-                {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" OnClick="() => SendAsync(suggestion)">@suggestion</MudChip>
-                }
-            </div>
-        }
+            }
 
-        <MudStack Row="true" AlignItems="AlignItems.End" Class="mt-2">
-            <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true" Disabled="_busy"
-                          OnKeyDown="OnKeyDownAsync" />
-            @if (_busy)
-            {
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Stop" Color="Color.Error" OnClick="Cancel" title="Stop" />
-            }
-            else
-            {
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Send" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_input)"
-                               OnClick="() => SendAsync(_input)" title="Send (Enter)" />
-            }
-        </MudStack>
-    }
-</MudPaper>
+            <MudStack Row="true" AlignItems="AlignItems.End" Class="mt-2">
+                <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true" Disabled="_busy || _copilot is null"
+                              OnKeyDown="OnKeyDownAsync" />
+                @if (_busy)
+                {
+                    <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Stop" Color="Color.Error" OnClick="Cancel" title="Stop" />
+                }
+                else
+                {
+                    <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
+                                   Disabled="string.IsNullOrWhiteSpace(_input) || _copilot is null"
+                                   OnClick="() => SendAsync(_input)" title="Send (Enter)" />
+                }
+            </MudStack>
+        }
+    </MudPaper>
+}
 
 @code {
     private sealed record ChatEntry(bool fromUser, string text)
@@ -83,23 +104,105 @@
         public bool IsError { get; set; }
     }
 
-    [Parameter] public string Title { get; set; } = AssistantService.AgentName;
+    /// <summary>The internal Copilot, see <see cref="InternalAgentKeys"/>.</summary>
+    [Parameter, EditorRequired] public string CopilotKey { get; set; } = string.Empty;
+
+    /// <summary>Overrides the Copilot's name as the title.</summary>
+    [Parameter] public string? Title { get; set; }
     [Parameter] public string? Subtitle { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Ask DGHSF Copilot";
 
-    /// <summary>The task-specific instructions, on top of the generic DGHSF Copilot instructions.</summary>
-    [Parameter, EditorRequired] public string Instructions { get; set; } = string.Empty;
-
     [Parameter] public AssistantTools? Tools { get; set; }
 
-    /// <summary>Example prompts shown before the conversation starts.</summary>
+    /// <summary>Example prompts shown before the conversation starts when the Chat Suggestions agent has none.</summary>
     [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
 
+    /// <summary>Extra page context for the Chat Suggestions agent, e.g. the selected repository.</summary>
+    [Parameter] public string? SuggestionContext { get; set; }
+
     private readonly List<ChatEntry> _messages = [];
+    private InternalAgent? _copilot;
+    private string? _loadedKey;
+    private string? _loadError;
     private AssistantConversation? _conversation;
     private CancellationTokenSource? _cancellation;
+    private CancellationTokenSource? _suggestionCancellation;
+    private IReadOnlyList<string>? _generatedSuggestions;
+    private bool _suggestionsRequested;
+    private bool _suggesting;
     private string? _input;
     private bool _busy;
+
+    private IReadOnlyList<string> CurrentSuggestions => _generatedSuggestions is { Count: > 0 } generated ? generated : Suggestions;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedKey != CopilotKey)
+        {
+            _loadedKey = CopilotKey;
+            _copilot = null;
+            _conversation = null;
+            _loadError = null;
+            try
+            {
+                _copilot = await Assistant.GetCopilotAsync(CopilotKey);
+            }
+            catch (Exception ex)
+            {
+                _loadError = $"Could not load the Copilot: {ex.Message}";
+            }
+        }
+
+        StartSuggestions();
+    }
+
+    /// <summary>Starts the Chat Suggestions agent once the page's tools (and so its form) are available.</summary>
+    private void StartSuggestions()
+    {
+        if (_suggestionsRequested || _copilot is not { IsEnabled: true } copilot || Tools is null
+            || !Assistant.IsConfigured || _messages.Count > 0)
+        {
+            return;
+        }
+
+        _suggestionsRequested = true;
+        _suggesting = true;
+        _suggestionCancellation = new CancellationTokenSource();
+        _ = GenerateSuggestionsAsync(copilot, Tools, _suggestionCancellation.Token);
+    }
+
+    private async Task GenerateSuggestionsAsync(InternalAgent copilot, AssistantTools tools, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> suggestions = [];
+        try
+        {
+            // Let the page finish rendering its form first; the tools read it on the UI thread.
+            await Task.Yield();
+            suggestions = await Assistant.SuggestPromptsAsync(copilot, SuggestionContext, tools, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        await InvokeAsync(() =>
+        {
+            _generatedSuggestions = suggestions;
+            _suggesting = false;
+            StateHasChanged();
+        });
+    }
+
+    private void CancelSuggestions()
+    {
+        _suggestionCancellation?.Cancel();
+        _suggestionCancellation?.Dispose();
+        _suggestionCancellation = null;
+        _suggesting = false;
+    }
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
     {
@@ -112,11 +215,12 @@
     private async Task SendAsync(string? text)
     {
         text = text?.Trim();
-        if (string.IsNullOrEmpty(text) || _busy)
+        if (string.IsNullOrEmpty(text) || _busy || _copilot is null)
         {
             return;
         }
 
+        CancelSuggestions();
         _input = null;
         _busy = true;
         _messages.Add(new ChatEntry(true, text));
@@ -126,7 +230,7 @@
 
         try
         {
-            _conversation ??= AgentFactory.CreateConversation(Instructions, Tools);
+            _conversation ??= Assistant.CreateConversation(_copilot, Tools);
             await foreach (var update in _conversation.RunStreamingAsync(text, _cancellation.Token))
             {
                 reply.Text += update;
@@ -160,15 +264,39 @@
         _cancellation?.Cancel();
     }
 
+    /// <summary>
+    /// Lets the Chat Suggestions agent write new chips for the form as it is now, e.g. after a field changed.
+    /// Ignored while a conversation is going on (no chips are shown then; a reset writes new ones).
+    /// </summary>
+    public void RefreshSuggestions()
+    {
+        if (_messages.Count > 0 || !_suggestionsRequested)
+        {
+            return;
+        }
+
+        CancelSuggestions();
+        _generatedSuggestions = null;
+        _suggestionsRequested = false;
+        StartSuggestions();
+        StateHasChanged();
+    }
+
     private void Reset()
     {
         _messages.Clear();
         _conversation?.Reset();
         _input = null;
+
+        // New suggestions for the form as it is now.
+        _generatedSuggestions = null;
+        _suggestionsRequested = false;
+        StartSuggestions();
     }
 
     public void Dispose()
     {
         _cancellation?.Cancel();
+        CancelSuggestions();
     }
 }

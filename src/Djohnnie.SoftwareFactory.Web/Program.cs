@@ -99,6 +99,16 @@ if (app.Environment.IsDevelopment())
     await app.Services.MigrateApplicationDatabaseAsync();
 }
 
+try
+{
+    await app.Services.SeedApplicationDataAsync();
+}
+catch (Exception ex)
+{
+    // Not fatal: the internal agents fall back to their default prompts and are seeded when their page is opened.
+    app.Logger.LogWarning(ex, "Could not seed the internal agents.");
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);

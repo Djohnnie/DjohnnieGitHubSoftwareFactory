@@ -31,6 +31,10 @@ else if (_template is not null)
 {
     <MudForm @ref="_form" Model="_template">
         <MudStack Spacing="4">
+            <AssistantChat @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItemTemplate(_type)" Tools="_assistantTools"
+                           Placeholder="@($"Describe the {Name} template you need")"
+                           Subtitle="@(Id is null ? $"Describe the {_type.PluralName.ToLowerInvariant()} this template is for; I'll ask what I need to know and fill in the form." : "Ask me to improve this template; I'll update the form.")"
+                           Suggestions="@(Id is null ? Suggestions : [])" />
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MudTextField Variant="Variant.Outlined" @bind-Value="_template.Name" Label="Template name" Required="true"
                               MaxLength="200" Immediate="true" />
@@ -70,8 +74,18 @@ else if (_template is not null)
     private string? _error;
     private List<BreadcrumbItem> _breadcrumbs = [];
     private (WorkItemType Type, int? Id)? _loadedParameters;
+    private AssistantTools? _assistantTools;
 
     private string Name => WorkItemActions.Name(_type);
+
+    private IReadOnlyList<string> Suggestions => _type switch
+    {
+        WorkItemType.Bug => ["A crash report with steps to reproduce", "A visual glitch template with screenshots", "A performance regression report"],
+        WorkItemType.Story => ["A classic user story with Given/When/Then criteria", "A story for an API endpoint", "A UI story with design notes"],
+        WorkItemType.Task => ["A technical chore such as a dependency upgrade", "A refactoring task with a clear scope", "A task to add missing tests"],
+        WorkItemType.Feature => ["A feature with requirements and acceptance criteria", "A feature behind a feature flag", "An integration with an external service"],
+        _ => ["A product epic with goals and success metrics", "A technical epic for a platform migration", "An epic for a new customer-facing area"]
+    };
     private string Heading => Id is null ? $"New {Name} template" : $"Edit {Name} template";
 
     private string SkeletonExample => _type switch
@@ -94,6 +108,7 @@ else if (_template is not null)
         _loading = true;
         _error = null;
         _template = null;
+        _assistantTools = null;
         try
         {
             _template = Id is null ? new WorkItemTemplate { Type = _type } : await Templates.GetAsync(Id.Value);
@@ -101,6 +116,12 @@ else if (_template is not null)
             {
                 _template = null;
                 _error = $"This {Name} template does not exist.";
+            }
+            else
+            {
+                _assistantTools = AssistantForms.ForWorkItemTemplate(
+                    () => _template!,
+                    change => InvokeAsync(() => { change(); StateHasChanged(); }));
             }
         }
         catch (Exception ex)

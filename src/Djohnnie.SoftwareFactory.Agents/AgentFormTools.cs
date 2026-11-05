@@ -64,7 +64,7 @@ public sealed class AgentFormTools(
             AIFunctionFactory.Create(GetFormAsync, "get_agent_form"),
             AIFunctionFactory.Create(UpdateFormAsync, "update_agent_form"),
             AIFunctionFactory.Create(ListModels, "list_models")
-        ]);
+        ], async () => await GetFormAsync());
     }
 
     [Description("Gets the current values of the custom agent form.")]

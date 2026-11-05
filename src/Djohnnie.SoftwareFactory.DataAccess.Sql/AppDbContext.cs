@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
     public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
+    public DbSet<InternalAgent> InternalAgents => Set<InternalAgent>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -33,6 +34,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureWorkItemTemplate()
             .ConfigureAgent()
             .ConfigureAgentTemplate()
-            .ConfigureAiModel();
+            .ConfigureAiModel()
+            .ConfigureInternalAgent();
     }
 }

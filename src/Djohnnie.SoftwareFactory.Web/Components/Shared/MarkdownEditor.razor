@@ -15,7 +15,7 @@
     storage is configured) and linked by URL, instead of Toast UI's default base64 data URIs.
 *@
 <div class="markdown-editor">
-    <Editor @ref="_editor" @bind-Value="_editorValue" Options="_options" Placeholder="@Placeholder" Change="OnChangeAsync" Load="OnLoadAsync" />
+    <Editor @ref="_editor" @bind-Value="_editorValue" Options="_options" Placeholder="@Placeholder" Change="OnChangeAsync" Blur="OnBlurAsync" Load="OnLoadAsync" />
     @if (MaxLength is { } max)
     {
         <MudText Typo="Typo.caption" Align="Align.End" Color="@((Value?.Length ?? 0) > max ? Color.Error : Color.Secondary)" Class="d-block mt-1">
@@ -40,6 +40,9 @@
     [Parameter] public string? Value { get; set; }
 
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Raised when the editor loses focus, after <see cref="ValueChanged"/> for the last edit.</summary>
+    [Parameter] public EventCallback OnBlur { get; set; }
 
     [Parameter] public string? Placeholder { get; set; }
 
@@ -89,6 +92,12 @@
             Value = markdown;
             await ValueChanged.InvokeAsync(markdown);
         }
+    }
+
+    private async Task OnBlurAsync()
+    {
+        await OnChangeAsync();
+        await OnBlur.InvokeAsync();
     }
 
     private async Task OnLoadAsync()

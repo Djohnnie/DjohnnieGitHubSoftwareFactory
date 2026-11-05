@@ -8,11 +8,14 @@
 @page "/bugs/{Id:int}"
 @page "/tasks/new"
 @page "/tasks/{Id:int}"
+@implements IDisposable
 @using ToastUI
 @inject WorkItemService WorkItemService
 @inject WorkItemTemplateService Templates
 @inject AiModelService ModelService
 @inject GitHubService GitHub
+@inject AssistantService Assistant
+@inject InternalAgentService InternalAgents
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -58,7 +61,7 @@ else if (_item is not null)
                     }
                     @if (_item.IsDraft)
                     {
-                        <AssistantChat @key="@($"{_type}:{Id}")" Instructions="@AssistantForms.WorkItemInstructions(_type)" Tools="_assistantTools"
+                        <AssistantChat @ref="_chat" @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItem(_type)" SuggestionContext="@($"Repository: {RepositoryName}")" Tools="_assistantTools"
                                        Placeholder="@ChatPlaceholder"
                                        Subtitle="@($"Describe the {Name}; I'll ask what I need to know and fill in the form.")"
                                        Suggestions="@(IsNew ? Suggestions : [])" />
@@ -71,7 +74,7 @@ else if (_item is not null)
                     }
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                         <MudTextField Variant="Variant.Outlined" @bind-Value="_item.Title" Label="Title" Required="true" RequiredError="A title is required."
-                                      MaxLength="256" ReadOnly="!_item.IsDraft" Immediate="true"
+                                      MaxLength="256" ReadOnly="!_item.IsDraft" Immediate="true" OnBlur="OnFieldBlur"
                                       Placeholder="@SelectedTemplate?.TitleTemplate"
                                       HelperText="Becomes the title of the GitHub issue." />
                     </MudPaper>
@@ -81,7 +84,7 @@ else if (_item is not null)
                         @if (_item.IsDraft)
                         {
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@DescriptionHelp</MudText>
-                            <MarkdownEditor @bind-Value="_item.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
+                            <MarkdownEditor Value="@_item.Description" ValueChanged="OnDescriptionChanged" OnBlur="OnFieldBlur" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
                                             Placeholder="@($"Describe the {Name}...")" />
                         }
                         else
@@ -239,6 +242,29 @@ else if (_item is not null)
                                          HelperText="A custom agent from .github/agents, or the default Copilot agent." />
                             <ModelPicker @bind-Value="_item.Model" ReadOnly="!_item.CanEditAssignment" DefaultText="Auto (Copilot picks the model)"
                                          HelperText="The model the cloud agent uses." />
+                            @if (_modelSelectorActive && _item.CanEditAssignment && (_suggestingModel || _modelSuggestion is not null))
+                            {
+                                <div class="mb-2 model-suggestion" aria-label="Model suggestion" aria-live="polite">
+                                    @if (_suggestingModel)
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">The Model Selector is reading the description…</MudText>
+                                        </MudStack>
+                                    }
+                                    else if (_modelSuggestion is { } suggestion)
+                                    {
+                                        var applied = string.Equals(_item.Model, suggestion.ModelId, StringComparison.OrdinalIgnoreCase);
+                                        <MudTooltip Text="@($"{Capitalize(suggestion.Complexity)} complexity. {suggestion.Reason}")">
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                                     Icon="@(applied ? Icons.Material.Filled.Check : Icons.Material.Filled.AutoAwesome)"
+                                                     OnClick="ApplyModelSuggestion" Disabled="applied">
+                                                @(applied ? "Suggested" : "Suggestion"): @ModelName(suggestion.ModelId) · @suggestion.Complexity
+                                            </MudChip>
+                                        </MudTooltip>
+                                    }
+                                </div>
+                            }
                             <MudTextField Variant="Variant.Outlined" @bind-Value="_item.BaseBranch" Label="Base branch" ReadOnly="!_item.CanEditAssignment"
                                           Placeholder="@Repository.Current?.DefaultBranch" MaxLength="250"
                                           HelperText="The branch Copilot starts from. Empty for the default branch." />
@@ -293,7 +319,18 @@ else if (_item is not null)
     [CascadingParameter] private RouteData? RouteData { get; set; }
 
     private AssistantTools? _assistantTools;
+    private AssistantChat? _chat;
+    private (string Title, string Description) _suggestionsForm;
     private List<AgentSummary>? _customAgents;
+    /// <summary>How long the description must stay unchanged before the Model Selector suggests a model (a debounce).</summary>
+    private static readonly TimeSpan ModelSuggestionDelay = TimeSpan.FromSeconds(3);
+
+    private List<AiModel> _models = [];
+    private bool _modelSelectorActive;
+    private bool _suggestingModel;
+    private ModelSelection? _modelSuggestion;
+    private string? _suggestedDescription;
+    private CancellationTokenSource? _modelSuggestionCancellation;
 
     private WorkItemType _type;
     private MudForm? _form;
@@ -313,7 +350,7 @@ else if (_item is not null)
     private bool IsNew => Id is null;
     private string Name => WorkItemActions.Name(_type);
     private string Heading => IsNew ? $"New {Name}" : _item?.Title ?? _type.DisplayName;
-    private string ChatPlaceholder => _type == WorkItemType.Bug ? "Describe what goes wrong" : "Describe what you want to build";
+    private string ChatPlaceholder =>_type == WorkItemType.Bug ? "Describe what goes wrong" : "Describe what you want to build";
     private WorkItemTemplate? SelectedTemplate => _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
     private string RepositoryName => Repository.Current!.FullName;
     private string ParentNames => string.Join(" or ", _type.ParentTypes.Select(WorkItemActions.Name));
@@ -410,7 +447,14 @@ else if (_item is not null)
         }
 
         SetBreadcrumbs();
+
+        // The suggestion only follows changes made to the description from here on.
+        CancelModelSuggestion();
+        _modelSuggestion = null;
+        _suggestedDescription = _item?.Description;
+        _suggestionsForm = (_item?.Title ?? string.Empty, _item?.Description ?? string.Empty);
         await CreateAssistantToolsAsync();
+        SuggestModelOnOpen();
     }
 
     private async Task LoadHierarchyAsync()
@@ -492,6 +536,8 @@ else if (_item is not null)
             try
             {
                 models = await ModelService.GetEnabledAsync();
+                _modelSelectorActive = Assistant.IsConfigured && models.Count > 0
+                    && (await InternalAgents.GetAsync(InternalAgentKeys.ModelSelector)).IsEnabled;
             }
             catch (Exception ex)
             {
@@ -499,11 +545,138 @@ else if (_item is not null)
             }
         }
 
+        _models = models;
         _assistantTools = AssistantForms.ForWorkItem(
             () => _item!,
             models,
             async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
-            change => InvokeAsync(() => { change(); StateHasChanged(); }));
+            change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }));
+    }
+
+    /// <summary>The Copilot's suggestion chips follow the title and description, once a changed field loses focus.</summary>
+    private void OnFieldBlur()
+    {
+        if (_item is null)
+        {
+            return;
+        }
+
+        var form = (_item.Title ?? string.Empty, _item.Description ?? string.Empty);
+        if (form != _suggestionsForm)
+        {
+            _suggestionsForm = form;
+            _chat?.RefreshSuggestions();
+        }
+    }
+
+    private void OnDescriptionChanged(string description)
+    {
+        _item!.Description = description;
+        ScheduleModelSuggestion();
+    }
+
+    /// <summary>
+    /// Debounces the Model Selector: every change to the description restarts the delay, and only when the description
+    /// stays unchanged for <see cref="ModelSuggestionDelay"/> is a model suggested. Other fields don't trigger it.
+    /// </summary>
+    private void ScheduleModelSuggestion()
+    {
+        if (_item is null || !_modelSelectorActive || !_item.CanEditAssignment
+            || string.Equals(_item.Description, _suggestedDescription, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CancelModelSuggestion();
+        _suggestedDescription = _item.Description;
+        if (string.IsNullOrWhiteSpace(_item.Description))
+        {
+            _modelSuggestion = null;
+            return;
+        }
+
+        _modelSuggestionCancellation = new CancellationTokenSource();
+        _ = SuggestModelAsync(_item.Copy(), ModelSuggestionDelay, _modelSuggestionCancellation.Token);
+    }
+
+    /// <summary>An existing draft with a description gets a suggestion right away; new items only after their description changes.</summary>
+    private void SuggestModelOnOpen()
+    {
+        if (IsNew || _item is null || !_modelSelectorActive || !_item.CanEditAssignment || string.IsNullOrWhiteSpace(_item.Description))
+        {
+            return;
+        }
+
+        _modelSuggestionCancellation = new CancellationTokenSource();
+        _ = SuggestModelAsync(_item.Copy(), TimeSpan.Zero, _modelSuggestionCancellation.Token);
+    }
+
+    private async Task SuggestModelAsync(WorkItem item, TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            await InvokeAsync(() =>
+            {
+                _suggestingModel = true;
+                StateHasChanged();
+            });
+            var suggestion = await WorkItemService.SelectModelAsync(item, cancellationToken);
+            await InvokeAsync(() =>
+            {
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    _modelSuggestion = suggestion;
+                    _suggestingModel = false;
+                    StateHasChanged();
+                }
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            await InvokeAsync(() =>
+            {
+                _suggestingModel = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void CancelModelSuggestion()
+    {
+        _modelSuggestionCancellation?.Cancel();
+        _modelSuggestionCancellation?.Dispose();
+        _modelSuggestionCancellation = null;
+        _suggestingModel = false;
+    }
+
+    private void ApplyModelSuggestion()
+    {
+        if (_modelSuggestion is { } suggestion && _item is { CanEditAssignment: true })
+        {
+            _item.Model = suggestion.ModelId;
+        }
+    }
+
+    private string ModelName(string modelId)
+    {
+        return _models.FirstOrDefault(m => string.Equals(m.ModelId, modelId, StringComparison.OrdinalIgnoreCase))?.Name ?? modelId;
+    }
+
+    private static string Capitalize(string value)
+    {
+        return value.Length == 0 ? value : string.Concat(value[..1].ToUpperInvariant(), value[1..]);
+    }
+
+    public void Dispose()
+    {
+        CancelModelSuggestion();
     }
 
     private string ParentLabel(int? parentId)

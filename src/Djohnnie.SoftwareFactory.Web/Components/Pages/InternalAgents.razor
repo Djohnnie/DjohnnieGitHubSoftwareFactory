@@ -1,0 +1,153 @@
+@page "/internal-agents"
+@attribute [RepositoryIndependent]
+@inject InternalAgentService Agents
+@inject AssistantService Assistant
+@inject ISnackbar Snackbar
+
+<PageTitle>Internal agents</PageTitle>
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Internal agents</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            DGHSF's own agents, built on the Microsoft Agent Framework and shared across repositories. Copilots help you fill in
+            a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt, or reset it to DGHSF's default.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (!Assistant.IsConfigured)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
+        The agents don't run until the model is configured: set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
+        <code>OpenAI:ApiKey</code> and restart the app. You can already change their prompts.
+    </MudAlert>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@foreach (var kind in Enum.GetValues<InternalAgentKind>())
+{
+    <MudText Typo="Typo.h6" Class="mt-4 mb-2">@(kind == InternalAgentKind.Copilot ? "Copilots" : "Background agents")</MudText>
+    <MudTable Outlined="true" Striped="true" T="InternalAgent" Items="@_agents.Where(a => a.Kind == kind)" Loading="_loading"
+              LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" Class="mb-4" aria-label="@(kind == InternalAgentKind.Copilot ? "Copilots" : "Background agents")">
+        <HeaderContent>
+            <MudTh>Agent</MudTh>
+            <MudTh>@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")</MudTh>
+            <MudTh>Prompt</MudTh>
+            <MudTh>Updated</MudTh>
+            <MudTh>Enabled</MudTh>
+            <MudTh Style="text-align:right">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body1"><b>@context.Name</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+            </MudTd>
+            <MudTd DataLabel="@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")">
+                <MudText Typo="Typo.body2" Style="white-space:nowrap">@UsedOn(context)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Prompt">
+                @if (context.IsCustomized)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">Customized</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Default</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Updated" Style="white-space:nowrap">@(context.Id == 0 ? "–" : context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))</MudTd>
+            <MudTd DataLabel="Enabled">
+                <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="enabled => SetEnabledAsync(context, enabled)" Color="Color.Primary"
+                           Disabled="_saving" aria-label="@($"Enable {context.Name}")" />
+            </MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap">
+                <MudTooltip Text="Edit the system prompt">
+                    <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
+                                   Href="@($"/internal-agents/{context.Key}")" aria-label="@($"Edit {context.Name}")" />
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<InternalAgent> _agents = [];
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _agents = await Agents.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the internal agents: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetEnabledAsync(InternalAgent agent, bool enabled)
+    {
+        _saving = true;
+        try
+        {
+            var saved = await Agents.SaveAsync(agent with { IsEnabled = enabled });
+            _agents[_agents.FindIndex(a => a.Key == saved.Key)] = saved;
+            Snackbar.Add($"{saved.Name} is {(saved.IsEnabled ? "enabled" : "disabled")}.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not save {agent.Name}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Where the agent is used, for the overview.</summary>
+    public static string UsedOn(InternalAgent agent)
+    {
+        foreach (var type in WorkItemTypeRules.All)
+        {
+            if (agent.Key == InternalAgentKeys.ForWorkItem(type))
+            {
+                return $"{type.DisplayName} editor";
+            }
+            if (agent.Key == InternalAgentKeys.ForWorkItemTemplate(type))
+            {
+                return $"{type.DisplayName} template editor";
+            }
+        }
+        return agent.Key switch
+        {
+            InternalAgentKeys.AgentCopilot => "Agent editor",
+            InternalAgentKeys.AgentTemplateCopilot => "Agent template editor",
+            InternalAgentKeys.ModelSelector => "After description edits (debounced)",
+            InternalAgentKeys.ChatSuggestions => "When a Copilot chat opens",
+            _ => string.Empty
+        };
+    }
+}

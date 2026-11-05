@@ -39,3 +39,9 @@ public sealed record CustomAgentChoice(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("description")] string? Description);
+
+public sealed record WorkItemTemplateFormSnapshot(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("titleExample")] string TitleExample,
+    [property: JsonPropertyName("descriptionSkeleton")] string DescriptionSkeleton);

@@ -7,6 +7,7 @@ using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -312,6 +313,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     public async Task Assistant_PrefillsTheDraftFromThePrompt()
     {
         await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
         _chatClient = new ScriptedChatClient(
             ScriptedChatClient.ToolCall("update_work_item_form", new Dictionary<string, object?>
             {
@@ -342,6 +344,94 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal("## Goal\nRun on the latest runtime.", task.Description);
         Assert.Equal("develop", task.BaseBranch);
         Assert.Null(task.Model);
+    }
+
+    [Fact]
+    public async Task ModelSuggestion_IsDebouncedOnDescriptionChanges_AndAppliedFromTheChip()
+    {
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        var models = Services.GetRequiredService<Application.Features.AiModels.AiModelService>();
+        await models.SaveAsync(new Contracts.AiModels.AiModel { Name = "GPT-5", ModelId = "gpt-5" }, _cancellationToken);
+        await models.SaveAsync(new Contracts.AiModels.AiModel { Name = "GPT-5 mini", ModelId = "gpt-5-mini" }, _cancellationToken);
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"modelId":"gpt-5-mini","complexity":"low","reason":"A typo fix."}"""));
+        Navigation.NavigateTo("/tasks/new");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+        cut.WaitForAssertion(() => Assert.Contains("Assignment", cut.Markup));
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Typo");
+        var editor = cut.FindComponent<MarkdownEditor>();
+        await cut.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync("Fix"));
+        await Task.Delay(TimeSpan.FromSeconds(1), _cancellationToken);
+        await cut.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync("Fix the typo on the home page"));
+        await Task.Delay(TimeSpan.FromSeconds(2.5), _cancellationToken);
+        Assert.Empty(_chatClient.Requests);
+
+        cut.WaitForAssertion(() => Assert.Contains("Suggestion: GPT-5 mini · low", cut.Markup), TimeSpan.FromSeconds(5));
+        var request = Assert.Single(_chatClient.Requests);
+        Assert.Contains("Fix the typo on the home page", string.Join("\n", request.Select(m => m.Text)));
+        Assert.Null(cut.FindComponent<ModelPicker>().Instance.Value);
+
+        await cut.InvokeAsync(() => cut.FindComponents<MudChip<string>>().Single(c => c.Markup.Contains("GPT-5 mini")).Find(".mud-chip").Click());
+
+        Assert.Equal("gpt-5-mini", cut.FindComponent<ModelPicker>().Instance.Value);
+        Assert.Contains("Suggested: GPT-5 mini · low", cut.Markup);
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Typo fix");
+        await Task.Delay(TimeSpan.FromSeconds(3.5), _cancellationToken);
+        Assert.Single(_chatClient.Requests);
+    }
+
+    [Fact]
+    public async Task ChatSuggestions_RefreshWhenAChangedTitleOrDescriptionLosesFocus()
+    {
+        await SelectRepositoryAsync();
+        _chatClient = new ScriptedChatClient(
+            ScriptedChatClient.Text("""{"suggestions":["First idea"]}"""),
+            ScriptedChatClient.Text("""{"suggestions":["About the title"]}"""),
+            ScriptedChatClient.Text("""{"suggestions":["About the description"]}"""));
+        Navigation.NavigateTo("/tasks/new");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+        cut.WaitForAssertion(() => Assert.Contains("First idea", cut.Markup), TimeSpan.FromSeconds(5));
+
+        var title = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input");
+        title.Input("Upgrade .NET");
+        Assert.Single(_chatClient.Requests);
+        await cut.InvokeAsync(() => title.Blur());
+        cut.WaitForAssertion(() => Assert.Contains("About the title", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("Upgrade .NET", string.Join("\n", _chatClient.Requests[1].Select(m => m.Text)));
+
+        // Losing focus without a change doesn't ask again.
+        await cut.InvokeAsync(() => title.Blur());
+        var editor = cut.FindComponent<MarkdownEditor>();
+        await cut.InvokeAsync(() => editor.Instance.OnBlur.InvokeAsync());
+        Assert.Equal(2, _chatClient.Requests.Count);
+
+        await cut.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync("## Goal\nRun on .NET 10."));
+        Assert.Equal(2, _chatClient.Requests.Count);
+        await cut.InvokeAsync(() => editor.Instance.OnBlur.InvokeAsync());
+        cut.WaitForAssertion(() => Assert.Contains("About the description", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("Run on .NET 10.", string.Join("\n", _chatClient.Requests[2].Select(m => m.Text)));
+    }
+
+    [Fact]
+    public async Task ModelSuggestion_ForAnExistingDraftWithADescription_IsShownWhenThePageOpens()
+    {
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        await Services.GetRequiredService<Application.Features.AiModels.AiModelService>()
+            .SaveAsync(new Contracts.AiModels.AiModel { Name = "GPT-5", ModelId = "gpt-5" }, _cancellationToken);
+        var bug = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Bug, Title = "Race", Description = "Orders are lost under load." }, _cancellationToken);
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"modelId":"gpt-5","complexity":"high","reason":"Concurrency bug."}"""));
+        Navigation.NavigateTo($"/bugs/{bug.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, bug.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Suggestion: GPT-5 · high", cut.Markup), TimeSpan.FromSeconds(2));
+        Assert.Contains("Orders are lost under load.", string.Join("\n", Assert.Single(_chatClient.Requests).Select(m => m.Text)));
+        Assert.Null(cut.FindComponent<ModelPicker>().Instance.Value);
     }
 
     private Task<WorkItem> SaveAsync(WorkItemType type, string title, int? parentId = null)

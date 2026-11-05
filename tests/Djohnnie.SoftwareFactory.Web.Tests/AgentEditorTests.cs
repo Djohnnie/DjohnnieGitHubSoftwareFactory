@@ -11,6 +11,7 @@ using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.Web.Auth;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
@@ -83,6 +84,7 @@ public class AgentEditorTests : BunitContext, IAsyncLifetime
     public async Task Assistant_PrefillsTheFormFromThePrompt()
     {
         await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
         await Services.GetRequiredService<AiModelService>().SaveAsync(new AiModel { Name = "GPT-5", ModelId = "gpt-5", InputPrice = 1m, OutputPrice = 8m }, Xunit.TestContext.Current.CancellationToken);
         _chatClient = new ScriptedChatClient(
             ScriptedChatClient.ToolCall("update_agent_form", new Dictionary<string, object?>

@@ -10,6 +10,8 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
 
     public List<List<ChatMessage>> Requests { get; } = [];
 
+    public List<ChatOptions?> Options { get; } = [];
+
     /// <summary>A response in which the model calls a tool.</summary>
     public static ChatResponse ToolCall(string name, IDictionary<string, object?> arguments)
     {
@@ -24,6 +26,7 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         Requests.Add(messages.ToList());
+        Options.Add(options);
         return Task.FromResult(_responses.Dequeue());
     }
 

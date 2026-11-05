@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using MediatR;
 
@@ -33,6 +34,13 @@ public sealed class WorkItemService(ISender mediator)
     public async Task<WorkItemAcceptResult> AcceptAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new AcceptWorkItemCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Asks the Model Selector which enabled model fits the complexity of the (unsaved) item; nothing is stored.</summary>
+    /// <returns><c>null</c> when the Model Selector is disabled or not configured, or picked nothing usable.</returns>
+    public async Task<ModelSelection?> SelectModelAsync(WorkItem item, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new SelectWorkItemModelQuery(new(item)), cancellationToken)).Dto.Selection;
     }
 
     public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)

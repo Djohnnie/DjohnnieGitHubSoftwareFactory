@@ -73,6 +73,8 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
     [InlineData(typeof(AgentTemplates), true)]
     [InlineData(typeof(WorkItemTemplates), true)]
     [InlineData(typeof(WorkItemTemplateEditor), true)]
+    [InlineData(typeof(Components.Pages.InternalAgents), true)]
+    [InlineData(typeof(InternalAgentEditor), true)]
     [InlineData(typeof(WorkItems), false)]
     [InlineData(typeof(WorkItemEditor), false)]
     [InlineData(typeof(Components.Pages.Agents), false)]
@@ -88,7 +90,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Empty(cut.FindAll(".mud-appbar nav"));
         if (rendersPage)
         {
-            var links = cut.FindAll(".app-header > .mud-appbar + nav a");
+            var links = cut.FindAll(".app-header > .mud-appbar + nav [role='group'] a");
             Assert.Equal(new[] { "/agent-templates", "/epic-templates", "/feature-templates", "/story-templates", "/bug-templates", "/task-templates" },
                 links.Select(link => link.GetAttribute("href")));
             Assert.Equal(new[]
@@ -98,6 +100,8 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
                 },
                 links.Select(link => link.GetAttribute("aria-label")));
             Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
+            var internalAgents = cut.Find(".app-header > .mud-appbar + nav > a[href='/internal-agents']");
+            Assert.Equal("Internal agents", internalAgents.TextContent.Trim());
             Assert.Contains("Select repository", cut.Find(".mud-appbar").TextContent);
         }
         else
@@ -139,7 +143,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Equal(new[]
             {
                 "/", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
-                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/models"
+                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/models", "/internal-agents"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal(new[] { "/agents", "/agent-templates" },

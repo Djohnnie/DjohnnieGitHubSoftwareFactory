@@ -43,7 +43,8 @@ public class ProjectArchitectureTests
         Assert.Equal(
             ["20261029222630_InitialCreate", "20261029225348_AddEpics", "20261030124727_AddAgentTemplates",
                 "20261102125044_AddRepositoryAccesses", "20261102133114_AddEpicTemplates",
-                "20261105083736_AddRepositoriesAgentsAndFavorites", "20261105095015_AddWorkItemHierarchy"],
+                "20261105083736_AddRepositoriesAgentsAndFavorites", "20261105095015_AddWorkItemHierarchy",
+                "20261105104758_AddInternalAgents"],
             db.Database.GetMigrations());
         Assert.All(db.Model.GetEntityTypes(), entity =>
         {

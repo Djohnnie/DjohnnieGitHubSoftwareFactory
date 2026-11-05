@@ -1,0 +1,198 @@
+@page "/internal-agents/{Key}"
+@attribute [RepositoryIndependent]
+@inject InternalAgentService Agents
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_agent?.Name ?? "Internal agent")</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_agent is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.h4">@_agent.Name</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(_agent.Kind == InternalAgentKind.Copilot ? "Copilot" : "Background agent")</MudChip>
+        @if (_agent.IsCustomized)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">Customized</MudChip>
+        }
+    </MudStack>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        @_agent.Description Used: @InternalAgents.UsedOn(_agent).
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">System prompt</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@PromptHelp</MudText>
+                <MudTextField T="string" @bind-Value="_agent.Instructions" Variant="Variant.Outlined" Label="System prompt" Lines="26"
+                              MaxLength="InternalAgent.MaxInstructionsLength" Counter="InternalAgent.MaxInstructionsLength" Immediate="true"
+                              Class="mono" Disabled="_saving" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudStack Spacing="4" Class="sticky-side">
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">Status</MudText>
+                    <MudSwitch T="bool" @bind-Value="_agent.IsEnabled" Color="Color.Primary" Disabled="_saving"
+                               Label="@(_agent.IsEnabled ? "Enabled" : "Disabled")" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@EnabledHelp</MudText>
+                    @if (_agent.Id != 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                            Updated @_agent.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                        </MudText>
+                    }
+                </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
+                        <MudButton Variant="Variant.Outlined" Href="/internal-agents" Disabled="_saving">Back</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                                   StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
+                    </MudStack>
+                    @if (_saving)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+                    }
+                </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">Default prompt</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                        @(_agent.IsCustomized ? "The prompt differs from DGHSF's default." : "The prompt is DGHSF's default.")
+                    </MudText>
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Visibility"
+                                   OnClick="() => _showDefault = !_showDefault">@(_showDefault ? "Hide default" : "Show default")</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Warning" StartIcon="@Icons.Material.Filled.SettingsBackupRestore"
+                                   OnClick="ResetAsync" Disabled="_saving || !_stored.IsCustomized">Reset to default</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        </MudItem>
+        @if (_showDefault)
+        {
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Default prompt">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Default system prompt</MudText>
+                    <pre class="preview">@_agent.DefaultInstructions</pre>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Key { get; set; } = string.Empty;
+
+    private InternalAgent? _agent;
+    private InternalAgent _stored = new();
+    private bool _loading = true;
+    private bool _saving;
+    private bool _showDefault;
+    private string? _error;
+    private string? _loadedKey;
+    private List<BreadcrumbItem> _breadcrumbs = [];
+
+    private string PromptHelp => _agent!.Kind == InternalAgentKind.Copilot
+        ? "Markdown instructions for the chat. Keep the tool names (in backticks) as they are: the Copilot uses those tools to read and fill in the form."
+        : "Instructions for the agent. It receives its input from DGHSF as JSON; DGHSF enforces the output format, so the prompt only needs to describe how to decide.";
+
+    private string EnabledHelp => _agent!.Kind == InternalAgentKind.Copilot
+        ? "A disabled Copilot is hidden from its page."
+        : _agent.Key == InternalAgentKeys.ModelSelector
+            ? "When disabled, the assignment settings show no model suggestion."
+            : "When disabled, Copilot chats show their built-in example suggestions.";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedKey == Key)
+        {
+            return;
+        }
+        _loadedKey = Key;
+        _loading = true;
+        _error = null;
+        _agent = null;
+        try
+        {
+            _stored = await Agents.GetAsync(Key);
+            _agent = _stored.Copy();
+        }
+        catch (InvalidOperationException)
+        {
+            _error = "This internal agent does not exist.";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the internal agent: {ex.Message}";
+        }
+        finally
+        {
+            _breadcrumbs = [new("Internal agents", "/internal-agents"), new(_agent?.Name ?? Key, null, disabled: true)];
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_agent!.Instructions))
+        {
+            Snackbar.Add("The system prompt is required.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            _stored = await Agents.SaveAsync(_agent);
+            _agent = _stored.Copy();
+            Snackbar.Add($"Saved {_agent.Name}. New conversations use the updated prompt.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset to default",
+                $"Replace the system prompt of {_agent!.Name} with DGHSF's default? Your customized prompt is lost.",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            _stored = await Agents.ResetAsync(_agent.Key);
+            _agent = _stored.Copy();
+            Snackbar.Add($"{_agent.Name} uses the default prompt again.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not reset: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
