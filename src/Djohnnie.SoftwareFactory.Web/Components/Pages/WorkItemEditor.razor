@@ -81,7 +81,7 @@ else if (_item is not null)
                         @if (_item.IsDraft)
                         {
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@DescriptionHelp</MudText>
-                            <MarkdownEditor @bind-Value="_item.Description" MaxLength="WorkItem.MaxDescriptionLength"
+                            <MarkdownEditor @bind-Value="_item.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
                                             Placeholder="@($"Describe the {Name}...")" />
                         }
                         else

@@ -8,6 +8,7 @@ using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +42,14 @@ public static class DependencyInjection
             services.AddScoped<RepositoryService>();
             services.AddScoped<AgentService>();
             services.AddScoped<AssistantService>();
+            services.AddScoped<ImageUploadService>();
+            var imageUploads = services.AddOptions<ImageUploadOptions>();
+            if (configuration is not null)
+            {
+                imageUploads.Bind(configuration.GetSection(ImageUploadOptions.SectionName));
+            }
+
+            services.TryAddSingleton<IImageStorage, AzureBlobImageStorage>();
             services.AddHttpClient<ModelPricingScraper>(client =>
             {
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");

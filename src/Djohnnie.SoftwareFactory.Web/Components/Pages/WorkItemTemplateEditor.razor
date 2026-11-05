@@ -42,7 +42,7 @@ else if (_template is not null)
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                     Markdown proposed when creating a new @Name, for example @SkeletonExample.
                 </MudText>
-                <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" />
+                <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true" />
             </MudPaper>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
                 Stored in DGHSF, not in a repository. Saving does not change existing @_type.PluralName.ToLowerInvariant().
