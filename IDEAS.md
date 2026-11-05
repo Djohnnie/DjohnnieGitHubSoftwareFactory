@@ -8,7 +8,7 @@
 
 ## 1. Vision
 
-DGHSF is a personal, custom **software factory** web application. It lets me browse my GitHub repositories, manage custom Copilot agents per repository, plan work as epics, features, stories, bugs and feature requests, turn accepted items into GitHub issues, and hand those issues to GitHub's cloud agent. A built-in assistant, **DGHSF Copilot**, helps me write and maintain the planning items.
+DGHSF is a personal, custom **software factory** web application. It lets me browse my GitHub repositories, manage custom Copilot agents per repository, plan work as epics, features, user stories, bugs and tasks, turn accepted items into GitHub issues, and hand those issues to GitHub's cloud agent. A built-in assistant, **DGHSF Copilot**, helps me write and maintain the planning items.
 
 The application is for me only. My own database is the source of truth; GitHub is where accepted work gets executed.
 
@@ -47,19 +47,22 @@ For each repository I can create, update and delete custom agents (the `.github/
 
 I plan work in the app using five item types:
 
-- **Epic**, **Feature** and **Story** form a hierarchy: an epic contains features, and a feature contains stories.
-- **Bug** and **Feature request** are standalone items that can optionally be linked.
+- **Epic**, **Feature** and **User story** form a hierarchy: an epic contains features, and a feature contains user stories.
+- **Bug** and **Task** are standalone, or part of an epic, a feature or a user story.
+- Epics and features only give structure; only user stories, bugs and tasks are assigned to an agent.
 
 ![Hierarchy](docs/hierarchy.svg)
 
 Items live in the app's database as drafts. Nothing reaches GitHub until I **manually accept** an item. On acceptance the item becomes a GitHub issue.
 
-**Implemented (epics):** an **Epics** page (`/epics`) per selected repository with full CRUD (title, Markdown description, assignment settings). **Accept & assign** creates a GitHub issue labelled `epic` (the label is created when missing; the body ends with a hidden `<!-- dghsf:epic:{id} -->` marker), then assigns it to the Copilot cloud agent. Once accepted, the title and description are read-only; deleting an epic only removes it from the app, never the issue. Features, stories, bugs and feature requests come later.
+**Implemented (work items):** pages for **Epics** (`/epics`), **Features** (`/features`), **User stories** (`/stories`), **Bugs** (`/bugs`) and **Tasks** (`/tasks`) per selected repository, with full CRUD (title, Markdown description, parent, and assignment settings for stories, bugs and tasks). A feature must be part of an epic and a story part of a feature; bugs and tasks can optionally be part of an epic, feature or story. Each item shows its children with buttons to add new ones. Accepting creates a GitHub issue labelled with its type (`epic`, `feature`, `story`, `bug` or `task`; the label is created with a fixed color when missing, and an existing label is left as it is). The body ends with a hidden `<!-- dghsf:{label}:{id} -->` marker. When the parent already has an issue, the new issue becomes its **sub-issue**; when the parent is accepted later, its accepted children become its sub-issues then. Stories, bugs and tasks are then assigned to the Copilot cloud agent (**Accept & assign**); epics and features are not (**Accept & create issue**). Once accepted, the title, description and parent are read-only. Deleting an item only removes it from the app, never the issue, and is refused while it still has children.
+
+**Implemented (templates):** every type has its own templates page (`/epic-templates`, `/feature-templates`, `/story-templates`, `/bug-templates`, `/task-templates`), shared across repositories. New items start with the first template of their type alphabetically.
 
 ### 4.4 Labels and issue mapping
 
-- The type of an item is expressed with **labels only** (for example `epic`, `feature`, `story`, `bug`, `feature-request`). I do not use GitHub issue types, sub-issues or a Projects board.
-- The hierarchy is kept in the app, and written into the issue body as links such as "Part of #123" or task lists.
+- The type of an item is expressed with a **label** (`epic`, `feature`, `story`, `bug`, `task`). These labels are managed automatically: DGHSF creates a missing label when it creates the first issue of that type. I do not use GitHub issue types or a Projects board.
+- The hierarchy is kept in the app and mirrored on GitHub with **sub-issues** (`POST /repos/{owner}/{repo}/issues/{number}/sub_issues` with the child's issue id).
 - I can fetch the labels of a repository and **create, update and delete** them from the app.
 - When creating an issue I can choose labels manually, or have them assigned automatically. I want to explore a mix of **rules** (item type to label) and **AI suggestions** from DGHSF Copilot.
 
@@ -80,7 +83,7 @@ I can assign GitHub's **Copilot cloud agent** to an issue, choosing:
 
 The app shows the agent's session status and links to the resulting pull request, and lets me **re-assign or unassign** the agent.
 
-**Verified and implemented:** the REST API supports this (public preview): `POST /repos/{owner}/{repo}/issues/{number}/assignees` with assignee `copilot-swe-agent[bot]` and an `agent_assignment` object (`target_repo`, `base_branch`, `custom_instructions`, `custom_agent`, `model`). The custom agent id is the agent file name without `.agent.md`. An epic stores the agent, model (from the managed models list; empty means auto), base branch and custom instructions. On accept, the status goes to **In progress** when GitHub confirms Copilot is assigned. If the assignment fails (for example when the cloud agent isn't enabled for the repository), the epic stays **Accepted** with its issue, and **Assign agent** retries. Session status, PR links and unassign are still to do.
+**Verified and implemented:** the REST API supports this (public preview): `POST /repos/{owner}/{repo}/issues/{number}/assignees` with assignee `copilot-swe-agent[bot]` and an `agent_assignment` object (`target_repo`, `base_branch`, `custom_instructions`, `custom_agent`, `model`). The custom agent id is the agent file name without `.agent.md`. A user story, bug or task stores the agent, model (from the managed models list; empty means auto), base branch and custom instructions. On accept, the status goes to **In progress** when GitHub confirms Copilot is assigned. If the assignment fails (for example when the cloud agent isn't enabled for the repository), the item stays **Accepted** with its issue, and **Assign agent** retries. Session status, PR links and unassign are still to do.
 
 ### 4.7 Two-way synchronisation
 
@@ -97,7 +100,7 @@ My own assistant, backed by Microsoft Foundry and the Microsoft Agent Framework,
 
 Conversations are **persisted** as chat history.
 
-**Implemented (in-page assist):** a generic agent (`AssistantAgentFactory`, Microsoft Agent Framework `ChatClientAgent`) uses an OpenAI-compatible endpoint configured with `OpenAI:Endpoint` (empty = public OpenAI; Foundry/Azure OpenAI resource-root URLs automatically use `/openai/v1/`, while explicit API paths are preserved), `OpenAI:Model` (the deployment name on Azure) and `OpenAI:ApiKey`. It uses the Responses API to support reasoning with function tools; set `OpenAI:UseResponsesApi` to `false` for services that only support Chat Completions. The agent editor and the draft epic editor have a chat panel. The assistant asks follow-up questions and prefills the form through tools; I still save manually. Chat history isn't persisted yet, and chat mode is still to do.
+**Implemented (in-page assist):** a generic agent (`AssistantAgentFactory`, Microsoft Agent Framework `ChatClientAgent`) uses an OpenAI-compatible endpoint configured with `OpenAI:Endpoint` (empty = public OpenAI; Foundry/Azure OpenAI resource-root URLs automatically use `/openai/v1/`, while explicit API paths are preserved), `OpenAI:Model` (the deployment name on Azure) and `OpenAI:ApiKey`. It uses the Responses API to support reasoning with function tools; set `OpenAI:UseResponsesApi` to `false` for services that only support Chat Completions. The agent editor and the draft work item editors have a chat panel, with instructions per type (assignment tools only for stories, bugs and tasks). The assistant asks follow-up questions and prefills the form through tools; I still save manually. Chat history isn't persisted yet, and chat mode is still to do.
 
 ## 5. Models and cost
 
@@ -117,7 +120,7 @@ I want to list the available models and their cost. What I found:
 
 1. Login (GitHub OAuth, single-user allow-list) and repository list.
 2. Settings page (PAT) and custom agent management per repository.
-3. Work items (epics, features, stories, bugs, feature requests) and label management.
+3. Work items (epics, features, user stories, bugs, tasks) and label management.
 4. Accept → GitHub issue creation, including diff-issues.
 5. Agent assignment (custom agent and model) and run tracking.
 6. Azure Function polling and two-way sync.

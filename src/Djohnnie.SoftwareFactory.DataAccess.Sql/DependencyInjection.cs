@@ -21,9 +21,9 @@ public static class DependencyInjection
         public IServiceCollection AddSqlStores()
         {
             services.TryAddScoped<IAiModelStore, AiModelStore>();
-            services.TryAddScoped<IEpicStore, EpicStore>();
+            services.TryAddScoped<IWorkItemStore, WorkItemStore>();
             services.TryAddScoped<IAgentTemplateStore, AgentTemplateStore>();
-            services.TryAddScoped<IEpicTemplateStore, EpicTemplateStore>();
+            services.TryAddScoped<IWorkItemTemplateStore, WorkItemTemplateStore>();
             services.TryAddScoped<IRepositoryStore, RepositoryStore>();
             services.TryAddScoped<IAgentStore, AgentStore>();
             return services;

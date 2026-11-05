@@ -15,14 +15,17 @@ public sealed record AgentFormSnapshot(
     [property: JsonPropertyName("userInvocable")] bool UserInvocable,
     [property: JsonPropertyName("disableModelInvocation")] bool DisableModelInvocation);
 
-public sealed record EpicFormSnapshot(
+/// <remarks>The assignment fields are only filled in for types that are assigned to an agent.</remarks>
+public sealed record WorkItemFormSnapshot(
+    [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("parent")] string? Parent,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("description")] string Description,
-    [property: JsonPropertyName("customAgent")] string CustomAgent,
-    [property: JsonPropertyName("model")] string Model,
-    [property: JsonPropertyName("baseBranch")] string BaseBranch,
-    [property: JsonPropertyName("customInstructions")] string? CustomInstructions);
+    [property: JsonPropertyName("customAgent"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomAgent,
+    [property: JsonPropertyName("model"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Model,
+    [property: JsonPropertyName("baseBranch"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BaseBranch,
+    [property: JsonPropertyName("customInstructions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomInstructions);
 
 public sealed record ModelChoice(
     [property: JsonPropertyName("id")] string Id,

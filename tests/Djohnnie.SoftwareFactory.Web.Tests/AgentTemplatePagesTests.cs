@@ -71,8 +71,10 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
 
     [Theory]
     [InlineData(typeof(AgentTemplates), true)]
-    [InlineData(typeof(EpicTemplates), true)]
-    [InlineData(typeof(EpicTemplateEditor), true)]
+    [InlineData(typeof(WorkItemTemplates), true)]
+    [InlineData(typeof(WorkItemTemplateEditor), true)]
+    [InlineData(typeof(WorkItems), false)]
+    [InlineData(typeof(WorkItemEditor), false)]
     [InlineData(typeof(Components.Pages.Agents), false)]
     public void Layout_WithoutRepository_OnlyRendersRepositoryIndependentPages(Type pageType, bool rendersPage)
     {
@@ -87,8 +89,14 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         if (rendersPage)
         {
             var links = cut.FindAll(".app-header > .mud-appbar + nav a");
-            Assert.Equal(new[] { "/agent-templates", "/epic-templates" }, links.Select(link => link.GetAttribute("href")));
-            Assert.Equal(new[] { "Manage agent templates", "Manage epic templates" }, links.Select(link => link.GetAttribute("aria-label")));
+            Assert.Equal(new[] { "/agent-templates", "/epic-templates", "/feature-templates", "/story-templates", "/bug-templates", "/task-templates" },
+                links.Select(link => link.GetAttribute("href")));
+            Assert.Equal(new[]
+                {
+                    "Manage agent templates", "Manage epic templates", "Manage feature templates", "Manage user story templates",
+                    "Manage bug templates", "Manage task templates"
+                },
+                links.Select(link => link.GetAttribute("aria-label")));
             Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
             Assert.Contains("Select repository", cut.Find(".mud-appbar").TextContent);
         }
@@ -128,12 +136,18 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Contains("owner /", header.TextContent);
         Assert.Empty(header.QuerySelectorAll("nav"));
         var navigation = cut.Find(".app-header > .mud-appbar + nav[aria-label='Main navigation']");
-        Assert.Equal(new[] { "/", "/agents", "/agent-templates", "/epics", "/epic-templates", "/models" },
+        Assert.Equal(new[]
+            {
+                "/", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
+                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/models"
+            },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal(new[] { "/agents", "/agent-templates" },
             navigation.QuerySelector("[aria-label='Agents and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal(new[] { "/epics", "/epic-templates" },
             navigation.QuerySelector("[aria-label='Epics and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(new[] { "/stories", "/story-templates" },
+            navigation.QuerySelector("[aria-label='User stories and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         foreach (var group in navigation.QuerySelectorAll("[role='group']"))
         {
             var templatesLink = group.QuerySelectorAll("a").Last();

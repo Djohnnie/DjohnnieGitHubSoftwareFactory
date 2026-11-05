@@ -32,6 +32,7 @@ public sealed record GitHubFile(string Path, string Sha, string Content, string?
 public sealed record GitHubCommitResult(string? ContentSha, string CommitSha, string? CommitUrl);
 
 public sealed record GitHubIssue(
+    [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("number")] int Number,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("html_url")] string HtmlUrl,

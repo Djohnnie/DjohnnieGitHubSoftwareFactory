@@ -4,8 +4,8 @@ using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
-using Djohnnie.SoftwareFactory.Application.Features.Epics;
-using Djohnnie.SoftwareFactory.Application.Features.EpicTemplates;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -25,18 +25,18 @@ public static class DependencyInjection
             services.AddMediatR(options =>
             {
                 options.LicenseKey = configuration?["MediatR:LicenseKey"];
-                options.RegisterServicesFromAssemblyContaining<EpicService>();
+                options.RegisterServicesFromAssemblyContaining<WorkItemService>();
                 options.AddOpenBehavior(typeof(ValidationBehavior<,>));
             });
-            services.AddValidatorsFromAssemblyContaining<EpicService>();
+            services.AddValidatorsFromAssemblyContaining<WorkItemService>();
             services.TryAddSingleton(TimeProvider.System);
             services.AddSqlStores();
-            services.AddScoped<EpicWorkflow>();
+            services.AddScoped<WorkItemWorkflow>();
             services.AddScoped<AgentTemplateWorkflow>();
             services.AddScoped<AiModelService>();
-            services.AddScoped<EpicService>();
+            services.AddScoped<WorkItemService>();
             services.AddScoped<AgentTemplateService>();
-            services.AddScoped<EpicTemplateService>();
+            services.AddScoped<WorkItemTemplateService>();
             services.AddScoped<GitHubService>();
             services.AddScoped<RepositoryService>();
             services.AddScoped<AgentService>();

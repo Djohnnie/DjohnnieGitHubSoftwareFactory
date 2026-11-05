@@ -1,0 +1,127 @@
+@page "/epic-templates"
+@page "/feature-templates"
+@page "/story-templates"
+@page "/bug-templates"
+@page "/task-templates"
+@attribute [RepositoryIndependent]
+@inject WorkItemTemplateService Templates
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@Title</PageTitle>
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">@Title</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Reusable title examples and Markdown skeletons, shared across repositories. New @_type.PluralName.ToLowerInvariant() start with the first template alphabetically.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="@WorkItemRoutes.NewTemplatePath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New template</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" Striped="true" T="WorkItemTemplate" Items="_templates" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <HeaderContent>
+        <MudTh>Template</MudTh>
+        <MudTh>Title example</MudTh>
+        <MudTh>Updated</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Template"><MudLink Href="@WorkItemRoutes.EditTemplatePath(_type, context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Title example">@context.TitleTemplate</MudTd>
+        <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            <MudTooltip Text="@($"Create {Article} {Name} from this template")">
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary"
+                               Href="@WorkItemRoutes.NewPath(_type, templateId: context.Id)" aria-label="@($"Create {Name}")" />
+            </MudTooltip>
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Href="@WorkItemRoutes.EditTemplatePath(_type, context.Id)" title="Edit" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" title="Delete" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>There are no @Name templates yet. Create one to propose a structure for new @_type.PluralName.ToLowerInvariant().</MudText>
+            <MudButton Href="@WorkItemRoutes.NewTemplatePath(_type)" Variant="Variant.Text" Color="Color.Primary">Create the first template</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
+    [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private WorkItemType _type;
+    private WorkItemType? _loadedType;
+    private List<WorkItemTemplate> _templates = [];
+    private bool _loading = true;
+    private string? _error;
+
+    private string Name => WorkItemActions.Name(_type);
+    private string Article => _type == WorkItemType.Epic ? "an" : "a";
+    private string Title => $"{_type.DisplayName} templates";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var type = WorkItemRoutes.TypeOf(Navigation);
+        if (_loadedType == type)
+        {
+            return;
+        }
+        _type = type;
+        _loadedType = type;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _templates = await Templates.GetAllAsync(_type);
+        }
+        catch (Exception ex)
+        {
+            _templates = [];
+            _error = $"Could not load the {Name} templates: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DeleteAsync(WorkItemTemplate template)
+    {
+        if (await Dialogs.ShowMessageBoxAsync($"Delete {Name} template",
+            $"Delete '{template.Name}'? {_type.PluralName} created from it are not affected.",
+            yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await Templates.DeleteAsync(template.Id);
+            _templates.Remove(template);
+            Snackbar.Add($"Deleted the template '{template.Name}'.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not delete '{template.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+}

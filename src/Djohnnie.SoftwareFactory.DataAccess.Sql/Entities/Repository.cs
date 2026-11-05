@@ -4,7 +4,7 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>
 /// A GitHub repository the app has worked with. Everything that belongs to a repository
-/// (epics, agents, ...) references this row; it cannot be deleted while anything still does.
+/// (work items, agents, ...) references this row; it cannot be deleted while anything still does.
 /// </summary>
 public sealed class Repository
 {
@@ -25,7 +25,7 @@ public sealed class Repository
 
     public bool IsFavorite { get; set; }
 
-    public List<Epic> Epics { get; set; } = [];
+    public List<WorkItem> WorkItems { get; set; } = [];
     public List<Agent> Agents { get; set; } = [];
 
     public static string Normalize(string fullName)

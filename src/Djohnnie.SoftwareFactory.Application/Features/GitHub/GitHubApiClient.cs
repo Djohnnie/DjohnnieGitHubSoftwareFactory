@@ -130,6 +130,23 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
+    public async Task<GitHubIssue> GetIssueAsync(string repositoryFullName, int issueNumber, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/issues/{issueNumber}", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<GitHubIssue>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    /// <summary>Makes an issue a sub-issue of <paramref name="parentIssueNumber"/>.</summary>
+    /// <param name="subIssueId">GitHub's id of the child issue (not its number).</param>
+    public async Task AddSubIssueAsync(string repositoryFullName, int parentIssueNumber, long subIssueId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/issues/{parentIssueNumber}/sub_issues",
+            JsonContent.Create(new Api.AddSubIssueRequest(subIssueId)), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     /// <summary>
     /// Assigns the Copilot cloud agent to an issue, optionally with a custom agent and model.
     /// GitHub silently ignores assignees it can't assign, so check <see cref="IsAssignedToCopilot"/> on the result.

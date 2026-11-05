@@ -1,11 +1,11 @@
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
-using Djohnnie.SoftwareFactory.Application.Features.Epics;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
-using Djohnnie.SoftwareFactory.Contracts.Epics;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +23,7 @@ public class FavoritesTests : IDisposable
         var options = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         _services = new ServiceCollection().AddLogging().AddApplication()
             .AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(options))
-            // Epic handlers need a GitHub client; these tests never call it.
+            // Work item handlers need a GitHub client; these tests never call it.
             .AddSingleton<IGitHubTokenProvider, UnusedTokenProvider>()
             .BuildServiceProvider();
     }
@@ -79,20 +79,20 @@ public class FavoritesTests : IDisposable
     }
 
     [Fact]
-    public async Task Epics_AreLinkedToOneRepositoryRowRegardlessOfCase()
+    public async Task WorkItems_AreLinkedToOneRepositoryRowRegardlessOfCase()
     {
-        var epics = _services.GetRequiredService<EpicService>();
+        var epics = _services.GetRequiredService<WorkItemService>();
 
-        await epics.SaveAsync(new Epic { RepositoryFullName = "Owner/Repo", Title = "First" }, _cancellationToken);
-        await epics.SaveAsync(new Epic { RepositoryFullName = "owner/repo", Title = "Second" }, _cancellationToken);
+        await epics.SaveAsync(new WorkItem { RepositoryFullName = "Owner/Repo", Title = "First" }, _cancellationToken);
+        await epics.SaveAsync(new WorkItem { RepositoryFullName = "owner/repo", Title = "Second" }, _cancellationToken);
 
         await using var db = CreateDb();
         var repository = await db.Repositories.SingleAsync(_cancellationToken);
         Assert.Equal("owner/repo", repository.FullName);
         Assert.Null(repository.LastAccessedAt);
-        Assert.All(await db.Epics.ToListAsync(_cancellationToken), epic => Assert.Equal(repository.Id, epic.RepositoryId));
+        Assert.All(await db.WorkItems.ToListAsync(_cancellationToken), epic => Assert.Equal(repository.Id, epic.RepositoryId));
         Assert.Equal(["First", "Second"],
-            (await epics.GetAllAsync("OWNER/REPO", _cancellationToken)).Select(e => e.Title).Order());
+            (await epics.GetAllAsync("OWNER/REPO", cancellationToken: _cancellationToken)).Select(e => e.Title).Order());
     }
 
     [Fact]

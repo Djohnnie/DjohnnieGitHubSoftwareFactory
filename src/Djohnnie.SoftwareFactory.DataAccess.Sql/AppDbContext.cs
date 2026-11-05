@@ -8,10 +8,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<AiModel> AiModels => Set<AiModel>();
     public DbSet<Repository> Repositories => Set<Repository>();
-    public DbSet<Epic> Epics => Set<Epic>();
+    public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
-    public DbSet<EpicTemplate> EpicTemplates => Set<EpicTemplate>();
+    public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -29,7 +29,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         modelBuilder
             .ConfigureRepository()
-            .ConfigureEpic()
+            .ConfigureWorkItem()
+            .ConfigureWorkItemTemplate()
             .ConfigureAgent()
             .ConfigureAgentTemplate()
             .ConfigureAiModel();

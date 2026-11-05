@@ -1,0 +1,7 @@
+@* The kind of work item, styled like its GitHub label. *@
+<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@WorkItemRoutes.Icon(Type)"
+         Style="@($"color:#{Type.LabelColor}; border-color:#{Type.LabelColor}")" title="@($"Label: {Type.Label}")">@Type.DisplayName</MudChip>
+
+@code {
+    [Parameter] public WorkItemType Type { get; set; }
+}

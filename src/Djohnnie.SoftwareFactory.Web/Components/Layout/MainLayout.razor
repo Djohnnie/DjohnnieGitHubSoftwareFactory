@@ -79,21 +79,27 @@
                                        Size="Size.Small" Class="header-link" aria-label="Manage agent templates" />
                     </MudTooltip>
                 </div>
-                <div class="navigation-group" role="group" aria-label="Epics and templates">
-                    @if (Repository.Current is not null)
-                    {
-                        <MudButton Href="/epics" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Flag">Epics</MudButton>
-                    }
-                    else
-                    {
-                        <span class="px-3">Epics</span>
-                    }
-                    <span class="navigation-separator" aria-hidden="true">/</span>
-                    <MudTooltip Text="Manage epic templates">
-                        <MudIconButton Href="/epic-templates" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
-                                       Size="Size.Small" Class="header-link" aria-label="Manage epic templates" />
-                    </MudTooltip>
-                </div>
+                @foreach (var type in WorkItemTypeRules.All)
+                {
+                    var plural = type.PluralName;
+                    var templatesLabel = $"Manage {type.DisplayName.ToLowerInvariant()} templates";
+                    <div class="navigation-group" role="group" aria-label="@($"{plural} and templates")">
+                        @if (Repository.Current is not null)
+                        {
+                            <MudButton Href="@WorkItemRoutes.ListPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                                       StartIcon="@WorkItemRoutes.Icon(type)">@plural</MudButton>
+                        }
+                        else
+                        {
+                            <span class="px-3">@plural</span>
+                        }
+                        <span class="navigation-separator" aria-hidden="true">/</span>
+                        <MudTooltip Text="@templatesLabel">
+                            <MudIconButton Href="@WorkItemRoutes.TemplatesPath(type)" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
+                                           Size="Size.Small" Class="header-link" aria-label="@templatesLabel" />
+                        </MudTooltip>
+                    </div>
+                }
                 @if (Repository.Current is not null)
                 {
                     <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
@@ -114,7 +120,11 @@
                 <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
                     Everything in DGHSF works on one repository at a time. Pick the one you want to work on; you can switch at any time from the top bar.
                     Templates don't need a repository: manage <MudLink Href="/agent-templates">agent templates</MudLink>
-                    or <MudLink Href="/epic-templates">epic templates</MudLink>.
+                    or the templates of <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Epic)">epics</MudLink>,
+                    <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Feature)">features</MudLink>,
+                    <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Story)">user stories</MudLink>,
+                    <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Bug)">bugs</MudLink> and
+                    <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Task)">tasks</MudLink>.
                 </MudText>
                 <MudPaper Outlined="true" Elevation="0">
                     <RepositoryPicker OnSelected="SelectAsync" />
@@ -189,9 +199,9 @@
         {
             Navigation.NavigateTo("/agents");
         }
-        else if (changed && path.StartsWith("/epics/", StringComparison.OrdinalIgnoreCase))
+        else if (changed && WorkItemRoutes.IsItemPage(path) && WorkItemRoutes.TypeOf(path) is { } type)
         {
-            Navigation.NavigateTo("/epics");
+            Navigation.NavigateTo(WorkItemRoutes.ListPath(type));
         }
     }
 

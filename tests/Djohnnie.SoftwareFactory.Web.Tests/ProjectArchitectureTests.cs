@@ -1,7 +1,7 @@
 using System.Reflection;
 using Djohnnie.SoftwareFactory.Agents;
-using Djohnnie.SoftwareFactory.Application.Features.Epics;
-using Djohnnie.SoftwareFactory.Contracts.Epics;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
 using MediatR;
@@ -14,11 +14,11 @@ public class ProjectArchitectureTests
     [Fact]
     public void AssembliesFollowTheDependencyHierarchy()
     {
-        var web = typeof(EpicEditor).Assembly;
-        var application = typeof(EpicService).Assembly;
+        var web = typeof(WorkItemEditor).Assembly;
+        var application = typeof(WorkItemService).Assembly;
         var sql = typeof(AppDbContext).Assembly;
         var agents = typeof(AssistantAgentFactory).Assembly;
-        var contracts = typeof(Epic).Assembly;
+        var contracts = typeof(WorkItem).Assembly;
 
         AssertReferences(web, application, contracts);
         AssertDoesNotReference(web, sql, agents);
@@ -43,19 +43,19 @@ public class ProjectArchitectureTests
         Assert.Equal(
             ["20261029222630_InitialCreate", "20261029225348_AddEpics", "20261030124727_AddAgentTemplates",
                 "20261102125044_AddRepositoryAccesses", "20261102133114_AddEpicTemplates",
-                "20261105083736_AddRepositoriesAgentsAndFavorites"],
+                "20261105083736_AddRepositoriesAgentsAndFavorites", "20261105095015_AddWorkItemHierarchy"],
             db.Database.GetMigrations());
         Assert.All(db.Model.GetEntityTypes(), entity =>
         {
             Assert.Equal(typeof(AppDbContext).Assembly, entity.ClrType.Assembly);
-            Assert.NotEqual(typeof(Epic).Assembly, entity.ClrType.Assembly);
+            Assert.NotEqual(typeof(WorkItem).Assembly, entity.ClrType.Assembly);
         });
     }
 
     [Fact]
     public void MediatorRequestsAndResponsesWrapContractRecords()
     {
-        var requests = typeof(EpicService).Assembly.GetTypes()
+        var requests = typeof(WorkItemService).Assembly.GetTypes()
             .Select(type => new
             {
                 Type = type,
@@ -71,8 +71,8 @@ public class ProjectArchitectureTests
             var response = request.Request!.GenericTypeArguments[0];
             var output = response.GetProperty("Dto")!.PropertyType;
 
-            Assert.Equal(typeof(Epic).Assembly, input.Assembly);
-            Assert.Equal(typeof(Epic).Assembly, output.Assembly);
+            Assert.Equal(typeof(WorkItem).Assembly, input.Assembly);
+            Assert.Equal(typeof(WorkItem).Assembly, output.Assembly);
             Assert.NotNull(input.GetMethod("<Clone>$"));
             Assert.NotNull(output.GetMethod("<Clone>$"));
         }

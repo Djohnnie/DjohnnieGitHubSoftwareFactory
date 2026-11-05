@@ -43,3 +43,5 @@ public sealed record CreateIssueRequest(
 public sealed record AssignRequest(
     [property: JsonPropertyName("assignees")] IReadOnlyList<string> Assignees,
     [property: JsonPropertyName("agent_assignment")] CopilotAssignment AgentAssignment);
+
+public sealed record AddSubIssueRequest([property: JsonPropertyName("sub_issue_id")] long SubIssueId);

@@ -1,0 +1,151 @@
+@page "/epic-templates/new"
+@page "/epic-templates/edit/{Id:int}"
+@page "/feature-templates/new"
+@page "/feature-templates/edit/{Id:int}"
+@page "/story-templates/new"
+@page "/story-templates/edit/{Id:int}"
+@page "/bug-templates/new"
+@page "/bug-templates/edit/{Id:int}"
+@page "/task-templates/new"
+@page "/task-templates/edit/{Id:int}"
+@attribute [RepositoryIndependent]
+@inject WorkItemTemplateService Templates
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@Heading</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+<MudText Typo="Typo.h4" GutterBottom="true">@Heading</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_template is not null)
+{
+    <MudForm @ref="_form" Model="_template">
+        <MudStack Spacing="4">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudTextField Variant="Variant.Outlined" @bind-Value="_template.Name" Label="Template name" Required="true"
+                              MaxLength="200" Immediate="true" />
+                <MudTextField Variant="Variant.Outlined" @bind-Value="_template.TitleTemplate" Label="Title example" Required="true"
+                              MaxLength="256" Immediate="true" HelperText="@($"Shown as a placeholder for the {Name} title, not saved as its actual title.")" />
+            </MudPaper>
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6">Description skeleton</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                    Markdown proposed when creating a new @Name, for example @SkeletonExample.
+                </MudText>
+                <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" />
+            </MudPaper>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Stored in DGHSF, not in a repository. Saving does not change existing @_type.PluralName.ToLowerInvariant().
+            </MudText>
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Outlined" Href="@WorkItemRoutes.TemplatesPath(_type)" Disabled="_saving">Cancel</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                           StartIcon="@Icons.Material.Filled.Save">Save template</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
+    [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private WorkItemType _type;
+    private WorkItemTemplate? _template;
+    private MudForm? _form;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private List<BreadcrumbItem> _breadcrumbs = [];
+    private (WorkItemType Type, int? Id)? _loadedParameters;
+
+    private string Name => WorkItemActions.Name(_type);
+    private string Heading => Id is null ? $"New {Name} template" : $"Edit {Name} template";
+
+    private string SkeletonExample => _type switch
+    {
+        WorkItemType.Bug => "headings for steps to reproduce, expected and actual behavior",
+        WorkItemType.Story => "the \"As a ..., I want ... so that ...\" line and acceptance criteria",
+        WorkItemType.Task => "headings for the goal, details and when it is done",
+        _ => "headings for goals, scope and acceptance criteria"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var parameters = (WorkItemRoutes.TypeOf(Navigation), Id);
+        if (_loadedParameters == parameters)
+        {
+            return;
+        }
+        _loadedParameters = parameters;
+        _type = parameters.Item1;
+        _loading = true;
+        _error = null;
+        _template = null;
+        try
+        {
+            _template = Id is null ? new WorkItemTemplate { Type = _type } : await Templates.GetAsync(Id.Value);
+            if (_template is null || _template.Type != _type)
+            {
+                _template = null;
+                _error = $"This {Name} template does not exist.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the {Name} template: {ex.Message}";
+        }
+        finally
+        {
+            _breadcrumbs =
+            [
+                new($"{_type.DisplayName} templates", WorkItemRoutes.TemplatesPath(_type)),
+                new(Id is null ? "New" : _template?.Name ?? $"#{Id}", null, disabled: true)
+            ];
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_template!.Description))
+        {
+            Snackbar.Add("A description skeleton is required.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var template = await Templates.SaveAsync(_template);
+            Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
+            Navigation.NavigateTo(WorkItemRoutes.TemplatesPath(_type));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not save the template: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

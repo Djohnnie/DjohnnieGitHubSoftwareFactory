@@ -1,0 +1,244 @@
+@page "/epics"
+@page "/features"
+@page "/stories"
+@page "/bugs"
+@page "/tasks"
+@inject WorkItemService WorkItemService
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@_type.PluralName</PageTitle>
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">@_type.PluralName</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            @_type.PluralName of <b>@Repository.Current?.FullName</b>. @Explanation
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="@WorkItemRoutes.NewPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New @Name</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" Striped="true" T="WorkItem" Items="_items" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <ToolBarContent>
+        <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="@($"Search {_type.PluralName.ToLowerInvariant()}")" Adornment="Adornment.Start" Immediate="true"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
+        <MudSpacer />
+        <MudSelect Variant="Variant.Outlined" T="WorkItemStatus?" @bind-Value="_status" Label="Status" Dense="true" Clearable="true" Style="max-width:200px">
+            @foreach (var status in Enum.GetValues<WorkItemStatus>())
+            {
+                <MudSelectItem T="WorkItemStatus?" Value="status">@WorkItemStatusChip.LabelOf(status)</MudSelectItem>
+            }
+        </MudSelect>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>@_type.DisplayName</MudTh>
+        @if (_type.ParentTypes.Count > 0)
+        {
+            <MudTh>Part of</MudTh>
+        }
+        <MudTh>Status</MudTh>
+        <MudTh>Issue</MudTh>
+        @if (_type.CanBeAssigned)
+        {
+            <MudTh>Agent</MudTh>
+            <MudTh>Model</MudTh>
+        }
+        <MudTh>Updated</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="@_type.DisplayName">
+            <MudLink Href="@WorkItemRoutes.ItemPath(context.Type, context.Id)" Typo="Typo.body1"><b>@context.Title</b></MudLink>
+        </MudTd>
+        @if (_type.ParentTypes.Count > 0)
+        {
+            <MudTd DataLabel="Part of">
+                @if (context.Parent is { } parent)
+                {
+                    <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)" Typo="Typo.body2" title="@parent.Type.DisplayName">
+                        <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" /> @parent.Title
+                    </MudLink>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Standalone</MudText>
+                }
+            </MudTd>
+        }
+        <MudTd DataLabel="Status"><WorkItemStatusChip Status="context.Status" /></MudTd>
+        <MudTd DataLabel="Issue">
+            @if (context.IssueNumber is { } number)
+            {
+                <MudLink Href="@context.IssueUrl" Target="_blank">#@number</MudLink>
+            }
+        </MudTd>
+        @if (_type.CanBeAssigned)
+        {
+            <MudTd DataLabel="Agent"><span class="mono">@(context.CustomAgent ?? "Copilot")</span></MudTd>
+            <MudTd DataLabel="Model"><span class="mono">@(context.Model ?? "auto")</span></MudTd>
+        }
+        <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            @if (context.IsDraft)
+            {
+                <MudTooltip Text="@WorkItemActions.AcceptText(_type)">
+                    <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.RocketLaunch"
+                                   Disabled="_busy" OnClick="() => AcceptAsync(context)" aria-label="@WorkItemActions.AcceptText(_type)" />
+                </MudTooltip>
+            }
+            else if (context.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
+            {
+                <MudTooltip Text="Assign agent">
+                    <MudIconButton Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.SmartToy"
+                                   Disabled="_busy" OnClick="() => AssignAsync(context)" aria-label="Assign agent" />
+                </MudTooltip>
+            }
+            <MudIconButton Variant="Variant.Text" Icon="@(context.IsDraft ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
+                           Href="@WorkItemRoutes.ItemPath(context.Type, context.Id)" title="@(context.IsDraft ? "Edit" : "View")" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Disabled="_busy" OnClick="() => DeleteAsync(context)" title="Delete" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@WorkItemRoutes.Icon(_type)" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>No @_type.PluralName.ToLowerInvariant() yet for this repository.</MudText>
+            <MudButton Href="@WorkItemRoutes.NewPath(_type)" Variant="Variant.Text" Color="Color.Primary">Create the first @Name</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
+    [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private WorkItemType _type;
+    private WorkItemType? _loadedType;
+    private List<WorkItem> _items = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _search;
+    private WorkItemStatus? _status;
+
+    private string Name => WorkItemActions.Name(_type);
+
+    private string Explanation => _type switch
+    {
+        WorkItemType.Epic => "Epics give structure: accepting one creates a GitHub issue labelled 'epic' whose features become its sub-issues. Epics are not assigned to an agent.",
+        WorkItemType.Feature => "Every feature is part of an epic. Accepting one creates a GitHub issue labelled 'feature', a sub-issue of the epic's issue. Features are not assigned to an agent.",
+        WorkItemType.Story => "Every user story is part of a feature. Accepting one creates a GitHub issue labelled 'story', a sub-issue of the feature's issue, and assigns it to the Copilot cloud agent.",
+        _ => $"{_type.PluralName} can stand alone or be part of an epic, feature or user story. Accepting one creates a GitHub issue labelled '{_type.Label}' (a sub-issue of its parent's issue) and assigns it to the Copilot cloud agent."
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var type = WorkItemRoutes.TypeOf(Navigation);
+        if (_loadedType == type)
+        {
+            return;
+        }
+        _type = type;
+        _loadedType = type;
+        _search = null;
+        _status = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _items = await WorkItemService.GetAllAsync(Repository.Current!.FullName, [_type]);
+        }
+        catch (Exception ex)
+        {
+            _items = [];
+            _error = $"Could not load the {_type.PluralName.ToLowerInvariant()}: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool Matches(WorkItem item)
+    {
+        return (_status is null || item.Status == _status) &&
+        (string.IsNullOrWhiteSpace(_search) || item.Title.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || item.Parent?.Title.Contains(_search, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private async Task AcceptAsync(WorkItem item)
+    {
+        if (await WorkItemActions.ConfirmAcceptAsync(Dialogs, item, item.Parent, Repository.Current!.FullName) != true)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            WorkItemActions.Report(Snackbar, await WorkItemService.AcceptAsync(Repository.Current.FullName, item.Id));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not accept '{item.Title}': {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private async Task AssignAsync(WorkItem item)
+    {
+        _busy = true;
+        try
+        {
+            WorkItemActions.Report(Snackbar, await WorkItemService.AssignAgentAsync(Repository.Current!.FullName, item.Id));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not assign '{item.Title}': {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(WorkItem item)
+    {
+        if (await WorkItemActions.ConfirmDeleteAsync(Dialogs, item) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await WorkItemService.DeleteAsync(Repository.Current!.FullName, item.Id);
+            _items.Remove(item);
+            Snackbar.Add($"Deleted '{item.Title}'.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not delete '{item.Title}': {ex.Message}", Severity.Error);
+        }
+    }
+}
