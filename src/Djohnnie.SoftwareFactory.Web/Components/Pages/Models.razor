@@ -190,13 +190,15 @@
         }
     }
 
-    private bool Matches(AiModel model) =>
-        (!_onlyEnabled || model.IsEnabled) &&
+    private bool Matches(AiModel model)
+    {
+        return (!_onlyEnabled || model.IsEnabled) &&
         (!_onlyFavorites || model.IsFavorite) &&
         (string.IsNullOrWhiteSpace(_search)
          || model.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
          || model.ModelId.Contains(_search, StringComparison.OrdinalIgnoreCase)
          || (model.Provider?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+    }
 
     private async Task EditAsync(AiModel? model)
     {
@@ -317,6 +319,8 @@
             : "Unchanged";
     }
 
-    private static string TierLabel(AiModel model) =>
-        string.IsNullOrEmpty(model.Threshold) ? model.Tier : $"{model.Tier} ({model.Threshold})";
+    private static string TierLabel(AiModel model)
+    {
+        return string.IsNullOrEmpty(model.Threshold) ? model.Tier : $"{model.Tier} ({model.Threshold})";
+    }
 }

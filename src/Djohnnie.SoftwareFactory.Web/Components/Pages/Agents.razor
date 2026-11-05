@@ -89,7 +89,10 @@
     private bool _loading = true;
     private string? _error;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override Task OnInitializedAsync()
+    {
+        return LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -213,13 +216,19 @@
         }
     }
 
-    internal static string TargetLabel(string? target) => target switch
+    internal static string TargetLabel(string? target)
     {
-        "github-copilot" => "GitHub Copilot",
-        "vscode" => "VS Code",
-        null or "" => "All",
-        _ => target
-    };
+        return target switch
+        {
+            "github-copilot" => "GitHub Copilot",
+            "vscode" => "VS Code",
+            null or "" => "All",
+            _ => target
+        };
+    }
 
-    internal static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
+    internal static string Short(string sha)
+    {
+        return sha.Length > 7 ? sha[..7] : sha;
+    }
 }

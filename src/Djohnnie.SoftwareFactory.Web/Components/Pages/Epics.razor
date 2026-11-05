@@ -98,7 +98,10 @@
     private string? _search;
     private WorkItemStatus? _status;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override Task OnInitializedAsync()
+    {
+        return LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -118,9 +121,11 @@
         }
     }
 
-    private bool Matches(Epic epic) =>
-        (_status is null || epic.Status == _status) &&
+    private bool Matches(Epic epic)
+    {
+        return (_status is null || epic.Status == _status) &&
         (string.IsNullOrWhiteSpace(_search) || epic.Title.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    }
 
     private async Task AcceptAsync(Epic epic)
     {

@@ -52,7 +52,10 @@ public partial class ModelPricingScraper(HttpClient httpClient)
         foreach (var table in document.QuerySelectorAll("table"))
         {
             var headers = table.QuerySelectorAll("thead th").Select(th => Clean(th.TextContent)).ToList();
-            int Column(string name) => headers.FindIndex(h => h.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+            int Column(string name)
+            {
+                return headers.FindIndex(h => h.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+            }
 
             var model = Column("Model");
             var input = headers.FindIndex(h => h.Equals("Input", StringComparison.OrdinalIgnoreCase));
@@ -73,7 +76,10 @@ public partial class ModelPricingScraper(HttpClient httpClient)
             foreach (var row in table.QuerySelectorAll("tbody tr"))
             {
                 var cells = row.QuerySelectorAll("td").ToList();
-                string? Cell(int index) => index >= 0 && index < cells.Count ? CellText(cells[index]) : null;
+                string? Cell(int index)
+                {
+                    return index >= 0 && index < cells.Count ? CellText(cells[index]) : null;
+                }
 
                 var name = Cell(model);
                 if (string.IsNullOrEmpty(name))
@@ -156,10 +162,15 @@ public partial class ModelPricingScraper(HttpClient httpClient)
         return Clean(FootnoteMarker().Replace(cell.TextContent, string.Empty));
     }
 
-    private static string? NullIfNotApplicable(string? value) =>
-        string.IsNullOrWhiteSpace(value) || value.Equals("Not applicable", StringComparison.OrdinalIgnoreCase) ? null : value;
+    private static string? NullIfNotApplicable(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) || value.Equals("Not applicable", StringComparison.OrdinalIgnoreCase) ? null : value;
+    }
 
-    private static string Clean(string value) => Whitespace().Replace(value, " ").Trim();
+    private static string Clean(string value)
+    {
+        return Whitespace().Replace(value, " ").Trim();
+    }
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();

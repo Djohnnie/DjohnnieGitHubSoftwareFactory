@@ -6,5 +6,11 @@ namespace Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 
 public static class AgentTemplateExtensions
 {
-    public static AgentDefinition ToAgent(this AgentTemplate template) => AgentFileSerializer.Parse(template.Content);
+    extension(AgentTemplate template)
+    {
+        public AgentDefinition ToAgent()
+        {
+            return AgentFileSerializer.Parse(template.Content);
+        }
+    }
 }

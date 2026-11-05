@@ -195,7 +195,13 @@
         }
     }
 
-    private void OnRepositoryChanged() => InvokeAsync(StateHasChanged);
+    private void OnRepositoryChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
 
-    public void Dispose() => Repository.Changed -= OnRepositoryChanged;
+    public void Dispose()
+    {
+        Repository.Changed -= OnRepositoryChanged;
+    }
 }

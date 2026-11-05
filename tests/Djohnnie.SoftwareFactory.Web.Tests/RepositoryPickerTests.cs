@@ -23,7 +23,10 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
         1, "recent", "owner/recent", new GitHubOwner("owner", null),
         "https://github.com/owner/recent", "Recent repository", false, false, false, "C#", "main", null);
 
-    ValueTask IAsyncLifetime.InitializeAsync() => ValueTask.CompletedTask;
+    ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 
     public RepositoryPickerTests()
     {
@@ -187,7 +190,10 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
 
     private sealed class TokenProvider : IGitHubTokenProvider
     {
-        public Task<string> GetAccessTokenAsync() => Task.FromResult("token");
+        public Task<string> GetAccessTokenAsync()
+        {
+            return Task.FromResult("token");
+        }
     }
 
     private sealed class DelayedGitHub : HttpMessageHandler

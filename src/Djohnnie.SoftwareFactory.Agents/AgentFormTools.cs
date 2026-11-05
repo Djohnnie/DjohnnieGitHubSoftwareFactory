@@ -57,12 +57,15 @@ public sealed class AgentFormTools(
         unless the user asks for it. Describe conventions in a way that applies to any repository that uses the same stack.
         """;
 
-    public AssistantTools AsTools() => new(
-    [
-        AIFunctionFactory.Create(GetFormAsync, "get_agent_form"),
-        AIFunctionFactory.Create(UpdateFormAsync, "update_agent_form"),
-        AIFunctionFactory.Create(ListModels, "list_models")
-    ]);
+    public AssistantTools AsTools()
+    {
+        return new(
+        [
+            AIFunctionFactory.Create(GetFormAsync, "get_agent_form"),
+            AIFunctionFactory.Create(UpdateFormAsync, "update_agent_form"),
+            AIFunctionFactory.Create(ListModels, "list_models")
+        ]);
+    }
 
     [Description("Gets the current values of the custom agent form.")]
     public async Task<AgentFormSnapshot> GetFormAsync()
@@ -81,7 +84,10 @@ public sealed class AgentFormTools(
     }
 
     [Description("Lists the models that can be used as the agent's model.")]
-    public IReadOnlyList<ModelChoice> ListModels() => ModelChoices(models);
+    public IReadOnlyList<ModelChoice> ListModels()
+    {
+        return ModelChoices(models);
+    }
 
     [Description("Prefills or changes fields of the custom agent form. Only pass the fields to change; omit (null) the others.")]
     public async Task<string> UpdateFormAsync(
@@ -225,11 +231,14 @@ public sealed class AgentFormTools(
         return Result(changed, problems);
     }
 
-    internal static IReadOnlyList<ModelChoice> ModelChoices(IEnumerable<AiModel> models) => models
-        .GroupBy(m => m.ModelId, StringComparer.OrdinalIgnoreCase)
-        .Select(g => g.OrderBy(m => m.IsDefaultTier ? 0 : 1).First())
-        .Select(m => new ModelChoice(m.ModelId, m.Name, m.Provider, m.Category, m.InputPrice, m.OutputPrice))
-        .ToList();
+    internal static IReadOnlyList<ModelChoice> ModelChoices(IEnumerable<AiModel> models)
+    {
+        return models
+            .GroupBy(m => m.ModelId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderBy(m => m.IsDefaultTier ? 0 : 1).First())
+            .Select(m => new ModelChoice(m.ModelId, m.Name, m.Provider, m.Category, m.InputPrice, m.OutputPrice))
+            .ToList();
+    }
 
     /// <summary>Resolves a model id or name to a managed model id; empty or 'default'/'auto' resolves to <c>null</c>.</summary>
     internal static bool TryResolveModel(IEnumerable<AiModel> models, string value, out string? modelId)

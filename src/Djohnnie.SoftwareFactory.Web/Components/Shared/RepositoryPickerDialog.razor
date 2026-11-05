@@ -12,5 +12,8 @@
 
     [Parameter] public string? SelectedFullName { get; set; }
 
-    private void Select(GitHubRepository repository) => MudDialog.Close(DialogResult.Ok(repository));
+    private void Select(GitHubRepository repository)
+    {
+        MudDialog.Close(DialogResult.Ok(repository));
+    }
 }

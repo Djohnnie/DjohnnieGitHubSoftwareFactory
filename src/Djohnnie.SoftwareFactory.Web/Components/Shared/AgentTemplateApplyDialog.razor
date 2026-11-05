@@ -143,39 +143,53 @@
         }
     }
 
-    private bool Matches(GitHubRepository repo) =>
-        string.IsNullOrWhiteSpace(_search)
+    private bool Matches(GitHubRepository repo)
+    {
+        return string.IsNullOrWhiteSpace(_search)
         || repo.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || (repo.Language?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
 
-    private static string OutcomeText(AgentTemplateApplyOutcome outcome) => outcome switch
+    private static string OutcomeText(AgentTemplateApplyOutcome outcome)
     {
-        AgentTemplateApplyOutcome.Created => "created",
-        AgentTemplateApplyOutcome.Updated => "replaced",
-        AgentTemplateApplyOutcome.Unchanged => "already up to date",
-        AgentTemplateApplyOutcome.Skipped => "skipped",
-        _ => "failed"
-    };
+        return outcome switch
+        {
+            AgentTemplateApplyOutcome.Created => "created",
+            AgentTemplateApplyOutcome.Updated => "replaced",
+            AgentTemplateApplyOutcome.Unchanged => "already up to date",
+            AgentTemplateApplyOutcome.Skipped => "skipped",
+            _ => "failed"
+        };
+    }
 
-    private static string OutcomeIcon(AgentTemplateApplyOutcome outcome) => outcome switch
+    private static string OutcomeIcon(AgentTemplateApplyOutcome outcome)
     {
-        AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Icons.Material.Filled.CheckCircle,
-        AgentTemplateApplyOutcome.Unchanged => Icons.Material.Filled.Remove,
-        AgentTemplateApplyOutcome.Skipped => Icons.Material.Filled.SkipNext,
-        _ => Icons.Material.Filled.Error
-    };
+        return outcome switch
+        {
+            AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Icons.Material.Filled.CheckCircle,
+            AgentTemplateApplyOutcome.Unchanged => Icons.Material.Filled.Remove,
+            AgentTemplateApplyOutcome.Skipped => Icons.Material.Filled.SkipNext,
+            _ => Icons.Material.Filled.Error
+        };
+    }
 
-    private static Color OutcomeColor(AgentTemplateApplyOutcome outcome) => outcome switch
+    private static Color OutcomeColor(AgentTemplateApplyOutcome outcome)
     {
-        AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Color.Success,
-        AgentTemplateApplyOutcome.Skipped => Color.Warning,
-        AgentTemplateApplyOutcome.Failed => Color.Error,
-        _ => Color.Default
-    };
+        return outcome switch
+        {
+            AgentTemplateApplyOutcome.Created or AgentTemplateApplyOutcome.Updated => Color.Success,
+            AgentTemplateApplyOutcome.Skipped => Color.Warning,
+            AgentTemplateApplyOutcome.Failed => Color.Error,
+            _ => Color.Default
+        };
+    }
 
     // Progress<T> posts to the captured context asynchronously; this reports in order, on the render thread.
     private sealed class SynchronousProgress(Action<AgentTemplateApplyResult> report) : IProgress<AgentTemplateApplyResult>
     {
-        public void Report(AgentTemplateApplyResult value) => report(value);
+        public void Report(AgentTemplateApplyResult value)
+        {
+            report(value);
+        }
     }
 }

@@ -1,0 +1,9 @@
+root = true
+
+[*.cs]
+# Use block bodies ({ ... }) for methods and method-like members; expression bodies only where nothing else is possible.
+csharp_style_expression_bodied_methods = false:warning
+csharp_style_expression_bodied_constructors = false:warning
+csharp_style_expression_bodied_operators = false:warning
+csharp_style_expression_bodied_conversion_operators = false:warning
+csharp_style_expression_bodied_local_functions = false:warning

@@ -32,7 +32,10 @@ public class EpicServiceTests : IDisposable
         _service = _services.GetRequiredService<EpicService>();
     }
 
-    public void Dispose() => _services.Dispose();
+    public void Dispose()
+    {
+        _services.Dispose();
+    }
 
     [Fact]
     public async Task Accept_CreatesLabelledIssueAndAssignsCopilotWithAgentAndModel()
@@ -154,9 +157,11 @@ public class EpicServiceTests : IDisposable
 
     private sealed class TokenAuth : AuthenticationStateProvider
     {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(
+        public override Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(
                 new ClaimsIdentity([new Claim(GitHubClaims.AccessToken, "token")], "test"))));
+        }
     }
 
     private sealed record Request(string Method, string Path, string? Body);
@@ -183,10 +188,14 @@ public class EpicServiceTests : IDisposable
             };
         }
 
-        private static string Issue(string[] assignees) =>
-            $$"""{"number":42,"title":"Epic","html_url":"https://github.com/owner/repo/issues/42","state":"open","assignees":[{{string.Join(",", assignees)}}]}""";
+        private static string Issue(string[] assignees)
+        {
+            return $$"""{"number":42,"title":"Epic","html_url":"https://github.com/owner/repo/issues/42","state":"open","assignees":[{{string.Join(",", assignees)}}]}""";
+        }
 
-        private static HttpResponseMessage Json(HttpStatusCode status, string json) =>
-            new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        private static HttpResponseMessage Json(HttpStatusCode status, string json)
+        {
+            return new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        }
     }
 }

@@ -48,13 +48,16 @@ public sealed class EpicFormTools(
         ## Acceptance criteria  (a checklist with `- [ ]` items that can be verified)
         """;
 
-    public AssistantTools AsTools() => new(
-    [
-        AIFunctionFactory.Create(GetFormAsync, "get_epic_form"),
-        AIFunctionFactory.Create(UpdateFormAsync, "update_epic_form"),
-        AIFunctionFactory.Create(ListCustomAgentsAsync, "list_custom_agents"),
-        AIFunctionFactory.Create(ListModels, "list_models")
-    ]);
+    public AssistantTools AsTools()
+    {
+        return new(
+        [
+            AIFunctionFactory.Create(GetFormAsync, "get_epic_form"),
+            AIFunctionFactory.Create(UpdateFormAsync, "update_epic_form"),
+            AIFunctionFactory.Create(ListCustomAgentsAsync, "list_custom_agents"),
+            AIFunctionFactory.Create(ListModels, "list_models")
+        ]);
+    }
 
     [Description("Gets the current values of the epic form.")]
     public async Task<EpicFormSnapshot> GetFormAsync()
@@ -71,14 +74,19 @@ public sealed class EpicFormTools(
     }
 
     [Description("Lists the custom agents of the repository that the Copilot cloud agent can use.")]
-    public async Task<IReadOnlyList<CustomAgentChoice>> ListCustomAgentsAsync(CancellationToken cancellationToken = default) =>
-        (await loadAgents(cancellationToken))
+    public async Task<IReadOnlyList<CustomAgentChoice>> ListCustomAgentsAsync(CancellationToken cancellationToken = default)
+    {
+        return (await loadAgents(cancellationToken))
             .Where(a => a.AvailableOnGitHub)
             .Select(a => new CustomAgentChoice(a.Id, a.Name, a.Description))
             .ToList();
+    }
 
     [Description("Lists the models the Copilot cloud agent can use for the assignment.")]
-    public IReadOnlyList<ModelChoice> ListModels() => AgentFormTools.ModelChoices(models);
+    public IReadOnlyList<ModelChoice> ListModels()
+    {
+        return AgentFormTools.ModelChoices(models);
+    }
 
     [Description("Prefills or changes fields of the epic form. Only pass the fields to change; omit (null) the others.")]
     public async Task<string> UpdateFormAsync(

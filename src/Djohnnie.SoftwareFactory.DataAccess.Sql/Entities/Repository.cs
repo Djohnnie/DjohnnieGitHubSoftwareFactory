@@ -28,7 +28,10 @@ public sealed class Repository
     public List<Epic> Epics { get; set; } = [];
     public List<Agent> Agents { get; set; } = [];
 
-    public static string Normalize(string fullName) => fullName.Trim().ToLowerInvariant();
+    public static string Normalize(string fullName)
+    {
+        return fullName.Trim().ToLowerInvariant();
+    }
 
     public static Repository Create(string fullName)
     {

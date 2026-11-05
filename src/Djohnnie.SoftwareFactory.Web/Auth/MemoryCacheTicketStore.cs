@@ -21,8 +21,10 @@ public sealed class MemoryCacheTicketStore(IMemoryCache cache) : ITicketStore
         return Task.CompletedTask;
     }
 
-    public Task<AuthenticationTicket?> RetrieveAsync(string key) =>
-        Task.FromResult(cache.TryGetValue(key, out AuthenticationTicket? ticket) ? ticket : null);
+    public Task<AuthenticationTicket?> RetrieveAsync(string key)
+    {
+        return Task.FromResult(cache.TryGetValue(key, out AuthenticationTicket? ticket) ? ticket : null);
+    }
 
     public Task RemoveAsync(string key)
     {
@@ -30,6 +32,8 @@ public sealed class MemoryCacheTicketStore(IMemoryCache cache) : ITicketStore
         return Task.CompletedTask;
     }
 
-    private void Set(string key, AuthenticationTicket ticket) =>
+    private void Set(string key, AuthenticationTicket ticket)
+    {
         cache.Set(key, ticket, new MemoryCacheEntryOptions { SlidingExpiration = Lifetime });
+    }
 }

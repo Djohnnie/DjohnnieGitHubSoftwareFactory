@@ -25,8 +25,10 @@ public sealed class AssistantAgentFactory(IChatClient? chatClient, ILoggerFactor
     /// <summary><c>false</c> when the OpenAI model or key is missing.</summary>
     public bool IsConfigured => chatClient is not null;
 
-    public AssistantConversation CreateConversation(string instructions, AssistantTools? tools = null) =>
-        new(CreateAgent(instructions, tools?.Tools));
+    public AssistantConversation CreateConversation(string instructions, AssistantTools? tools = null)
+    {
+        return new(CreateAgent(instructions, tools?.Tools));
+    }
 
     public AIAgent CreateAgent(string instructions, IList<AITool>? tools = null)
     {

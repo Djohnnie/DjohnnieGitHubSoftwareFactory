@@ -87,7 +87,10 @@ public static partial class AgentFileSerializer
     public static string Serialize(AgentDefinition agent)
     {
         var original = OriginalMapping(agent.OriginalFrontmatter);
-        bool Had(string key) => Get(original, key) is not null;
+        bool Had(string key)
+        {
+            return Get(original, key) is not null;
+        }
 
         var root = Merge(original,
         [
@@ -292,16 +295,25 @@ public static partial class AgentFileSerializer
         return result;
     }
 
-    private static YamlMappingNode? OriginalMapping(string? yaml) =>
-        yaml is null ? null : (YamlMappingNode)LoadNode(yaml);
+    private static YamlMappingNode? OriginalMapping(string? yaml)
+    {
+        return yaml is null ? null : (YamlMappingNode)LoadNode(yaml);
+    }
 
-    private static YamlNode? Get(YamlMappingNode? mapping, string key) =>
-        mapping is not null && mapping.Children.TryGetValue(new YamlScalarNode(key), out var value) ? value : null;
+    private static YamlNode? Get(YamlMappingNode? mapping, string key)
+    {
+        return mapping is not null && mapping.Children.TryGetValue(new YamlScalarNode(key), out var value) ? value : null;
+    }
 
-    private static string? GetString(YamlMappingNode mapping, string key) => (Get(mapping, key) as YamlScalarNode)?.Value;
+    private static string? GetString(YamlMappingNode mapping, string key)
+    {
+        return (Get(mapping, key) as YamlScalarNode)?.Value;
+    }
 
-    private static bool? GetBool(YamlMappingNode mapping, string key) =>
-        bool.TryParse(GetString(mapping, key), out var value) ? value : null;
+    private static bool? GetBool(YamlMappingNode mapping, string key)
+    {
+        return bool.TryParse(GetString(mapping, key), out var value) ? value : null;
+    }
 
     private static YamlScalarNode? Str(string? value)
     {
@@ -318,7 +330,10 @@ public static partial class AgentFileSerializer
         return new YamlScalarNode(value) { Style = style };
     }
 
-    private static YamlScalarNode Bool(bool value) => new(value ? "true" : "false") { Style = ScalarStyle.Plain };
+    private static YamlScalarNode Bool(bool value)
+    {
+        return new(value ? "true" : "false") { Style = ScalarStyle.Plain };
+    }
 
     private static YamlNode LoadNode(string yaml)
     {

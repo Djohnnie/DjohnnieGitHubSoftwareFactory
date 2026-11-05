@@ -52,5 +52,8 @@ public sealed record Epic
 
     public bool IsDraft => Status == WorkItemStatus.Draft;
 
-    public Epic Copy() => this with { };
+    public Epic Copy()
+    {
+        return this with { };
+    }
 }

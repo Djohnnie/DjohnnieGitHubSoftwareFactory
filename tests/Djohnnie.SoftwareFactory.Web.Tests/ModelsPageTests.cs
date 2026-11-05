@@ -13,7 +13,10 @@ namespace Djohnnie.SoftwareFactory.Web.Tests;
 
 public class ModelsPageTests : BunitContext, IAsyncLifetime
 {
-    ValueTask IAsyncLifetime.InitializeAsync() => ValueTask.CompletedTask;
+    ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 
     public ModelsPageTests()
     {

@@ -132,7 +132,10 @@ else
     private string? _error;
     private string? _search;
 
-    protected override Task OnInitializedAsync() => Task.WhenAll(LoadKnownAsync(), LoadRepositoriesAsync());
+    protected override Task OnInitializedAsync()
+    {
+        return Task.WhenAll(LoadKnownAsync(), LoadRepositoriesAsync());
+    }
 
     /// <summary>Loads the favorite and the recently accessed repositories (the latter excludes favorites).</summary>
     private async Task LoadKnownAsync()
@@ -175,13 +178,17 @@ else
         }
     }
 
-    private Task SelectKnownAsync(RepositorySummary known) =>
-        SelectAsync(async () => _repositories?.FirstOrDefault(repository =>
+    private Task SelectKnownAsync(RepositorySummary known)
+    {
+        return SelectAsync(async () => _repositories?.FirstOrDefault(repository =>
                 string.Equals(repository.FullName, known.FullName, StringComparison.OrdinalIgnoreCase))
                 ?? await GitHub.GetRepositoryAsync(known.FullName, _cancellation.Token));
+    }
 
-    private bool IsFavorite(GitHubRepository repository) =>
-        _favoriteRepositories.Any(favorite => string.Equals(favorite.FullName, repository.FullName, StringComparison.OrdinalIgnoreCase));
+    private bool IsFavorite(GitHubRepository repository)
+    {
+        return _favoriteRepositories.Any(favorite => string.Equals(favorite.FullName, repository.FullName, StringComparison.OrdinalIgnoreCase));
+    }
 
     private async Task SetFavoriteAsync(string fullName, bool isFavorite)
     {
@@ -199,7 +206,10 @@ else
         }
     }
 
-    private Task SelectAsync(GitHubRepository repository) => SelectAsync(() => Task.FromResult(repository));
+    private Task SelectAsync(GitHubRepository repository)
+    {
+        return SelectAsync(() => Task.FromResult(repository));
+    }
 
     private async Task SelectAsync(Func<Task<GitHubRepository>> loadRepository)
     {
@@ -226,11 +236,13 @@ else
         }
     }
 
-    private bool Matches(GitHubRepository repo) =>
-        string.IsNullOrWhiteSpace(_search)
+    private bool Matches(GitHubRepository repo)
+    {
+        return string.IsNullOrWhiteSpace(_search)
         || repo.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || (repo.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
         || (repo.Language?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
 
     public void Dispose()
     {

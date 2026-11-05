@@ -32,7 +32,10 @@ public class AgentTemplateServiceTests : IDisposable
         _service = _services.GetRequiredService<AgentTemplateService>();
     }
 
-    public void Dispose() => _services.Dispose();
+    public void Dispose()
+    {
+        _services.Dispose();
+    }
 
     [Fact]
     public async Task Save_StoresTheAgentFileAndRejectsADuplicateFileName()
@@ -82,9 +85,11 @@ public class AgentTemplateServiceTests : IDisposable
 
     private sealed class TokenAuth : AuthenticationStateProvider
     {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-            Task.FromResult(new AuthenticationState(new ClaimsPrincipal(
+        public override Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(
                 new ClaimsIdentity([new Claim(GitHubClaims.AccessToken, "token")], "test"))));
+        }
     }
 
     private sealed record Request(string Method, string Path, string? Body);
@@ -125,7 +130,9 @@ public class AgentTemplateServiceTests : IDisposable
                 : new HttpResponseMessage(HttpStatusCode.NotFound);
         }
 
-        private static HttpResponseMessage Json(HttpStatusCode status, string json) =>
-            new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        private static HttpResponseMessage Json(HttpStatusCode status, string json)
+        {
+            return new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        }
     }
 }

@@ -11,10 +11,15 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
     public List<List<ChatMessage>> Requests { get; } = [];
 
     /// <summary>A response in which the model calls a tool.</summary>
-    public static ChatResponse ToolCall(string name, IDictionary<string, object?> arguments) =>
-        new(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), name, arguments)]));
+    public static ChatResponse ToolCall(string name, IDictionary<string, object?> arguments)
+    {
+        return new(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), name, arguments)]));
+    }
 
-    public static ChatResponse Text(string text) => new(new ChatMessage(ChatRole.Assistant, text));
+    public static ChatResponse Text(string text)
+    {
+        return new(new ChatMessage(ChatRole.Assistant, text));
+    }
 
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
@@ -31,7 +36,10 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
         }
     }
 
-    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        return null;
+    }
 
     public void Dispose()
     {

@@ -30,12 +30,21 @@ public class FavoritesTests : IDisposable
 
     private sealed class UnusedTokenProvider : IGitHubTokenProvider
     {
-        public Task<string> GetAccessTokenAsync() => throw new InvalidOperationException("GitHub must not be called.");
+        public Task<string> GetAccessTokenAsync()
+        {
+            throw new InvalidOperationException("GitHub must not be called.");
+        }
     }
 
-    public void Dispose() => _services.Dispose();
+    public void Dispose()
+    {
+        _services.Dispose();
+    }
 
-    private AppDbContext CreateDb() => _services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
+    private AppDbContext CreateDb()
+    {
+        return _services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
+    }
 
     [Fact]
     public async Task FavoriteRepository_IsListedSeparatelyFromRecentOnes()

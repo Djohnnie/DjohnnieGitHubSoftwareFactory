@@ -145,8 +145,10 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
 
     public const string CopilotLogin = "copilot-swe-agent[bot]";
 
-    public static bool IsAssignedToCopilot(GitHubIssue issue) =>
-        issue.Assignees?.Any(a => a.Login.Contains("copilot", StringComparison.OrdinalIgnoreCase)) == true;
+    public static bool IsAssignedToCopilot(GitHubIssue issue)
+    {
+        return issue.Assignees?.Any(a => a.Login.Contains("copilot", StringComparison.OrdinalIgnoreCase)) == true;
+    }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken)
     {
@@ -182,8 +184,10 @@ public sealed class GitHubApiClient(HttpClient httpClient, IGitHubTokenProvider 
         throw new GitHubApiException(response.StatusCode, message);
     }
 
-    private static string ContentsUrl(string repositoryFullName, string path) =>
-        $"repos/{repositoryFullName}/contents/{string.Join('/', path.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString))}";
+    private static string ContentsUrl(string repositoryFullName, string path)
+    {
+        return $"repos/{repositoryFullName}/contents/{string.Join('/', path.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString))}";
+    }
 
     private static string? GetNextLink(HttpResponseMessage response)
     {

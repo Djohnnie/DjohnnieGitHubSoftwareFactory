@@ -54,15 +54,19 @@ public class ModelPricingScraperTests
     [InlineData("GPT-5.4 nano", "gpt-5.4-nano")]
     [InlineData("Claude Opus 4.8 (fast mode) (preview)", "claude-opus-4.8-fast")]
     [InlineData("MAI-Code-1.1-Flash", "mai-code-1.1-flash")]
-    public void ToModelId_DerivesAgentModelValue(string name, string expected) =>
+    public void ToModelId_DerivesAgentModelValue(string name, string expected)
+    {
         Assert.Equal(expected, ModelPricingScraper.ToModelId(name));
+    }
 
     [Theory]
     [InlineData("https://example.com/models")]
     [InlineData("http://docs.github.com/en/copilot")]
     [InlineData("not a url")]
-    public void ValidateUrl_RejectsNonGitHubDocsUrls(string url) =>
+    public void ValidateUrl_RejectsNonGitHubDocsUrls(string url)
+    {
         Assert.Throws<ArgumentException>(() => ModelPricingScraper.ValidateUrl(url));
+    }
 
     [Fact]
     public async Task Import_AddsNewAndRefreshesPricesButKeepsUserChanges()
@@ -85,6 +89,9 @@ public class ModelPricingScraperTests
 
     internal sealed class TestDbFactory(DbContextOptions<AppDbContext> options) : IDbContextFactory<AppDbContext>
     {
-        public AppDbContext CreateDbContext() => new(options);
+        public AppDbContext CreateDbContext()
+        {
+            return new(options);
+        }
     }
 }

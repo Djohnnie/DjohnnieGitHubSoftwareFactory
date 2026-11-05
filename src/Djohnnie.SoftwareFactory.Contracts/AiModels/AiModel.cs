@@ -51,13 +51,20 @@ public sealed record AiModel
 
     public string CostSummary => FormatCost(InputPrice, OutputPrice);
 
-    public static string FormatCost(decimal? input, decimal? output) =>
-        input is null && output is null
+    public static string FormatCost(decimal? input, decimal? output)
+    {
+        return input is null && output is null
             ? "No pricing"
             : $"{FormatPrice(input)} in / {FormatPrice(output)} out per 1M tokens";
+    }
 
-    public static string FormatPrice(decimal? price) =>
-        price is null ? "–" : price.Value.ToString(price.Value < 0.1m && price.Value != 0 ? "$0.000" : "$0.00", System.Globalization.CultureInfo.InvariantCulture);
+    public static string FormatPrice(decimal? price)
+    {
+        return price is null ? "–" : price.Value.ToString(price.Value < 0.1m && price.Value != 0 ? "$0.000" : "$0.00", System.Globalization.CultureInfo.InvariantCulture);
+    }
 
-    public AiModel Copy() => this with { };
+    public AiModel Copy()
+    {
+        return this with { };
+    }
 }

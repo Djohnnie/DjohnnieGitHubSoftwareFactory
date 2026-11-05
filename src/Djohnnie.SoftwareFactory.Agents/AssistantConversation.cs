@@ -8,7 +8,10 @@ public sealed class AssistantConversation
     private readonly AIAgent _agent;
     private AgentSession? _session;
 
-    internal AssistantConversation(AIAgent agent) => _agent = agent;
+    internal AssistantConversation(AIAgent agent)
+    {
+        _agent = agent;
+    }
 
     public async IAsyncEnumerable<string> RunStreamingAsync(string text, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -22,5 +25,8 @@ public sealed class AssistantConversation
         }
     }
 
-    public void Reset() => _session = null;
+    public void Reset()
+    {
+        _session = null;
+    }
 }

@@ -1,11 +1,11 @@
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Epics;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
-using Djohnnie.SoftwareFactory.DataAccess.Sql;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.Epics;
 
-public sealed class EpicWorkflow(EpicStore store, GitHubApiClient gitHub)
+public sealed class EpicWorkflow(IEpicStore store, GitHubApiClient gitHub)
 {
     public async Task<EpicAcceptResult> AcceptAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
@@ -35,8 +35,10 @@ public sealed class EpicWorkflow(EpicStore store, GitHubApiClient gitHub)
         return await TryAssignAsync(epic, cancellationToken);
     }
 
-    public static string IssueBody(Epic epic) =>
-        $"{epic.Description.Trim()}\n\n<!-- dghsf:epic:{epic.Id} -->\n";
+    public static string IssueBody(Epic epic)
+    {
+        return $"{epic.Description.Trim()}\n\n<!-- dghsf:epic:{epic.Id} -->\n";
+    }
 
     private async Task<EpicAcceptResult> TryAssignAsync(Epic epic, CancellationToken cancellationToken)
     {
@@ -57,7 +59,9 @@ public sealed class EpicWorkflow(EpicStore store, GitHubApiClient gitHub)
         return new(await store.MarkAssignedAsync(epic.RepositoryFullName, epic.Id, cancellationToken), null);
     }
 
-    private async Task<Epic> FindAsync(string repositoryFullName, int id, CancellationToken cancellationToken) =>
-        await store.GetAsync(repositoryFullName, id, cancellationToken)
-        ?? throw new InvalidOperationException("The epic no longer exists.");
+    private async Task<Epic> FindAsync(string repositoryFullName, int id, CancellationToken cancellationToken)
+    {
+        return await store.GetAsync(repositoryFullName, id, cancellationToken)
+            ?? throw new InvalidOperationException("The epic no longer exists.");
+    }
 }

@@ -259,10 +259,15 @@
         _nameSlug = slug;
     }
 
-    private Task OnFileNameChangedAsync(string? fileName) => FileNameChanged.InvokeAsync(fileName);
+    private Task OnFileNameChangedAsync(string? fileName)
+    {
+        return FileNameChanged.InvokeAsync(fileName);
+    }
 
-    private string? ValidateFileName(string? value) =>
-        AgentDefinition.IsValidFileName(value) ? null : "Use letters, digits, '-', '_' or '.' only.";
+    private string? ValidateFileName(string? value)
+    {
+        return AgentDefinition.IsValidFileName(value) ? null : "Use letters, digits, '-', '_' or '.' only.";
+    }
 
     private void AddTool(string tool)
     {
@@ -284,10 +289,12 @@
         return Task.CompletedTask;
     }
 
-    private Task<IEnumerable<string>> SearchAgentsAsync(string? value, CancellationToken cancellationToken) =>
-        Task.FromResult(string.IsNullOrWhiteSpace(value)
+    private Task<IEnumerable<string>> SearchAgentsAsync(string? value, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(string.IsNullOrWhiteSpace(value)
             ? HandoffAgents.AsEnumerable()
             : HandoffAgents.Where(a => a.Contains(value, StringComparison.OrdinalIgnoreCase)));
+    }
 
     private string Preview()
     {

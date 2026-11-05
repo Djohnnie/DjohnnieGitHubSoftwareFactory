@@ -54,28 +54,41 @@ public class AssistantAgentFactoryTests
             if (streaming)
             {
                 context.Response.ContentType = "text/event-stream";
-                async Task SendEventAsync(string type, object data) =>
+                async Task SendEventAsync(string type, object data)
+                {
                     await context.Response.WriteAsync($"event: {type}\ndata: {JsonSerializer.Serialize(data)}\n\n", context.RequestAborted);
+                }
 
                 await SendEventAsync("response.created", new { type = "response.created", sequence_number = 0, response });
                 await SendEventAsync("response.output_item.added", new
                 {
-                    type = "response.output_item.added", sequence_number = 1, output_index = 0,
+                    type = "response.output_item.added",
+                    sequence_number = 1,
+                    output_index = 0,
                     item = new { type = "function_call", id = "fc_test", call_id = "call_test", name = "update_epic_form", arguments = "", status = "in_progress" }
                 });
                 await SendEventAsync("response.function_call_arguments.delta", new
                 {
-                    type = "response.function_call_arguments.delta", sequence_number = 2,
-                    item_id = "fc_test", output_index = 0, delta = response.output[0].arguments
+                    type = "response.function_call_arguments.delta",
+                    sequence_number = 2,
+                    item_id = "fc_test",
+                    output_index = 0,
+                    delta = response.output[0].arguments
                 });
                 await SendEventAsync("response.function_call_arguments.done", new
                 {
-                    type = "response.function_call_arguments.done", sequence_number = 3,
-                    item_id = "fc_test", output_index = 0, arguments = response.output[0].arguments
+                    type = "response.function_call_arguments.done",
+                    sequence_number = 3,
+                    item_id = "fc_test",
+                    output_index = 0,
+                    arguments = response.output[0].arguments
                 });
                 await SendEventAsync("response.output_item.done", new
                 {
-                    type = "response.output_item.done", sequence_number = 4, output_index = 0, item = response.output[0]
+                    type = "response.output_item.done",
+                    sequence_number = 4,
+                    output_index = 0,
+                    item = response.output[0]
                 });
                 await SendEventAsync("response.completed", new { type = "response.completed", sequence_number = 5, response });
             }

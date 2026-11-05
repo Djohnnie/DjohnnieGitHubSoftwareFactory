@@ -73,7 +73,10 @@ public sealed record AgentDefinition
     /// <summary>Frontmatter keys this app does not edit; they are written back unchanged.</summary>
     public IReadOnlyList<string> PreservedKeys { get; internal set; } = [];
 
-    public static string GetPath(string fileName) => $"{Directory}/{fileName}{FileExtension}";
+    public static string GetPath(string fileName)
+    {
+        return $"{Directory}/{fileName}{FileExtension}";
+    }
 
     /// <summary>Gets the agent's file name without directory and <c>.agent.md</c>/<c>.md</c> extension.</summary>
     public static string GetFileName(string path)
@@ -108,9 +111,11 @@ public sealed record AgentDefinition
         return slug.Trim('-', '.');
     }
 
-    public static bool IsValidFileName(string? value) =>
-        !string.IsNullOrEmpty(value)
-        && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
-        && !value.StartsWith('.')
-        && !value.EndsWith('.');
+    public static bool IsValidFileName(string? value)
+    {
+        return !string.IsNullOrEmpty(value)
+            && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+            && !value.StartsWith('.')
+            && !value.EndsWith('.');
+    }
 }

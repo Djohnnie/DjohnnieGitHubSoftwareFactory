@@ -6,5 +6,8 @@ public sealed record AssistantTools
 {
     internal IList<AITool> Tools { get; }
 
-    internal AssistantTools(IList<AITool> tools) => Tools = tools;
+    internal AssistantTools(IList<AITool> tools)
+    {
+        Tools = tools;
+    }
 }

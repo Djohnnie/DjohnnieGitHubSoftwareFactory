@@ -2,11 +2,11 @@ using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AgentTemplates;
-using Djohnnie.SoftwareFactory.DataAccess.Sql;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 
-public class AgentTemplateWorkflow(AgentTemplateStore store, GitHubApiClient gitHub)
+public class AgentTemplateWorkflow(IAgentTemplateStore store, GitHubApiClient gitHub)
 {
     /// <summary>Creates (<paramref name="id"/> 0) or updates a template from an agent definition.</summary>
     /// <exception cref="FormatException">The agent cannot be serialized (for example invalid MCP server YAML).</exception>
@@ -93,5 +93,8 @@ public class AgentTemplateWorkflow(AgentTemplateStore store, GitHubApiClient git
         }
     }
 
-    private static string Normalize(string content) => content.Replace("\r\n", "\n").TrimEnd();
+    private static string Normalize(string content)
+    {
+        return content.Replace("\r\n", "\n").TrimEnd();
+    }
 }

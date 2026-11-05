@@ -32,7 +32,10 @@ public class AgentEditorTests : BunitContext, IAsyncLifetime
     private readonly FakeGitHub _gitHub = new();
     private ScriptedChatClient? _chatClient;
 
-    ValueTask IAsyncLifetime.InitializeAsync() => ValueTask.CompletedTask;
+    ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 
     public AgentEditorTests()
     {
@@ -114,10 +117,12 @@ public class AgentEditorTests : BunitContext, IAsyncLifetime
             Encoding.UTF8.GetString(Convert.FromBase64String(body.RootElement.GetProperty("content").GetString()!)));
     }
 
-    private Task SelectRepositoryAsync() =>
-        Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
+    private Task SelectRepositoryAsync()
+    {
+        return Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
             1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo",
             null, false, false, false, null, "main", null));
+    }
 
     [Fact]
     public async Task Save_NewAgent_CommitsAgentFileAndReturnsToList()

@@ -57,6 +57,9 @@ public class RepositoryHistoryTests
     private sealed class TestClock : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = new(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
-        public override DateTimeOffset GetUtcNow() => Now;
+        public override DateTimeOffset GetUtcNow()
+        {
+            return Now;
+        }
     }
 }

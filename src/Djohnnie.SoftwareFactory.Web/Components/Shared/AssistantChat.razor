@@ -155,7 +155,10 @@
         }
     }
 
-    private void Cancel() => _cancellation?.Cancel();
+    private void Cancel()
+    {
+        _cancellation?.Cancel();
+    }
 
     private void Reset()
     {
@@ -164,5 +167,8 @@
         _input = null;
     }
 
-    public void Dispose() => _cancellation?.Cancel();
+    public void Dispose()
+    {
+        _cancellation?.Cancel();
+    }
 }

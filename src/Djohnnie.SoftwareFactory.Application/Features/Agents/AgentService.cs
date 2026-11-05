@@ -7,10 +7,14 @@ namespace Djohnnie.SoftwareFactory.Application.Features.Agents;
 public sealed class AgentService(ISender mediator)
 {
     /// <summary>Records the agents currently in the repository and returns the ids of the favorite ones.</summary>
-    public async Task<IReadOnlySet<string>> SyncAsync(string repositoryFullName, IEnumerable<string> fileNames, CancellationToken cancellationToken = default) =>
-        (await mediator.Send(new SyncAgentsCommand(new(repositoryFullName, fileNames.ToList())), cancellationToken)).Dto.Items
+    public async Task<IReadOnlySet<string>> SyncAsync(string repositoryFullName, IEnumerable<string> fileNames, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new SyncAgentsCommand(new(repositoryFullName, fileNames.ToList())), cancellationToken)).Dto.Items
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
-    public async Task SetFavoriteAsync(string repositoryFullName, string fileName, bool isFavorite, CancellationToken cancellationToken = default) =>
+    public async Task SetFavoriteAsync(string repositoryFullName, string fileName, bool isFavorite, CancellationToken cancellationToken = default)
+    {
         await mediator.Send(new SetAgentFavoriteCommand(new(repositoryFullName, fileName, isFavorite)), cancellationToken);
+    }
 }

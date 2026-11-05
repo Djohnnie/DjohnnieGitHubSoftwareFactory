@@ -297,11 +297,14 @@ else if (_epic is not null)
             change => InvokeAsync(() => { change(); StateHasChanged(); }));
     }
 
-    private void SetBreadcrumbs() => _breadcrumbs =
-    [
-        new("Epics", "/epics"),
-        new(_epic is { Id: > 0 } ? _epic.Title : IsNew ? "New" : $"#{Id}", null, disabled: true)
-    ];
+    private void SetBreadcrumbs()
+    {
+        _breadcrumbs =
+        [
+            new("Epics", "/epics"),
+            new(_epic is { Id: > 0 } ? _epic.Title : IsNew ? "New" : $"#{Id}", null, disabled: true)
+        ];
+    }
 
     private async Task<bool> SaveCoreAsync()
     {

@@ -130,5 +130,7 @@ app.MapRazorComponents<App>()
 
 app.Run();
 
-static bool IsLocal(string? url) =>
-    !string.IsNullOrEmpty(url) && url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'));
+static bool IsLocal(string? url)
+{
+    return !string.IsNullOrEmpty(url) && url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'));
+}

@@ -18,45 +18,55 @@ namespace Djohnnie.SoftwareFactory.Application;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services, IConfiguration? configuration = null)
+    extension(IServiceCollection services)
     {
-        services.AddMediatR(options =>
+        public IServiceCollection AddApplication(IConfiguration? configuration = null)
         {
-            options.LicenseKey = configuration?["MediatR:LicenseKey"];
-            options.RegisterServicesFromAssemblyContaining<EpicService>();
-            options.AddOpenBehavior(typeof(ValidationBehavior<,>));
-        });
-        services.AddValidatorsFromAssemblyContaining<EpicService>();
-        services.TryAddSingleton(TimeProvider.System);
-        services.AddSqlStores();
-        services.AddScoped<EpicWorkflow>();
-        services.AddScoped<AgentTemplateWorkflow>();
-        services.AddScoped<AiModelService>();
-        services.AddScoped<EpicService>();
-        services.AddScoped<AgentTemplateService>();
-        services.AddScoped<EpicTemplateService>();
-        services.AddScoped<GitHubService>();
-        services.AddScoped<RepositoryService>();
-        services.AddScoped<AgentService>();
-        services.AddScoped<AssistantService>();
-        services.AddHttpClient<ModelPricingScraper>(client =>
+            services.AddMediatR(options =>
+            {
+                options.LicenseKey = configuration?["MediatR:LicenseKey"];
+                options.RegisterServicesFromAssemblyContaining<EpicService>();
+                options.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            });
+            services.AddValidatorsFromAssemblyContaining<EpicService>();
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddSqlStores();
+            services.AddScoped<EpicWorkflow>();
+            services.AddScoped<AgentTemplateWorkflow>();
+            services.AddScoped<AiModelService>();
+            services.AddScoped<EpicService>();
+            services.AddScoped<AgentTemplateService>();
+            services.AddScoped<EpicTemplateService>();
+            services.AddScoped<GitHubService>();
+            services.AddScoped<RepositoryService>();
+            services.AddScoped<AgentService>();
+            services.AddScoped<AssistantService>();
+            services.AddHttpClient<ModelPricingScraper>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+            services.AddHttpClient<GitHubApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.github.com/");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+                client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+            });
+            return services;
+        }
+
+        public IServiceCollection AddSoftwareFactory(IConfiguration configuration)
         {
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
-            client.Timeout = TimeSpan.FromSeconds(30);
-        });
-        services.AddHttpClient<GitHubApiClient>(client =>
-        {
-            client.BaseAddress = new Uri("https://api.github.com/");
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-            client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
-        });
-        return services;
+            return services.AddApplication(configuration).AddSqlDataAccess(configuration).AddAssistantAgents(configuration);
+        }
     }
 
-    public static IServiceCollection AddSoftwareFactory(this IServiceCollection services, IConfiguration configuration) =>
-        services.AddApplication(configuration).AddSqlDataAccess(configuration).AddAssistantAgents(configuration);
-
-    public static Task MigrateApplicationDatabaseAsync(this IServiceProvider services, CancellationToken cancellationToken = default) =>
-        services.MigrateSqlDatabaseAsync(cancellationToken);
+    extension(IServiceProvider services)
+    {
+        public Task MigrateApplicationDatabaseAsync(CancellationToken cancellationToken = default)
+        {
+            return services.MigrateSqlDatabaseAsync(cancellationToken);
+        }
+    }
 }

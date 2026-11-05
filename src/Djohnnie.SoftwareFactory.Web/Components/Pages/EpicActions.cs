@@ -7,8 +7,10 @@ namespace Djohnnie.SoftwareFactory.Web.Components.Pages;
 /// <summary>Confirmations and feedback shared by the epics list and the epic editor.</summary>
 internal static class EpicActions
 {
-    public static bool IsExpected(Exception ex) =>
-        ex is InvalidOperationException or GitHubApiException or HttpRequestException;
+    public static bool IsExpected(Exception ex)
+    {
+        return ex is InvalidOperationException or GitHubApiException or HttpRequestException;
+    }
 
     public static Task<bool?> ConfirmAcceptAsync(IDialogService dialogs, Epic epic, string repositoryFullName)
     {
@@ -20,12 +22,14 @@ internal static class EpicActions
             yesText: "Accept & assign", cancelText: "Cancel");
     }
 
-    public static Task<bool?> ConfirmDeleteAsync(IDialogService dialogs, Epic epic) =>
-        dialogs.ShowMessageBoxAsync("Delete epic",
+    public static Task<bool?> ConfirmDeleteAsync(IDialogService dialogs, Epic epic)
+    {
+        return dialogs.ShowMessageBoxAsync("Delete epic",
             epic.IssueNumber is { } number
                 ? $"Delete '{epic.Title}' from DGHSF? GitHub issue #{number} is not touched; close it on GitHub if needed."
                 : $"Delete the draft '{epic.Title}'? This cannot be undone.",
             yesText: "Delete", cancelText: "Cancel");
+    }
 
     public static void Report(ISnackbar snackbar, EpicAcceptResult result)
     {

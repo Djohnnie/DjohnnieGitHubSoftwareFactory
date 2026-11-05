@@ -8,7 +8,10 @@ namespace Djohnnie.SoftwareFactory.Application.Features.Assistant;
 public sealed record AssistantTools
 {
     internal AgentInfrastructure.AssistantTools Tools { get; }
-    internal AssistantTools(AgentInfrastructure.AssistantTools tools) => Tools = tools;
+    internal AssistantTools(AgentInfrastructure.AssistantTools tools)
+    {
+        Tools = tools;
+    }
 }
 
 public static class AssistantForms
@@ -19,11 +22,15 @@ public static class AssistantForms
 
     public static AssistantTools ForAgent(
         Func<AgentDefinition> getAgent, Func<string?> getFileName, Action<string>? setFileName,
-        IReadOnlyList<AiModel> models, Func<Action, Task> onUi) =>
-        new(new AgentInfrastructure.AgentFormTools(getAgent, getFileName, setFileName, models, onUi).AsTools());
+        IReadOnlyList<AiModel> models, Func<Action, Task> onUi)
+    {
+        return new(new AgentInfrastructure.AgentFormTools(getAgent, getFileName, setFileName, models, onUi).AsTools());
+    }
 
     public static AssistantTools ForEpic(
         Func<Epic> getEpic, IReadOnlyList<AiModel> models,
-        Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi) =>
-        new(new AgentInfrastructure.EpicFormTools(getEpic, models, loadAgents, onUi).AsTools());
+        Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi)
+    {
+        return new(new AgentInfrastructure.EpicFormTools(getEpic, models, loadAgents, onUi).AsTools());
+    }
 }

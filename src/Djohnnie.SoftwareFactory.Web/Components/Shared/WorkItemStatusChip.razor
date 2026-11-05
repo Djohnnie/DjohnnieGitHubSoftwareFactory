@@ -4,28 +4,37 @@
 @code {
     [Parameter] public WorkItemStatus Status { get; set; }
 
-    public static string LabelOf(WorkItemStatus status) => status switch
+    public static string LabelOf(WorkItemStatus status)
     {
-        WorkItemStatus.Draft => "Draft",
-        WorkItemStatus.Accepted => "Accepted",
-        WorkItemStatus.InProgress => "In progress",
-        WorkItemStatus.Done => "Done",
-        _ => status.ToString()
-    };
+        return status switch
+        {
+            WorkItemStatus.Draft => "Draft",
+            WorkItemStatus.Accepted => "Accepted",
+            WorkItemStatus.InProgress => "In progress",
+            WorkItemStatus.Done => "Done",
+            _ => status.ToString()
+        };
+    }
 
-    private static Color ColorOf(WorkItemStatus status) => status switch
+    private static Color ColorOf(WorkItemStatus status)
     {
-        WorkItemStatus.Accepted => Color.Info,
-        WorkItemStatus.InProgress => Color.Warning,
-        WorkItemStatus.Done => Color.Success,
-        _ => Color.Default
-    };
+        return status switch
+        {
+            WorkItemStatus.Accepted => Color.Info,
+            WorkItemStatus.InProgress => Color.Warning,
+            WorkItemStatus.Done => Color.Success,
+            _ => Color.Default
+        };
+    }
 
-    private static string IconOf(WorkItemStatus status) => status switch
+    private static string IconOf(WorkItemStatus status)
     {
-        WorkItemStatus.Accepted => Icons.Material.Filled.TaskAlt,
-        WorkItemStatus.InProgress => Icons.Material.Filled.SmartToy,
-        WorkItemStatus.Done => Icons.Material.Filled.Done,
-        _ => Icons.Material.Filled.EditNote
-    };
+        return status switch
+        {
+            WorkItemStatus.Accepted => Icons.Material.Filled.TaskAlt,
+            WorkItemStatus.InProgress => Icons.Material.Filled.SmartToy,
+            WorkItemStatus.Done => Icons.Material.Filled.Done,
+            _ => Icons.Material.Filled.EditNote
+        };
+    }
 }

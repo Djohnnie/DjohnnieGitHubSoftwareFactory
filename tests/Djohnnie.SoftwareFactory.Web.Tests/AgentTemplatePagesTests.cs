@@ -25,7 +25,10 @@ namespace Djohnnie.SoftwareFactory.Web.Tests;
 
 public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
 {
-    ValueTask IAsyncLifetime.InitializeAsync() => ValueTask.CompletedTask;
+    ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 
     public AgentTemplatePagesTests()
     {
@@ -156,7 +159,9 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
 
     private sealed class NotFoundHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
     }
 }

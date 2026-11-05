@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,28 +8,34 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddSqlDataAccess(this IServiceCollection services, IConfiguration configuration)
+    extension(IServiceCollection services)
     {
-        services.AddDbContextFactory<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("Database")
-                ?? throw new InvalidOperationException("ConnectionStrings:Database must be configured.")));
-        return services.AddSqlStores();
+        public IServiceCollection AddSqlDataAccess(IConfiguration configuration)
+        {
+            services.AddDbContextFactory<AppDbContext>(options =>
+                options.UseSqlServer(configuration.GetConnectionString("Database")
+                    ?? throw new InvalidOperationException("ConnectionStrings:Database must be configured.")));
+            return services.AddSqlStores();
+        }
+
+        public IServiceCollection AddSqlStores()
+        {
+            services.TryAddScoped<IAiModelStore, AiModelStore>();
+            services.TryAddScoped<IEpicStore, EpicStore>();
+            services.TryAddScoped<IAgentTemplateStore, AgentTemplateStore>();
+            services.TryAddScoped<IEpicTemplateStore, EpicTemplateStore>();
+            services.TryAddScoped<IRepositoryStore, RepositoryStore>();
+            services.TryAddScoped<IAgentStore, AgentStore>();
+            return services;
+        }
     }
 
-    public static IServiceCollection AddSqlStores(this IServiceCollection services)
+    extension(IServiceProvider services)
     {
-        services.TryAddScoped<AiModelStore>();
-        services.TryAddScoped<EpicStore>();
-        services.TryAddScoped<AgentTemplateStore>();
-        services.TryAddScoped<EpicTemplateStore>();
-        services.TryAddScoped<RepositoryStore>();
-        services.TryAddScoped<AgentStore>();
-        return services;
-    }
-
-    public static async Task MigrateSqlDatabaseAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
-    {
-        await using var db = await services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(cancellationToken);
-        await db.Database.MigrateAsync(cancellationToken);
+        public async Task MigrateSqlDatabaseAsync(CancellationToken cancellationToken = default)
+        {
+            await using var db = await services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(cancellationToken);
+            await db.Database.MigrateAsync(cancellationToken);
+        }
     }
 }

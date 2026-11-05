@@ -29,7 +29,10 @@ public class EpicEditorTests : BunitContext, IAsyncLifetime
 {
     private ScriptedChatClient? _chatClient;
 
-    ValueTask IAsyncLifetime.InitializeAsync() => ValueTask.CompletedTask;
+    ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 
     public EpicEditorTests()
     {
@@ -206,14 +209,18 @@ public class EpicEditorTests : BunitContext, IAsyncLifetime
         Assert.Null(epic.Model);
     }
 
-    private Task SelectRepositoryAsync() =>
-        Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
+    private Task SelectRepositoryAsync()
+    {
+        return Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
             1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo",
             null, false, false, false, null, "main", null));
+    }
 
     private sealed class NoAgents : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
     }
 }
