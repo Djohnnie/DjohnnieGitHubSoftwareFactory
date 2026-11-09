@@ -9,7 +9,7 @@ public sealed class SaveGeneratedWorkItemsValidator : AbstractValidator<SaveGene
     public SaveGeneratedWorkItemsValidator()
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
-        RuleFor(request => request.Dto.ParentId).GreaterThan(0);
+        RuleFor(request => request.Dto.ParentId).NotEmpty();
         RuleFor(request => request.Dto.Items).NotEmpty().WithMessage("Select at least one item to save.")
             .Must(items => items.Count <= GeneratedWorkItem.MaxPerRun).WithMessage($"At most {GeneratedWorkItem.MaxPerRun} items can be saved at once.");
         RuleForEach(request => request.Dto.Items).SetValidator(new ContractValidator<GeneratedWorkItem>());

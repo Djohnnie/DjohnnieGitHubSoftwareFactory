@@ -1,6 +1,8 @@
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
 
@@ -27,7 +29,7 @@ public sealed class SqlServerDatabase : IAsyncDisposable
 
     public IDbContextFactory<AppDbContext> Factory { get; }
 
-    public static async Task<SqlServerDatabase> CreateAsync()
+    public static async Task<SqlServerDatabase> CreateAsync(string? targetMigration = null)
     {
         var configured = Environment.GetEnvironmentVariable(ServerVariable);
         var server = string.IsNullOrWhiteSpace(configured) ? OperatingSystem.IsWindows() ? LocalDb : null : configured;
@@ -41,7 +43,7 @@ public sealed class SqlServerDatabase : IAsyncDisposable
         try
         {
             await using var db = database.Factory.CreateDbContext();
-            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await db.GetService<IMigrator>().MigrateAsync(targetMigration, TestContext.Current.CancellationToken);
         }
         catch (SqlException ex) when (string.IsNullOrWhiteSpace(configured))
         {

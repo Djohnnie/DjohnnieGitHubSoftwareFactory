@@ -8,7 +8,7 @@ namespace Djohnnie.SoftwareFactory.Contracts.AgentTemplates;
 /// </summary>
 public sealed record AgentTemplate
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>The default agent file name (without <c>.agent.md</c>); unique across templates.</summary>
     [Required, MaxLength(100)]

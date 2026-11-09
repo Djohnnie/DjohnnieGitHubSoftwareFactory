@@ -9,7 +9,7 @@ public sealed record AiModel
 {
     public const string DefaultTier = "Default";
 
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;

@@ -6,7 +6,7 @@ namespace Djohnnie.SoftwareFactory.Web.Components.Shared;
 
 /// <summary>
 /// URLs and icons per work item type. The work item and template pages each serve all types and read the type
-/// from the first path segment, e.g. <c>/stories/12</c> or <c>/bug-templates/new</c>.
+/// from the first path segment, e.g. <c>/stories/{id}</c> or <c>/bug-templates/new</c>.
 /// </summary>
 public static class WorkItemRoutes
 {
@@ -15,7 +15,7 @@ public static class WorkItemRoutes
         return "/" + Segment(type);
     }
 
-    public static string NewPath(WorkItemType type, int? parentId = null, int? templateId = null)
+    public static string NewPath(WorkItemType type, Guid? parentId = null, Guid? templateId = null)
     {
         var query = new List<string>();
         if (parentId is { } parent)
@@ -29,13 +29,13 @@ public static class WorkItemRoutes
         return $"{ListPath(type)}/new{(query.Count == 0 ? string.Empty : "?" + string.Join('&', query))}";
     }
 
-    public static string ItemPath(WorkItemType type, int id)
+    public static string ItemPath(WorkItemType type, Guid id)
     {
         return $"{ListPath(type)}/{id}";
     }
 
     /// <summary>The page that generates and reviews the child items of a stored item.</summary>
-    public static string GeneratePath(WorkItemType type, int id)
+    public static string GeneratePath(WorkItemType type, Guid id)
     {
         return $"{ItemPath(type, id)}/generate";
     }
@@ -50,7 +50,7 @@ public static class WorkItemRoutes
         return $"{TemplatesPath(type)}/new";
     }
 
-    public static string EditTemplatePath(WorkItemType type, int id)
+    public static string EditTemplatePath(WorkItemType type, Guid id)
     {
         return $"{TemplatesPath(type)}/edit/{id}";
     }
@@ -81,7 +81,7 @@ public static class WorkItemRoutes
     /// current page before its own parameters are updated, or before it is removed: the URL is already the new one while
     /// <paramref name="id"/> is still the old one. Such a combination means nothing and must not be loaded or acted on.
     /// </summary>
-    public static bool IsOutOfStep(Microsoft.AspNetCore.Components.RouteData? routeData, Type page, int? id)
+    public static bool IsOutOfStep(Microsoft.AspNetCore.Components.RouteData? routeData, Type page, Guid? id)
     {
         return routeData is not null && (routeData.PageType != page || !Equals(routeData.RouteValues.GetValueOrDefault("Id"), id));
     }
@@ -92,7 +92,7 @@ public static class WorkItemRoutes
         var path = Uri.TryCreate(uri, UriKind.Absolute, out var absolute) ? absolute.AbsolutePath : uri.Split('?', '#')[0];
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var isItemOrGeneratePath = segments.Length == 2 || (segments.Length == 3 && segments[2].Equals("generate", StringComparison.OrdinalIgnoreCase));
-        return isItemOrGeneratePath && int.TryParse(segments[1], out _)
+        return isItemOrGeneratePath && Guid.TryParse(segments[1], out _)
             && WorkItemTypeRules.All.Any(type => segments[0].Equals(Segment(type), StringComparison.OrdinalIgnoreCase));
     }
 

@@ -34,7 +34,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
 
         model.UpdatedAt = timeProvider.GetUtcNow();
         var entity = model.ToEntity();
-        if (model.Id == 0)
+        if (model.Id == Guid.Empty)
         {
             db.AiModels.Add(entity);
         }
@@ -46,7 +46,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         return entity.ToContract();
     }
 
-    public async Task SetEnabledAsync(int id, bool enabled, CancellationToken cancellationToken = default)
+    public async Task SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var model = await db.AiModels.FindAsync([id], cancellationToken);
@@ -58,7 +58,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         }
     }
 
-    public async Task SetFavoriteAsync(int id, bool isFavorite, CancellationToken cancellationToken = default)
+    public async Task SetFavoriteAsync(Guid id, bool isFavorite, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var model = await db.AiModels.FindAsync([id], cancellationToken);
@@ -69,7 +69,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         }
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var model = await db.AiModels.FindAsync([id], cancellationToken);
@@ -100,7 +100,7 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
             if (match is null)
             {
                 var entity = model.ToEntity();
-                entity.Id = 0;
+                entity.Id = Guid.Empty;
                 entity.UpdatedAt = now;
                 db.AiModels.Add(entity);
                 existing.Add(entity);

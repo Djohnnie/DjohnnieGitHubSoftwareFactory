@@ -11,7 +11,7 @@ public sealed record InternalAgent
     public const int MaxInstructionsLength = 30_000;
     public const int MaxModelLength = 200;
 
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>The fixed identifier, see <see cref="InternalAgentKeys"/>.</summary>
     [Required, MaxLength(100)]

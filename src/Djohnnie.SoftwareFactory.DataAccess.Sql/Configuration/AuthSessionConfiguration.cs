@@ -11,6 +11,8 @@ internal static class AuthSessionConfiguration
         {
             return modelBuilder.Entity<AuthSession>(session =>
             {
+                session.HasIndex(s => s.Key).IsUnique();
+
                 // Expired sessions are removed by expiry time.
                 session.HasIndex(s => s.ExpiresAt);
             });

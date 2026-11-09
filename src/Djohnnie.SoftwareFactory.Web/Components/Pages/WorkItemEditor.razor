@@ -1,13 +1,13 @@
 @page "/epics/new"
-@page "/epics/{Id:int}"
+@page "/epics/{Id:guid}"
 @page "/features/new"
-@page "/features/{Id:int}"
+@page "/features/{Id:guid}"
 @page "/stories/new"
-@page "/stories/{Id:int}"
+@page "/stories/{Id:guid}"
 @page "/bugs/new"
-@page "/bugs/{Id:int}"
+@page "/bugs/{Id:guid}"
 @page "/tasks/new"
-@page "/tasks/{Id:int}"
+@page "/tasks/{Id:guid}"
 @implements IDisposable
 @inject WorkItemService WorkItemService
 @inject WorkItemTemplateService Templates
@@ -84,13 +84,13 @@ else if (_item is not null)
                     @if (IsNew && _templates.Count > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                            <MudSelect T="int" Value="_templateChoiceId" ValueChanged="ChangeTemplateAsync" Label="@($"{_type.DisplayName} template")"
+                            <MudSelect T="Guid" Value="_templateChoiceId" ValueChanged="ChangeTemplateAsync" Label="@($"{_type.DisplayName} template")"
                                        Variant="Variant.Outlined" Disabled="_busy"
                                        HelperText="The default template is proposed, or else the first alphabetically. Choose another or start blank.">
-                                <MudSelectItem T="int" Value="0">No template</MudSelectItem>
+                                <MudSelectItem T="Guid" Value="Guid.Empty">No template</MudSelectItem>
                                 @foreach (var template in _templates)
                                 {
-                                    <MudSelectItem T="int" Value="template.Id">@template.Name</MudSelectItem>
+                                    <MudSelectItem T="Guid" Value="template.Id">@template.Name</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudPaper>
@@ -226,17 +226,17 @@ else if (_item is not null)
                             <MudText Typo="Typo.h6">Part of</MudText>
                             @if (_item.IsDraft)
                             {
-                                <MudSelect T="int?" Variant="Variant.Outlined" @bind-Value="_item.ParentId" Label="Parent"
+                                <MudSelect T="Guid?" Variant="Variant.Outlined" @bind-Value="_item.ParentId" Label="Parent"
                                            Required="_type.RequiresParent" RequiredError="@($"Choose the {ParentNames} this {Name} is part of.")"
                                            Clearable="!_type.RequiresParent" ToStringFunc="ParentLabel" AnchorOrigin="Origin.BottomCenter" MaxHeight="420"
                                            HelperText="@ParentHelp">
                                     @if (!_type.RequiresParent)
                                     {
-                                        <MudSelectItem T="int?" Value="@((int?)null)">Standalone (no parent)</MudSelectItem>
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Standalone (no parent)</MudSelectItem>
                                     }
                                     @foreach (var parent in _parents)
                                     {
-                                        <MudSelectItem T="int?" Value="@parent.Id">
+                                        <MudSelectItem T="Guid?" Value="@parent.Id">
                                             <MudText Typo="Typo.body2">
                                                 <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-1" />
                                                 @parent.Title
@@ -330,9 +330,9 @@ else if (_item is not null)
 }
 
 @code {
-    [Parameter] public int? Id { get; set; }
-    [SupplyParameterFromQuery(Name = "template")] public int? TemplateId { get; set; }
-    [SupplyParameterFromQuery(Name = "parent")] public int? ParentIdQuery { get; set; }
+    [Parameter] public Guid? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "template")] public Guid? TemplateId { get; set; }
+    [SupplyParameterFromQuery(Name = "parent")] public Guid? ParentIdQuery { get; set; }
 
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
@@ -361,10 +361,10 @@ else if (_item is not null)
     private List<WorkItemTemplate> _templates = [];
     private List<WorkItem> _parents = [];
     private List<WorkItem> _children = [];
-    private int _selectedTemplateId;
-    private int _templateChoiceId;
+    private Guid _selectedTemplateId;
+    private Guid _templateChoiceId;
     private bool _initialized;
-    private (WorkItemType Type, int? Id, int? TemplateId, int? ParentId) _loadedParameters;
+    private (WorkItemType Type, Guid? Id, Guid? TemplateId, Guid? ParentId) _loadedParameters;
 
     private bool IsNew => Id is null;
     private string Name => WorkItemActions.Name(_type);
@@ -406,7 +406,7 @@ else if (_item is not null)
         }
     }
 
-    private string BreadcrumbCurrent => _item is { Id: > 0 } ? _item.Title : IsNew ? "New" : $"#{Id}";
+    private string BreadcrumbCurrent => _item is not null && _item.Id != Guid.Empty ? _item.Title : IsNew ? "New" : "…";
 
     private string ParentHelp => _type.RequiresParent
         ? $"Every {Name} is part of {(_type.ParentTypes[0] == WorkItemType.Epic ? "an" : "a")} {ParentNames}; its issue becomes a sub-issue of the parent's issue."
@@ -450,8 +450,8 @@ else if (_item is not null)
         _templates = [];
         _parents = [];
         _children = [];
-        _selectedTemplateId = 0;
-        _templateChoiceId = 0;
+        _selectedTemplateId = Guid.Empty;
+        _templateChoiceId = Guid.Empty;
         try
         {
             _item = IsNew
@@ -527,7 +527,7 @@ else if (_item is not null)
             {
                 Snackbar.Add($"The requested {Name} template no longer exists. Start blank or choose another template.", Severity.Warning);
             }
-            _selectedTemplateId = template?.Id ?? 0;
+            _selectedTemplateId = template?.Id ?? Guid.Empty;
             _templateChoiceId = _selectedTemplateId;
             _item!.Description = template?.Description ?? string.Empty;
         }
@@ -537,7 +537,7 @@ else if (_item is not null)
         }
     }
 
-    private async Task ChangeTemplateAsync(int templateId)
+    private async Task ChangeTemplateAsync(Guid templateId)
     {
         _templateChoiceId = templateId;
         if (templateId == _selectedTemplateId)
@@ -721,7 +721,7 @@ else if (_item is not null)
         CancelModelSuggestion();
     }
 
-    private string ParentLabel(int? parentId)
+    private string ParentLabel(Guid? parentId)
     {
         if (parentId is null)
         {
@@ -740,7 +740,7 @@ else if (_item is not null)
             return false;
         }
 
-        var wasNew = _item!.Id == 0;
+        var wasNew = _item!.Id == Guid.Empty;
         _item = await WorkItemService.SaveAsync(_item);
         if (wasNew)
         {
@@ -914,7 +914,7 @@ else if (_item is not null)
 
     private async Task ReloadAsync()
     {
-        if (_item is { Id: > 0 } && await WorkItemService.GetAsync(RepositoryName, _item.Id) is { } fresh)
+        if (_item is not null && _item.Id != Guid.Empty && await WorkItemService.GetAsync(RepositoryName, _item.Id) is { } fresh)
         {
             _item = fresh;
         }

@@ -3,11 +3,9 @@ using Djohnnie.SoftwareFactory.Contracts.Assistant;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>One message of a Copilot conversation.</summary>
-public sealed class ChatMessage
+public sealed class ChatMessage : Entity
 {
-    public long Id { get; set; }
-
-    public int ConversationId { get; set; }
+    public Guid ConversationId { get; set; }
     public ChatConversation Conversation { get; set; } = null!;
 
     /// <summary>The position in the conversation; unique within it.</summary>

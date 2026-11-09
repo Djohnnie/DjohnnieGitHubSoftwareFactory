@@ -6,6 +6,6 @@ public sealed class DeleteModelValidator : AbstractValidator<DeleteModelCommand>
 {
     public DeleteModelValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

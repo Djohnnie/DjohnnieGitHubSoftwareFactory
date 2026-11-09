@@ -11,17 +11,17 @@ public sealed class AgentTemplateService(ISender mediator)
         return (await mediator.Send(new GetTemplatesQuery(new()), cancellationToken)).Dto.Items.ToList();
     }
 
-    public async Task<AgentTemplate?> GetAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<AgentTemplate?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetTemplateQuery(new(id)), cancellationToken)).Dto;
     }
 
-    public async Task<AgentTemplate> SaveAsync(int id, string fileName, AgentDefinition agent, CancellationToken cancellationToken = default)
+    public async Task<AgentTemplate> SaveAsync(Guid id, string fileName, AgentDefinition agent, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveTemplateCommand(new(id, fileName, agent)), cancellationToken)).Dto;
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new DeleteTemplateCommand(new(id)), cancellationToken);
     }

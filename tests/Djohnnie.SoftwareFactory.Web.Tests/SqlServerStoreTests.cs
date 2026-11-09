@@ -132,7 +132,7 @@ public class SqlServerStoreTests
         Assert.Empty(await db.AuthSessions.ToListAsync(_cancellationToken));
     }
 
-    private Task<WorkItem> SaveAsync(WorkItemStore store, WorkItemType type, string title, int? parentId = null)
+    private Task<WorkItem> SaveAsync(WorkItemStore store, WorkItemType type, string title, Guid? parentId = null)
     {
         return store.SaveAsync(new WorkItem
         {

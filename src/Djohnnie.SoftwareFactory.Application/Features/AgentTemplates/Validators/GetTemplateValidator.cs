@@ -6,6 +6,6 @@ public sealed class GetTemplateValidator : AbstractValidator<GetTemplateQuery>
 {
     public GetTemplateValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

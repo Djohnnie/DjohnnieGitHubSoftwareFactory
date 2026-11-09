@@ -4,17 +4,15 @@ using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>An epic, feature, user story, bug or task of one repository.</summary>
-public class WorkItem
+public class WorkItem : Entity
 {
-    public int Id { get; set; }
-
-    public int RepositoryId { get; set; }
+    public Guid RepositoryId { get; set; }
     public Repository Repository { get; set; } = null!;
 
     public WorkItemType Type { get; set; }
 
     /// <summary>The parent epic, feature or story; always in the same repository.</summary>
-    public int? ParentId { get; set; }
+    public Guid? ParentId { get; set; }
     public WorkItem? Parent { get; set; }
     public List<WorkItem> Children { get; set; } = [];
 

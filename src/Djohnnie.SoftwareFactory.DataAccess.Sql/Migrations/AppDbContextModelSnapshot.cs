@@ -24,11 +24,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Agent", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -38,10 +36,22 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.Property<bool>("IsFavorite")
                         .HasColumnType("bit");
 
-                    b.Property<int>("RepositoryId")
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("RepositoryId", "FileName")
                         .IsUnique();
@@ -51,11 +61,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentTemplate", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Content")
                         .IsRequired()
@@ -79,10 +87,22 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("FileName")
                         .IsUnique();
@@ -92,11 +112,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AiModel", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal?>("CacheWritePrice")
                         .HasPrecision(18, 4)
@@ -146,6 +164,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.Property<string>("Threshold")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -160,6 +184,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
                     b.HasKey("Id");
 
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
+
                     b.HasIndex("ModelId");
 
                     b.HasIndex("Name", "Tier")
@@ -170,37 +200,55 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AuthSession", b =>
                 {
-                    b.Property<string>("Key")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
 
                     b.Property<byte[]>("Ticket")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
 
-                    b.HasKey("Key");
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
 
                     b.ToTable("AuthSessions");
                 });
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("uniqueidentifier");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("uniqueidentifier");
 
-                    b.Property<int?>("AgentId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("AgentTemplateId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("AgentTemplateId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset?>("ClosedAt")
                         .HasColumnType("datetimeoffset");
@@ -213,19 +261,31 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<int?>("RepositoryId")
+                    b.Property<Guid?>("RepositoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<int?>("WorkItemId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("WorkItemId")
+                        .HasColumnType("uniqueidentifier");
 
-                    b.Property<int?>("WorkItemTemplateId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("WorkItemTemplateId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("AgentId")
                         .IsUnique()
@@ -255,14 +315,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatMessage", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("uniqueidentifier");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("ConversationId")
-                        .HasColumnType("int");
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -282,7 +340,19 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("int");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("ConversationId", "Sequence")
                         .IsUnique();
@@ -292,11 +362,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgent", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -334,10 +402,22 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("Key")
                         .IsUnique();
@@ -347,11 +427,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -369,7 +447,19 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("FullName")
                         .IsUnique();
@@ -381,11 +471,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset?>("AcceptIssueSince")
                         .HasColumnType("datetimeoffset");
@@ -434,15 +522,21 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int?>("ParentId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("RepositoryId")
-                        .HasColumnType("int");
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
                         .HasColumnType("int");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -457,6 +551,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
                     b.HasKey("Id");
 
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
+
                     b.HasIndex("ParentId");
 
                     b.HasIndex("RepositoryId", "Type", "Status");
@@ -466,11 +566,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItemTemplate", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -488,6 +586,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
                     b.Property<string>("TitleTemplate")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -500,6 +604,12 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
                     b.HasIndex("Type");
 

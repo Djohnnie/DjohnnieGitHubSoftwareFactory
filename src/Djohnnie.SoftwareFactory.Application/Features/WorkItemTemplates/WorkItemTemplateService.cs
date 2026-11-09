@@ -12,7 +12,7 @@ public sealed class WorkItemTemplateService(ISender mediator)
         return (await mediator.Send(new GetWorkItemTemplatesQuery(new(type)), cancellationToken)).Dto.Items.ToList();
     }
 
-    public async Task<WorkItemTemplate?> GetAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemTemplate?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetWorkItemTemplateQuery(new(id)), cancellationToken)).Dto;
     }
@@ -22,7 +22,7 @@ public sealed class WorkItemTemplateService(ISender mediator)
         return (await mediator.Send(new SaveWorkItemTemplateCommand(new(template)), cancellationToken)).Dto;
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new DeleteWorkItemTemplateCommand(new(id)), cancellationToken);
     }

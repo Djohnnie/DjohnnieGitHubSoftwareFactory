@@ -39,7 +39,7 @@ public class WorkItemTemplateTests : BunitContext
             TitleTemplate = " Add [capability] ",
             Description = "## Goal\n\n<!-- Describe the goal -->\n\n## Acceptance criteria\n- [ ] Done\n"
         }, TestContext.Current.CancellationToken);
-        Assert.True(template.Id > 0);
+        Assert.NotEqual(Guid.Empty, template.Id);
         Assert.Equal("Feature", template.Name);
         Assert.Equal("Add [capability]", template.TitleTemplate);
         var loaded = await service.GetAsync(template.Id, TestContext.Current.CancellationToken);

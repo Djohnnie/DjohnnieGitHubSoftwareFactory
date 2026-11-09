@@ -61,7 +61,7 @@ public class AgentEditorTests : BunitContext, IAsyncLifetime
     public async Task NewAgentFromTemplate_PrefillsTheFormAndCommitsTheTemplate()
     {
         await SelectRepositoryAsync();
-        var template = await Services.GetRequiredService<AgentTemplateService>().SaveAsync(0, "reviewer", new AgentDefinition { Name = "Code Reviewer", Description = "Reviews code.", Prompt = "Review carefully.", Tools = ["read"], ToolsMode = AgentToolsMode.Selected }, Xunit.TestContext.Current.CancellationToken);
+        var template = await Services.GetRequiredService<AgentTemplateService>().SaveAsync(Guid.Empty, "reviewer", new AgentDefinition { Name = "Code Reviewer", Description = "Reviews code.", Prompt = "Review carefully.", Tools = ["read"], ToolsMode = AgentToolsMode.Selected }, Xunit.TestContext.Current.CancellationToken);
         Render<MudPopoverProvider>();
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/agents/new?template={template.Id}");
 

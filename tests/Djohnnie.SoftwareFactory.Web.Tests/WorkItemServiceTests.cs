@@ -65,7 +65,7 @@ public partial class WorkItemServiceTests : IDisposable
         var gitHub = _services.GetRequiredService<GitHubService>();
 
         await Assert.ThrowsAsync<ValidationFailedException>(() => _service.GetAllAsync(name, cancellationToken: _cancellationToken));
-        await Assert.ThrowsAsync<ValidationFailedException>(() => _service.AcceptAsync(name, 1, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => _service.AcceptAsync(name, Guid.NewGuid(), _cancellationToken));
         await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.GetFileAsync(name, "README.md", _cancellationToken));
         await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.GetDirectoryAsync(name, "", _cancellationToken));
         await Assert.ThrowsAsync<ValidationFailedException>(() => gitHub.PutFileAsync(name, "README.md", "content", "message", null, _cancellationToken));
@@ -332,7 +332,7 @@ public partial class WorkItemServiceTests : IDisposable
 
         await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Title = new string('x', 257) }), _cancellationToken));
         await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new SaveWorkItemCommand(new WorkItem { RepositoryFullName = Repo, Type = (WorkItemType)42, Title = "Bad type" }), _cancellationToken));
-        await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new AcceptWorkItemCommand(new("", 1)), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => mediator.Send(new AcceptWorkItemCommand(new("", Guid.NewGuid())), _cancellationToken));
 
         Assert.Empty((await mediator.Send(new GetWorkItemsQuery(new(Repo)), _cancellationToken)).Dto.Items);
         Assert.Empty(_gitHub.Requests);
@@ -352,7 +352,7 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Null(otherRepository);
     }
 
-    private Task<WorkItem> SaveAsync(WorkItemType type, string title, int? parentId = null, string? customAgent = null)
+    private Task<WorkItem> SaveAsync(WorkItemType type, string title, Guid? parentId = null, string? customAgent = null)
     {
         return _service.SaveAsync(new WorkItem
         {

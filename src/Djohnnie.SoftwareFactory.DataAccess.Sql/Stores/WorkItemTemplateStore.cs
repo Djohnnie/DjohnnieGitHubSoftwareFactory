@@ -11,11 +11,11 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var templates = await db.WorkItemTemplates.AsNoTracking().Where(t => t.Type == type).ToListAsync(cancellationToken);
-        return templates.Select(t => t.ToContract())
-            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).ToList();
+        return templates.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.SysId)
+            .Select(t => t.ToContract()).ToList();
     }
 
-    public async Task<WorkItemTemplate?> GetAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemTemplate?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var template = await db.WorkItemTemplates.AsNoTracking().SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
@@ -26,7 +26,7 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
-        var template = value.Id == 0
+        var template = value.Id == Guid.Empty
             ? new Entities.WorkItemTemplate { Type = value.Type, CreatedAt = now }
             : await db.WorkItemTemplates.SingleOrDefaultAsync(t => t.Id == value.Id, cancellationToken)
                 ?? throw new DomainRuleException("The template no longer exists.");
@@ -35,7 +35,7 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
         template.Description = value.Description;
         template.IsDefault = value.IsDefault;
         template.UpdatedAt = now;
-        if (value.Id == 0)
+        if (value.Id == Guid.Empty)
         {
             db.WorkItemTemplates.Add(template);
         }
@@ -49,7 +49,7 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
         return template.ToContract();
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var template = await db.WorkItemTemplates.SingleOrDefaultAsync(t => t.Id == id, cancellationToken);

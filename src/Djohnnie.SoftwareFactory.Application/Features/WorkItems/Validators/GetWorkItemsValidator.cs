@@ -9,6 +9,6 @@ public sealed class GetWorkItemsValidator : AbstractValidator<GetWorkItemsQuery>
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
         RuleForEach(request => request.Dto.Types).IsInEnum();
-        RuleFor(request => request.Dto.ParentId).GreaterThan(0).When(request => request.Dto.ParentId is not null);
+        RuleFor(request => request.Dto.ParentId).NotEmpty().When(request => request.Dto.ParentId is not null);
     }
 }

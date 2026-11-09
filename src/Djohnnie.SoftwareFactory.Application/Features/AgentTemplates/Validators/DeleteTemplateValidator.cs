@@ -6,6 +6,6 @@ public sealed class DeleteTemplateValidator : AbstractValidator<DeleteTemplateCo
 {
     public DeleteTemplateValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

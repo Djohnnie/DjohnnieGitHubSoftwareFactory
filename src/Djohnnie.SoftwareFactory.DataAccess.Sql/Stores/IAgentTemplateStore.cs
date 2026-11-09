@@ -6,9 +6,9 @@ public interface IAgentTemplateStore
 {
     Task<List<AgentTemplate>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    Task<AgentTemplate?> GetAsync(int id, CancellationToken cancellationToken = default);
+    Task<AgentTemplate?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<AgentTemplate> SaveAsync(AgentTemplate value, CancellationToken cancellationToken = default);
 
-    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

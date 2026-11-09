@@ -6,7 +6,6 @@ public sealed class ModelValidator : AbstractValidator<Djohnnie.SoftwareFactory.
 {
     public ModelValidator()
     {
-        RuleFor(model => model.Id).GreaterThanOrEqualTo(0);
         RuleFor(model => model.Name).NotEmpty().MaximumLength(100);
         RuleFor(model => model.ModelId).NotEmpty().MaximumLength(100);
         RuleFor(model => model.Provider).MaximumLength(100);

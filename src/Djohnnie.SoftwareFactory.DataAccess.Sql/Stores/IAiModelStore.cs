@@ -10,11 +10,11 @@ public interface IAiModelStore
 
     Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default);
 
-    Task SetEnabledAsync(int id, bool enabled, CancellationToken cancellationToken = default);
+    Task SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken = default);
 
-    Task SetFavoriteAsync(int id, bool isFavorite, CancellationToken cancellationToken = default);
+    Task SetFavoriteAsync(Guid id, bool isFavorite, CancellationToken cancellationToken = default);
 
-    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Adds new models and refreshes pricing details of existing ones (matched on name and tier).

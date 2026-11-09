@@ -41,12 +41,12 @@ public class AgentTemplateServiceTests : IDisposable
     [Fact]
     public async Task Save_StoresTheAgentFileAndRejectsADuplicateFileName()
     {
-        var template = await _service.SaveAsync(0, "reviewer", new AgentDefinition { Description = "Reviews code.", Prompt = "Review carefully." }, TestContext.Current.CancellationToken);
+        var template = await _service.SaveAsync(Guid.Empty, "reviewer", new AgentDefinition { Description = "Reviews code.", Prompt = "Review carefully." }, TestContext.Current.CancellationToken);
 
         Assert.Equal("reviewer", template.Name);
         Assert.Equal("---\ndescription: Reviews code.\n---\n\nReview carefully.\n", template.Content);
         var error = await Assert.ThrowsAsync<DomainRuleException>(() =>
-            _service.SaveAsync(0, "reviewer", new AgentDefinition { Name = "Other", Description = "Other." }, TestContext.Current.CancellationToken));
+            _service.SaveAsync(Guid.Empty, "reviewer", new AgentDefinition { Name = "Other", Description = "Other." }, TestContext.Current.CancellationToken));
         Assert.Contains("already uses the file name 'reviewer'", error.Message);
 
         var renamed = await _service.SaveAsync(template.Id, "reviewer", new AgentDefinition { Name = "Code Reviewer", Description = "Reviews code." }, TestContext.Current.CancellationToken);
@@ -57,7 +57,7 @@ public class AgentTemplateServiceTests : IDisposable
     [Fact]
     public async Task Apply_CreatesMissingAgentsAndOnlyReplacesDifferentFilesWhenAllowed()
     {
-        var template = await _service.SaveAsync(0, "reviewer", new AgentDefinition { Description = "Reviews code.", Prompt = "Review carefully." }, TestContext.Current.CancellationToken);
+        var template = await _service.SaveAsync(Guid.Empty, "reviewer", new AgentDefinition { Description = "Reviews code.", Prompt = "Review carefully." }, TestContext.Current.CancellationToken);
         _gitHub.Files["o/same"] = template.Content.Replace("\n", "\r\n");
         _gitHub.Files["o/different"] = "---\ndescription: Old.\n---\n";
         _gitHub.Failing.Add("o/broken");

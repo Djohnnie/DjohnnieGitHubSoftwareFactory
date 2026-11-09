@@ -208,7 +208,7 @@
                 }
             }
 
-            var template = await Templates.SaveAsync(existing?.Id ?? 0, fileName, row.Agent!);
+            var template = await Templates.SaveAsync(existing?.Id ?? Guid.Empty, fileName, row.Agent!);
             Snackbar.Add($"Saved '{template.Name}' as a template.", Severity.Success);
             Navigation.NavigateTo($"/agent-templates/edit/{template.Id}");
         }

@@ -6,10 +6,8 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 /// A reusable custom agent profile, stored in the app's database instead of a repository.
 /// It is used to create the same agent in one or more repositories.
 /// </summary>
-public class AgentTemplate
+public class AgentTemplate : Entity
 {
-    public int Id { get; set; }
-
     /// <summary>The default agent file name (without <c>.agent.md</c>); unique across templates.</summary>
     [Required, MaxLength(100)]
     public string FileName { get; set; } = string.Empty;

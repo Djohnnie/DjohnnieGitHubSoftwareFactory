@@ -6,6 +6,6 @@ public sealed class SetModelEnabledValidator : AbstractValidator<SetModelEnabled
 {
     public SetModelEnabledValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

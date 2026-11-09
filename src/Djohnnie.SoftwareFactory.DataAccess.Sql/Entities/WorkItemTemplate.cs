@@ -3,10 +3,8 @@ using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
-public class WorkItemTemplate
+public class WorkItemTemplate : Entity
 {
-    public int Id { get; set; }
-
     public WorkItemType Type { get; set; }
 
     [Required, MaxLength(200)]

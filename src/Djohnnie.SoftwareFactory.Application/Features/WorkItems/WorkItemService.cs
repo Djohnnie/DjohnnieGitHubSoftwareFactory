@@ -7,12 +7,12 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 public sealed class WorkItemService(ISender mediator)
 {
     /// <summary>The items of a repository, optionally only of some types and/or the children of one parent.</summary>
-    public async Task<List<WorkItem>> GetAllAsync(string repositoryFullName, IReadOnlyList<WorkItemType>? types = null, int? parentId = null, CancellationToken cancellationToken = default)
+    public async Task<List<WorkItem>> GetAllAsync(string repositoryFullName, IReadOnlyList<WorkItemType>? types = null, Guid? parentId = null, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetWorkItemsQuery(new(repositoryFullName, types, parentId)), cancellationToken)).Dto.Items.ToList();
     }
 
-    public async Task<WorkItem?> GetAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItem?> GetAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetWorkItemQuery(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
@@ -22,7 +22,7 @@ public sealed class WorkItemService(ISender mediator)
         return (await mediator.Send(new SaveWorkItemCommand(item), cancellationToken)).Dto;
     }
 
-    public async Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new DeleteWorkItemCommand(new(repositoryFullName, id)), cancellationToken);
     }
@@ -31,7 +31,7 @@ public sealed class WorkItemService(ISender mediator)
     /// Creates the labelled GitHub issue, links it to its parent and children as sub-issues and, for stories,
     /// bugs and tasks, assigns the Copilot cloud agent.
     /// </summary>
-    public async Task<WorkItemAcceptResult> AcceptAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemAcceptResult> AcceptAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new AcceptWorkItemCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
@@ -44,18 +44,18 @@ public sealed class WorkItemService(ISender mediator)
     }
 
     /// <summary>Lets the Work Item Breakdown agent propose the children of a stored epic, feature or user story; nothing is stored.</summary>
-    public async Task<GeneratedChildWorkItems> GenerateChildrenAsync(string repositoryFullName, int parentId, CancellationToken cancellationToken = default)
+    public async Task<GeneratedChildWorkItems> GenerateChildrenAsync(string repositoryFullName, Guid parentId, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GenerateChildWorkItemsQuery(new(repositoryFullName, parentId)), cancellationToken)).Dto;
     }
 
     /// <summary>Saves proposed children as drafts under their parent, all or none.</summary>
-    public async Task<List<WorkItem>> SaveGeneratedChildrenAsync(string repositoryFullName, int parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
+    public async Task<List<WorkItem>> SaveGeneratedChildrenAsync(string repositoryFullName, Guid parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveGeneratedWorkItemsCommand(new(repositoryFullName, parentId, items)), cancellationToken)).Dto.Items.ToList();
     }
 
-    public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new AssignWorkItemAgentCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }

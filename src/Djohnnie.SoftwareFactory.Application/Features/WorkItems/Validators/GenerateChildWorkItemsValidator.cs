@@ -8,6 +8,6 @@ public sealed class GenerateChildWorkItemsValidator : AbstractValidator<Generate
     public GenerateChildWorkItemsValidator()
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
-        RuleFor(request => request.Dto.ParentId).GreaterThan(0);
+        RuleFor(request => request.Dto.ParentId).NotEmpty();
     }
 }

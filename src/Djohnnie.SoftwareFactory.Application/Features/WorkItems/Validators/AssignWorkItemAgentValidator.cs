@@ -8,6 +8,6 @@ public sealed class AssignWorkItemAgentValidator : AbstractValidator<AssignWorkI
     public AssignWorkItemAgentValidator()
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

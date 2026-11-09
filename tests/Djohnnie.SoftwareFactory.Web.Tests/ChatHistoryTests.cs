@@ -154,7 +154,7 @@ public class ChatHistoryTests : BunitContext, IAsyncLifetime
         Assert.DoesNotContain(_chatClient.Requests[^1], m => m.Text.Contains("Old question", StringComparison.Ordinal));
 
         await using var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken);
-        var conversations = await db.ChatConversations.Include(c => c.Messages).OrderBy(c => c.Id).ToListAsync(_cancellationToken);
+        var conversations = await db.ChatConversations.Include(c => c.Messages).OrderBy(c => c.SysId).ToListAsync(_cancellationToken);
         Assert.Equal(2, conversations.Count);
         Assert.NotNull(conversations[0].ClosedAt);
         Assert.NotEmpty(conversations[0].Messages);
@@ -184,17 +184,19 @@ public class ChatHistoryTests : BunitContext, IAsyncLifetime
     [Fact]
     public async Task EveryKindOfOwner_KeepsItsOwnConversation()
     {
+        var workItemTemplateId = Guid.NewGuid();
+        var agentTemplateId = Guid.NewGuid();
         var item = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Epic", Description = "D" }, _cancellationToken);
         await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
         {
-            db.WorkItemTemplates.Add(new() { Id = 11, Type = WorkItemType.Bug, Name = "T", TitleTemplate = "T", Description = "D" });
-            db.AgentTemplates.Add(new() { Id = 12, FileName = "t", Name = "T", Content = "C" });
+            db.WorkItemTemplates.Add(new() { Id = workItemTemplateId, Type = WorkItemType.Bug, Name = "T", TitleTemplate = "T", Description = "D" });
+            db.AgentTemplates.Add(new() { Id = agentTemplateId, FileName = "t", Name = "T", Content = "C" });
             await db.SaveChangesAsync(_cancellationToken);
         }
 
         ChatOwner[] owners =
         [
-            ChatOwner.ForWorkItem(Repo, item.Id), ChatOwner.ForWorkItemTemplate(11), ChatOwner.ForAgentTemplate(12),
+            ChatOwner.ForWorkItem(Repo, item.Id), ChatOwner.ForWorkItemTemplate(workItemTemplateId), ChatOwner.ForAgentTemplate(agentTemplateId),
             ChatOwner.ForAgent(Repo, "reviewer.agent.md"), ChatOwner.ForCopilotInstructions(Repo)
         ];
         foreach (var owner in owners)

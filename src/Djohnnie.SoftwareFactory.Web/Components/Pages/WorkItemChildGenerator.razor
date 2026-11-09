@@ -1,6 +1,6 @@
-@page "/epics/{Id:int}/generate"
-@page "/features/{Id:int}/generate"
-@page "/stories/{Id:int}/generate"
+@page "/epics/{Id:guid}/generate"
+@page "/features/{Id:guid}/generate"
+@page "/stories/{Id:guid}/generate"
 @implements IDisposable
 @inject WorkItemService WorkItemService
 @inject RepositoryContext Repository
@@ -71,13 +71,13 @@ else if (_parent is not null && _error is null)
 }
 
 @code {
-    [Parameter] public int Id { get; set; }
+    [Parameter] public Guid Id { get; set; }
 
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
 
     private readonly CancellationTokenSource _cancellation = new();
-    private (WorkItemType Type, int Id)? _loadedParameters;
+    private (WorkItemType Type, Guid Id)? _loadedParameters;
     private WorkItemType _type;
     private WorkItemType _childType;
     private WorkItem? _parent;

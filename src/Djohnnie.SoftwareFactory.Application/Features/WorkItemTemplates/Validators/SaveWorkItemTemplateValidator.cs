@@ -10,7 +10,6 @@ public sealed class SaveWorkItemTemplateValidator : AbstractValidator<SaveWorkIt
         RuleFor(request => request.Dto.Template).NotNull();
         When(request => request.Dto.Template is not null, () =>
         {
-            RuleFor(request => request.Dto.Template.Id).GreaterThanOrEqualTo(0);
             RuleFor(request => request.Dto.Template.Type).IsInEnum();
             RuleFor(request => request.Dto.Template.Name).NotEmpty().MaximumLength(200);
             RuleFor(request => request.Dto.Template.TitleTemplate).NotEmpty().MaximumLength(256);

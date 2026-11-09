@@ -8,6 +8,6 @@ public sealed class AcceptWorkItemValidator : AbstractValidator<AcceptWorkItemCo
     public AcceptWorkItemValidator()
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

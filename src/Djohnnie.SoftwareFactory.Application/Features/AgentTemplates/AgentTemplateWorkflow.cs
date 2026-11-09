@@ -12,7 +12,7 @@ public class AgentTemplateWorkflow(IAgentTemplateStore store, GitHubApiClient gi
     /// <summary>Creates (<paramref name="id"/> 0) or updates a template from an agent definition.</summary>
     /// <exception cref="FormatException">The agent cannot be serialized (for example invalid MCP server YAML).</exception>
     /// <exception cref="DomainRuleException">The file name is invalid or already used by another template.</exception>
-    public async Task<AgentTemplate> SaveAsync(int id, string fileName, AgentDefinition agent, CancellationToken cancellationToken = default)
+    public async Task<AgentTemplate> SaveAsync(Guid id, string fileName, AgentDefinition agent, CancellationToken cancellationToken = default)
     {
         fileName = fileName.Trim();
         if (!AgentDefinition.IsValidFileName(fileName))

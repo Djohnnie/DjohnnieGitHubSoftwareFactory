@@ -15,7 +15,7 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
     /// of the parent's issue and makes the issues of already accepted children its sub-issues. Stories, bugs and tasks
     /// are then assigned to Copilot. Linking or assignment problems are reported in the result; the issue stays.
     /// </summary>
-    public async Task<WorkItemAcceptResult> AcceptAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemAcceptResult> AcceptAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var item = await FindAsync(repositoryFullName, id, cancellationToken);
         var name = item.Type.DisplayName.ToLowerInvariant();
@@ -73,7 +73,7 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
         return await TryAssignAsync(item, cancellationToken) with { HierarchyError = hierarchyError };
     }
 
-    public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var item = await FindAsync(repositoryFullName, id, cancellationToken);
         if (!item.Type.CanBeAssigned)
@@ -204,7 +204,7 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
         return new(await store.MarkAssignedAsync(item.RepositoryFullName, item.Id, cancellationToken), null);
     }
 
-    private async Task<WorkItem> FindAsync(string repositoryFullName, int id, CancellationToken cancellationToken)
+    private async Task<WorkItem> FindAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken)
     {
         return await store.GetAsync(repositoryFullName, id, cancellationToken)
             ?? throw new DomainRuleException("The work item no longer exists.");

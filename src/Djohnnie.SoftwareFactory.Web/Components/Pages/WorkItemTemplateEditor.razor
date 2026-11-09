@@ -1,13 +1,13 @@
 @page "/epic-templates/new"
-@page "/epic-templates/edit/{Id:int}"
+@page "/epic-templates/edit/{Id:guid}"
 @page "/feature-templates/new"
-@page "/feature-templates/edit/{Id:int}"
+@page "/feature-templates/edit/{Id:guid}"
 @page "/story-templates/new"
-@page "/story-templates/edit/{Id:int}"
+@page "/story-templates/edit/{Id:guid}"
 @page "/bug-templates/new"
-@page "/bug-templates/edit/{Id:int}"
+@page "/bug-templates/edit/{Id:guid}"
 @page "/task-templates/new"
-@page "/task-templates/edit/{Id:int}"
+@page "/task-templates/edit/{Id:guid}"
 @attribute [RepositoryIndependent]
 @inject WorkItemTemplateService Templates
 @inject NavigationManager Navigation
@@ -17,7 +17,7 @@
 <PageTitle>@Heading</PageTitle>
 
 <PageBreadcrumbs Parents="@([new($"{_type.DisplayName} templates", WorkItemRoutes.TemplatesPath(_type))])"
-                 Current="@(Id is null ? "New" : _template?.Name ?? $"#{Id}")" BackDisabled="_saving" />
+                 Current="@(Id is null ? "New" : _template?.Name ?? "…")" BackDisabled="_saving" />
 <MudText Typo="Typo.h4" GutterBottom="true">@Heading</MudText>
 
 @if (!_loading && _template is not null)
@@ -80,7 +80,7 @@ else if (_template is not null)
 }
 
 @code {
-    [Parameter] public int? Id { get; set; }
+    [Parameter] public Guid? Id { get; set; }
 
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
@@ -92,7 +92,7 @@ else if (_template is not null)
     private bool _loading = true;
     private bool _saving;
     private string? _error;
-    private (WorkItemType Type, int? Id)? _loadedParameters;
+    private (WorkItemType Type, Guid? Id)? _loadedParameters;
     private AssistantTools? _assistantTools;
 
     private string Name => WorkItemActions.Name(_type);

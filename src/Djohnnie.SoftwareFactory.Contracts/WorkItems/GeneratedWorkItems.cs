@@ -14,7 +14,7 @@ public sealed record GeneratedWorkItem(
 }
 
 /// <summary>Asks the Work Item Breakdown agent to split a stored epic, feature or user story.</summary>
-public sealed record GenerateChildWorkItemsRequest(string RepositoryFullName, int ParentId);
+public sealed record GenerateChildWorkItemsRequest(string RepositoryFullName, Guid ParentId);
 
 /// <param name="ChildType">The type of the proposed items.</param>
 /// <param name="TemplateName">The template the items follow, or <c>null</c> when the child type has no templates.</param>
@@ -22,4 +22,4 @@ public sealed record GenerateChildWorkItemsRequest(string RepositoryFullName, in
 public sealed record GeneratedChildWorkItems(WorkItemType ChildType, string? TemplateName, IReadOnlyList<GeneratedWorkItem> Items);
 
 /// <summary>Saves proposed items as drafts under their parent, all or none.</summary>
-public sealed record SaveGeneratedWorkItemsRequest(string RepositoryFullName, int ParentId, IReadOnlyList<GeneratedWorkItem> Items);
+public sealed record SaveGeneratedWorkItemsRequest(string RepositoryFullName, Guid ParentId, IReadOnlyList<GeneratedWorkItem> Items);

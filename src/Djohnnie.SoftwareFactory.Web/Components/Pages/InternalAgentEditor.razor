@@ -93,7 +93,7 @@ else if (_agent is not null)
                     <MudSwitch T="bool" @bind-Value="_agent.IsEnabled" Color="Color.Primary" Disabled="_saving"
                                Label="@(_agent.IsEnabled ? "Enabled" : "Disabled")" />
                     <MudText Typo="Typo.body2" Color="Color.Secondary">@EnabledHelp</MudText>
-                    @if (_agent.Id != 0)
+                    @if (_agent.Id != Guid.Empty)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
                             Updated @_agent.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")

@@ -20,17 +20,17 @@ public sealed class AiModelService(ISender mediator)
         return (await mediator.Send(new SaveModelCommand(model), cancellationToken)).Dto;
     }
 
-    public async Task SetEnabledAsync(int id, bool enabled, CancellationToken cancellationToken = default)
+    public async Task SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new SetModelEnabledCommand(new(id, enabled)), cancellationToken);
     }
 
-    public async Task SetFavoriteAsync(int id, bool isFavorite, CancellationToken cancellationToken = default)
+    public async Task SetFavoriteAsync(Guid id, bool isFavorite, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new SetModelFavoriteCommand(new(id, isFavorite)), cancellationToken);
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new DeleteModelCommand(new(id)), cancellationToken);
     }

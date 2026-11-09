@@ -5,11 +5,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 /// <summary>
 /// An AI model that can be used by custom agents. Prices are in USD per 1 million tokens.
 /// </summary>
-public class AiModel
+public class AiModel : Entity
 {
     public const string DefaultTier = "Default";
-
-    public int Id { get; set; }
 
     [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;

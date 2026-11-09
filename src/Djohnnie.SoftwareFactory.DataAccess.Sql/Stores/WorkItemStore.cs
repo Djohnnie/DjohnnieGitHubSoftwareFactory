@@ -6,7 +6,7 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvider timeProvider) : IWorkItemStore
 {
-    public async Task<List<WorkItem>> GetAllAsync(string repositoryFullName, IReadOnlyList<WorkItemType>? types = null, int? parentId = null, CancellationToken cancellationToken = default)
+    public async Task<List<WorkItem>> GetAllAsync(string repositoryFullName, IReadOnlyList<WorkItemType>? types = null, Guid? parentId = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var query = Query(db.WorkItems.AsNoTracking(), repositoryFullName);
@@ -23,7 +23,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entities.Select(e => e.ToContract()).ToList();
     }
 
-    public async Task<WorkItem?> GetAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task<WorkItem?> GetAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await Query(db.WorkItems.AsNoTracking(), repositoryFullName)
@@ -35,7 +35,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
-        var entity = item.Id == 0
+        var entity = item.Id == Guid.Empty
             ? new Entities.WorkItem
             {
                 Repository = await db.GetOrAddRepositoryAsync(item.RepositoryFullName, cancellationToken),
@@ -63,7 +63,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.BaseBranch = assignable ? NullIfEmpty(item.BaseBranch) : null;
         entity.CustomInstructions = assignable ? NullIfEmpty(item.CustomInstructions) : null;
         entity.UpdatedAt = now;
-        if (item.Id == 0)
+        if (item.Id == Guid.Empty)
         {
             db.WorkItems.Add(entity);
         }
@@ -71,7 +71,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
-    public async Task<List<WorkItem>> AddGeneratedChildrenAsync(string repositoryFullName, int parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
+    public async Task<List<WorkItem>> AddGeneratedChildrenAsync(string repositoryFullName, Guid parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var parent = await FindAsync(db, repositoryFullName, parentId, cancellationToken);
@@ -96,7 +96,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return children.Select(child => child.ToContract()).ToList();
     }
 
-    public async Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await Query(db.WorkItems, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
@@ -115,7 +115,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<DateTimeOffset?> BeginAcceptAsync(string repositoryFullName, int id, TimeSpan claimTimeout, CancellationToken cancellationToken)
+    public async Task<DateTimeOffset?> BeginAcceptAsync(string repositoryFullName, Guid id, TimeSpan claimTimeout, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
@@ -150,7 +150,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return issueSince;
     }
 
-    public async Task EndFailedAcceptAsync(string repositoryFullName, int id, bool issueMayExist, CancellationToken cancellationToken)
+    public async Task EndFailedAcceptAsync(string repositoryFullName, Guid id, bool issueMayExist, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
@@ -168,7 +168,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<WorkItem> MarkAcceptedAsync(string repositoryFullName, int id, long issueId, int issueNumber, string issueUrl, CancellationToken cancellationToken)
+    public async Task<WorkItem> MarkAcceptedAsync(string repositoryFullName, Guid id, long issueId, int issueNumber, string issueUrl, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
@@ -187,7 +187,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
-    public async Task<WorkItem> MarkAssignedAsync(string repositoryFullName, int id, CancellationToken cancellationToken)
+    public async Task<WorkItem> MarkAssignedAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
@@ -197,7 +197,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
-    public async Task SetIssueIdAsync(string repositoryFullName, int id, long issueId, CancellationToken cancellationToken)
+    public async Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
@@ -205,7 +205,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SetParentAsync(AppDbContext db, Entities.WorkItem entity, string repositoryFullName, int? parentId, CancellationToken cancellationToken)
+    private static async Task SetParentAsync(AppDbContext db, Entities.WorkItem entity, string repositoryFullName, Guid? parentId, CancellationToken cancellationToken)
     {
         if (parentId is null)
         {
@@ -235,7 +235,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return items.Include(e => e.Repository).Include(e => e.Parent).Where(e => e.Repository.FullName == normalized);
     }
 
-    private static async Task<Entities.WorkItem> FindAsync(AppDbContext db, string repositoryFullName, int id, CancellationToken cancellationToken)
+    private static async Task<Entities.WorkItem> FindAsync(AppDbContext db, string repositoryFullName, Guid id, CancellationToken cancellationToken)
     {
         return await Query(db.WorkItems, repositoryFullName).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
             ?? throw new DomainRuleException("The work item no longer exists.");

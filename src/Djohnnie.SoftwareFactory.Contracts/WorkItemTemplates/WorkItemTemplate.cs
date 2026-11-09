@@ -6,7 +6,7 @@ namespace Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 /// <summary>A reusable title example and Markdown skeleton for new work items of one type, shared across repositories.</summary>
 public sealed record WorkItemTemplate
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>Set when the template is created; it cannot change afterwards.</summary>
     public WorkItemType Type { get; set; }

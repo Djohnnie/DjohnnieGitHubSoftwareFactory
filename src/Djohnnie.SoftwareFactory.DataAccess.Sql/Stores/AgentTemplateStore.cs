@@ -13,7 +13,7 @@ public sealed class AgentTemplateStore(IDbContextFactory<AppDbContext> dbFactory
         return templates.Select(t => t.ToContract()).OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public async Task<AgentTemplate?> GetAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<AgentTemplate?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var template = await db.AgentTemplates.AsNoTracking().SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
@@ -29,7 +29,7 @@ public sealed class AgentTemplateStore(IDbContextFactory<AppDbContext> dbFactory
         }
 
         var now = timeProvider.GetUtcNow();
-        var template = value.Id == 0
+        var template = value.Id == Guid.Empty
             ? new Entities.AgentTemplate { CreatedAt = now }
             : await db.AgentTemplates.SingleOrDefaultAsync(t => t.Id == value.Id, cancellationToken)
                 ?? throw new DomainRuleException("The template no longer exists.");
@@ -38,7 +38,7 @@ public sealed class AgentTemplateStore(IDbContextFactory<AppDbContext> dbFactory
         template.Description = value.Description;
         template.Content = value.Content;
         template.UpdatedAt = now;
-        if (value.Id == 0)
+        if (value.Id == Guid.Empty)
         {
             db.AgentTemplates.Add(template);
         }
@@ -46,7 +46,7 @@ public sealed class AgentTemplateStore(IDbContextFactory<AppDbContext> dbFactory
         return template.ToContract();
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var template = await db.AgentTemplates.SingleOrDefaultAsync(t => t.Id == id, cancellationToken);

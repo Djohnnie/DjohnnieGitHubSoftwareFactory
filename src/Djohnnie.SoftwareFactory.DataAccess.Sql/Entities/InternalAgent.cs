@@ -4,10 +4,8 @@ using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>One of DGHSF's own agents; seeded from code, with an editable system prompt.</summary>
-public class InternalAgent
+public class InternalAgent : Entity
 {
-    public int Id { get; set; }
-
     [Required, MaxLength(100)]
     public string Key { get; set; } = string.Empty;
 

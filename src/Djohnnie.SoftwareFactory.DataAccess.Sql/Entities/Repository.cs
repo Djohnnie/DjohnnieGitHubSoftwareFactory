@@ -6,11 +6,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 /// A GitHub repository the app has worked with. Everything that belongs to a repository
 /// (work items, agents, ...) references this row; it cannot be deleted while anything still does.
 /// </summary>
-public sealed class Repository
+public sealed class Repository : Entity
 {
     public const int MaxFullNameLength = 200;
-
-    public int Id { get; set; }
 
     /// <summary>The repository as <c>owner/name</c>, in lower case: GitHub names are case-insensitive.</summary>
     [Required, MaxLength(MaxFullNameLength)]

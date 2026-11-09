@@ -76,7 +76,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>();
 
-        Assert.Equal(template.Id.ToString(), cut.FindComponent<MudSelect<int>>().Find("input").GetAttribute("value"));
+        Assert.Equal(template.Id.ToString(), cut.FindComponent<MudSelect<Guid>>().Find("input").GetAttribute("value"));
         var title = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title");
         Assert.Equal("Add [capability]", title.Instance.Placeholder);
         Assert.Equal(string.Empty, title.Find("input").GetAttribute("value"));
@@ -92,7 +92,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Navigation.NavigateTo($"/epics/{epic.Id}?template={otherTemplate.Id}");
         var existing = Render<WorkItemEditor>(p => p.Add(e => e.Id, epic.Id));
         Assert.Equal(epic.Description, existing.FindComponent<MarkdownEditor>().Instance.Value);
-        Assert.Empty(existing.FindComponents<MudSelect<int>>());
+        Assert.Empty(existing.FindComponents<MudSelect<Guid>>());
     }
 
     [Fact]
@@ -109,22 +109,22 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal(second.Description, cut.FindComponent<MarkdownEditor>().Instance.Value);
         cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Keep my title");
 
-        await cut.InvokeAsync(() => cut.FindComponent<MudSelect<int>>().Instance.SelectOption(value: first.Id));
+        await cut.InvokeAsync(() => cut.FindComponent<MudSelect<Guid>>().Instance.SelectOption(value: first.Id));
         Assert.Equal(first.Description, cut.FindComponent<MarkdownEditor>().Instance.Value);
         Assert.Empty(dialogs.FindAll(".mud-dialog"));
 
         await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("My edited description"));
-        await cut.InvokeAsync(() => { _ = cut.FindComponent<MudSelect<int>>().Instance.SelectOption(value: second.Id); });
+        await cut.InvokeAsync(() => { _ = cut.FindComponent<MudSelect<Guid>>().Instance.SelectOption(value: second.Id); });
         await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Cancel").Click());
         Assert.Equal("My edited description", cut.FindComponent<MarkdownEditor>().Instance.Value);
-        Assert.Equal(first.Id.ToString(), cut.FindComponent<MudSelect<int>>().Find("input").GetAttribute("value"));
+        Assert.Equal(first.Id.ToString(), cut.FindComponent<MudSelect<Guid>>().Find("input").GetAttribute("value"));
 
-        await cut.InvokeAsync(() => { _ = cut.FindComponent<MudSelect<int>>().Instance.SelectOption(value: second.Id); });
+        await cut.InvokeAsync(() => { _ = cut.FindComponent<MudSelect<Guid>>().Instance.SelectOption(value: second.Id); });
         await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Replace").Click());
         Assert.Equal(second.Description, cut.FindComponent<MarkdownEditor>().Instance.Value);
         Assert.Equal("Keep my title", cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").GetAttribute("value"));
 
-        await cut.InvokeAsync(() => cut.FindComponent<MudSelect<int>>().Instance.SelectOption(value: 0));
+        await cut.InvokeAsync(() => cut.FindComponent<MudSelect<Guid>>().Instance.SelectOption(value: Guid.Empty));
         Assert.Empty(cut.FindComponent<MarkdownEditor>().Instance.Value!);
         Assert.Null(cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Instance.Placeholder);
     }
@@ -171,12 +171,12 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         {
             Type = WorkItemType.Epic, Name = "Feature", TitleTemplate = "Example", Description = "## Goal"
         }, _cancellationToken);
-        Navigation.NavigateTo("/epics/new?template=999");
+        Navigation.NavigateTo($"/epics/new?template={Guid.NewGuid()}");
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>();
 
         Assert.Empty(cut.FindComponent<MarkdownEditor>().Instance.Value!);
-        Assert.Equal("0", cut.FindComponent<MudSelect<int>>().Find("input").GetAttribute("value"));
+        Assert.Equal(Guid.Empty.ToString(), cut.FindComponent<MudSelect<Guid>>().Find("input").GetAttribute("value"));
         Assert.Contains(Services.GetRequiredService<ISnackbar>().ShownSnackbars,
             snackbar => snackbar.Message?.ToString()?.Contains("no longer exists") == true);
     }
@@ -190,7 +190,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         var cut = Render<WorkItemEditor>();
         Assert.Contains("DGHSF Copilot is not configured yet", cut.Markup);
         Assert.Empty(cut.FindComponents<AgentPicker>());
-        Assert.Empty(cut.FindComponents<MudSelect<int?>>());
+        Assert.Empty(cut.FindComponents<MudSelect<Guid?>>());
         Assert.Contains("Accept &amp; create issue", cut.Markup);
 
         cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Passkey login");
@@ -213,7 +213,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>();
 
-        var parent = cut.FindComponent<MudSelect<int?>>();
+        var parent = cut.FindComponent<MudSelect<Guid?>>();
         Assert.Equal(feature.Id, parent.Instance.GetState(x => x.Value));
         Assert.True(parent.Instance.Required);
         Assert.Single(cut.FindComponents<AgentPicker>());
@@ -570,7 +570,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         _chatClient = new ScriptedChatClient();
         await SelectRepositoryAsync();
         await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
-        int? parentId = type == WorkItemType.Story ? (await SaveAsync(WorkItemType.Feature, "Feature", (await SaveAsync(WorkItemType.Epic, "Epic")).Id)).Id : null;
+        Guid? parentId = type == WorkItemType.Story ? (await SaveAsync(WorkItemType.Feature, "Feature", (await SaveAsync(WorkItemType.Epic, "Epic")).Id)).Id : null;
         var item = await SaveAsync(type, "Stored", parentId);
         Navigation.NavigateTo(WorkItemRoutes.ItemPath(type, item.Id));
         Render<MudPopoverProvider>();
@@ -649,7 +649,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save selected as draft")).Click());
 
         var saved = Assert.Single(await Items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken));
-        Assert.Equal(("Cart", "## Cart", WorkItemStatus.Draft, (int?)epic.Id), (saved.Title, saved.Description, saved.Status, saved.ParentId));
+        Assert.Equal(("Cart", "## Cart", WorkItemStatus.Draft, (Guid?)epic.Id), (saved.Title, saved.Description, saved.Status, saved.ParentId));
         Assert.EndsWith($"/epics/{epic.Id}", Navigation.Uri);
     }
 
@@ -786,7 +786,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         return navigations;
     }
 
-    private Task<WorkItem> SaveAsync(WorkItemType type, string title, int? parentId = null)
+    private Task<WorkItem> SaveAsync(WorkItemType type, string title, Guid? parentId = null)
     {
         return Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = type, ParentId = parentId, Title = title, Description = "Body" }, _cancellationToken);
     }

@@ -21,7 +21,7 @@ public enum ChatMessageRole
 /// <summary>What a Copilot conversation belongs to; it is shown again when that page is opened again.</summary>
 public sealed record ChatOwner
 {
-    private ChatOwner(ChatOwnerKind kind, string? repositoryFullName = null, int? id = null, string? fileName = null)
+    private ChatOwner(ChatOwnerKind kind, string? repositoryFullName = null, Guid? id = null, string? fileName = null)
     {
         Kind = kind;
         RepositoryFullName = repositoryFullName;
@@ -31,20 +31,20 @@ public sealed record ChatOwner
 
     public ChatOwnerKind Kind { get; }
     public string? RepositoryFullName { get; }
-    public int? Id { get; }
+    public Guid? Id { get; }
     public string? FileName { get; }
 
-    public static ChatOwner ForWorkItem(string repositoryFullName, int id)
+    public static ChatOwner ForWorkItem(string repositoryFullName, Guid id)
     {
         return new(ChatOwnerKind.WorkItem, repositoryFullName, id);
     }
 
-    public static ChatOwner ForWorkItemTemplate(int id)
+    public static ChatOwner ForWorkItemTemplate(Guid id)
     {
         return new(ChatOwnerKind.WorkItemTemplate, id: id);
     }
 
-    public static ChatOwner ForAgentTemplate(int id)
+    public static ChatOwner ForAgentTemplate(Guid id)
     {
         return new(ChatOwnerKind.AgentTemplate, id: id);
     }

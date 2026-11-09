@@ -6,11 +6,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 /// Local data about a custom agent of a repository. The agent itself lives in the repository
 /// (<c>.github/agents/{FileName}.agent.md</c>); this row only keeps what GitHub does not, such as the favorite flag.
 /// </summary>
-public sealed class Agent
+public sealed class Agent : Entity
 {
-    public int Id { get; set; }
-
-    public int RepositoryId { get; set; }
+    public Guid RepositoryId { get; set; }
     public Repository Repository { get; set; } = null!;
 
     /// <summary>The agent id: the file name without <c>.agent.md</c>.</summary>

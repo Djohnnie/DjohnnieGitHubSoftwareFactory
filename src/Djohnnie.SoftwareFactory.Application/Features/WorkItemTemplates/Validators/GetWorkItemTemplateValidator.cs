@@ -6,6 +6,6 @@ public sealed class GetWorkItemTemplateValidator : AbstractValidator<GetWorkItem
 {
     public GetWorkItemTemplateValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

@@ -6,6 +6,6 @@ public sealed class DeleteWorkItemTemplateValidator : AbstractValidator<DeleteWo
 {
     public DeleteWorkItemTemplateValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThan(0);
+        RuleFor(request => request.Dto.Id).NotEmpty();
     }
 }

@@ -10,7 +10,7 @@ public sealed record WorkItem
 {
     public const int MaxDescriptionLength = 60_000;
 
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>The repository the item belongs to, as <c>owner/name</c>.</summary>
     [Required, MaxLength(200)]
@@ -20,7 +20,7 @@ public sealed record WorkItem
     public WorkItemType Type { get; set; }
 
     /// <summary>The parent epic, feature or story in the same repository; see <see cref="WorkItemTypeRules"/>.</summary>
-    public int? ParentId { get; set; }
+    public Guid? ParentId { get; set; }
 
     /// <summary>The stored parent (read only; changing <see cref="ParentId"/> does not update it until saved).</summary>
     public WorkItemReference? Parent { get; set; }
@@ -75,4 +75,4 @@ public sealed record WorkItem
 }
 
 /// <summary>A short reference to another work item, e.g. a parent or child.</summary>
-public sealed record WorkItemReference(int Id, WorkItemType Type, string Title, WorkItemStatus Status, int? IssueNumber, string? IssueUrl);
+public sealed record WorkItemReference(Guid Id, WorkItemType Type, string Title, WorkItemStatus Status, int? IssueNumber, string? IssueUrl);

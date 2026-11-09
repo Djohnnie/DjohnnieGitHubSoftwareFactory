@@ -1,5 +1,5 @@
 @page "/agent-templates/new"
-@page "/agent-templates/edit/{Id:int}"
+@page "/agent-templates/edit/{Id:guid}"
 @attribute [RepositoryIndependent]
 @inject AgentTemplateService Templates
 @inject AiModelService ModelService
@@ -9,7 +9,7 @@
 
 <PageTitle>@(IsNew ? "New agent template" : $"Edit template {_fileName}")</PageTitle>
 
-<PageBreadcrumbs Parents="@([new("Agent templates", "/agent-templates")])" Current="@(IsNew ? "New" : _fileName ?? Id.ToString()!)" BackDisabled="_saving" />
+<PageBreadcrumbs Parents="@([new("Agent templates", "/agent-templates")])" Current="@(IsNew ? "New" : _fileName ?? "…")" BackDisabled="_saving" />
 
 <MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New agent template" : $"Edit template {_title}")</MudText>
 
@@ -63,7 +63,7 @@ else if (_agent is not null)
 }
 
 @code {
-    [Parameter] public int? Id { get; set; }
+    [Parameter] public Guid? Id { get; set; }
 
     private static readonly string[] TemplateSuggestions =
     [
@@ -188,7 +188,7 @@ else if (_agent is not null)
         _saving = true;
         try
         {
-            var template = await Templates.SaveAsync(Id ?? 0, _fileName!, _agent!);
+            var template = await Templates.SaveAsync(Id ?? Guid.Empty, _fileName!, _agent!);
             if (IsNew && _chat is not null)
             {
                 await _chat.AttachAsync(ChatOwner.ForAgentTemplate(template.Id));

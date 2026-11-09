@@ -74,7 +74,7 @@ else if (_agent is not null)
     [Parameter] public string? FileName { get; set; }
 
     /// <summary>The id of an agent template to prefill a new agent with.</summary>
-    [SupplyParameterFromQuery(Name = "template")] public int? TemplateId { get; set; }
+    [SupplyParameterFromQuery(Name = "template")] public Guid? TemplateId { get; set; }
 
     private static readonly string[] AgentSuggestions =
     [

@@ -7,7 +7,6 @@ public sealed class SaveTemplateValidator : AbstractValidator<SaveTemplateComman
 {
     public SaveTemplateValidator()
     {
-        RuleFor(request => request.Dto.Id).GreaterThanOrEqualTo(0);
         RuleFor(request => request.Dto.FileName).Must(name => AgentDefinition.IsValidFileName(name?.Trim()))
             .WithMessage("A valid agent file name is required.").MaximumLength(100);
         RuleFor(request => request.Dto.Agent).NotNull();

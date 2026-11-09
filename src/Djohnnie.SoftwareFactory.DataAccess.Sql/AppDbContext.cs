@@ -44,6 +44,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureAiModel()
             .ConfigureInternalAgent()
             .ConfigureAuthSession()
-            .ConfigureChatConversation();
+            .ConfigureChatConversation()
+            .ConfigureEntityKeys();
     }
 }
