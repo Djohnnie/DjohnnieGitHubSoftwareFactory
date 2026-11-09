@@ -22,6 +22,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 | Project | Responsibility |
 | --- | --- |
 | `Djohnnie.SoftwareFactory.Web` | Blazor UI, GitHub sign-in, the selected repository |
+| `Djohnnie.SoftwareFactory.Sync` | Azure Function that refreshes accepted work items from GitHub on a CRON schedule |
 | `Djohnnie.SoftwareFactory.Application` | MediatR commands and queries per feature, validation, GitHub API client, workflows |
 | `Djohnnie.SoftwareFactory.DataAccess.Sql` | EF Core entities, stores, migrations |
 | `Djohnnie.SoftwareFactory.Agents` | DGHSF's internal agents and their form tools |
@@ -73,6 +74,25 @@ dotnet run --project src/Djohnnie.SoftwareFactory.Web --launch-profile https
 
 In Development, the app applies the EF Core migrations at startup to the database in `ConnectionStrings:Database`. Point it at a local database, not production. Without the `OpenAI` settings the app still works, but the Copilot chats show a setup hint. Without the `Speech` settings the microphone buttons next to the title fields are hidden.
 
+### The sync function
+
+`Djohnnie.SoftwareFactory.Sync` needs [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) v4 and a storage emulator such as Azurite for its timer. Create `src/Djohnnie.SoftwareFactory.Sync/local.settings.json`, which is gitignored:
+
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "WorkItemSyncSchedule": "0 */15 * * * *",
+    "ConnectionStrings__Database": "Server=(localdb)\\MSSQLLocalDB;Database=DGHSF;Trusted_Connection=True;TrustServerCertificate=True",
+    "GitHub__SyncToken": "<GitHub token that can read the issues of your repositories>"
+  }
+}
+```
+
+Then run `func start` in that directory. The function doesn't apply migrations, so run the web app once first.
+
 ## Tests
 
 ```shell
@@ -87,4 +107,4 @@ Most tests use bUnit and the EF Core InMemory provider. `SqlServerStoreTests` ru
 
 ## Deployment
 
-Every push to `main` builds, tests, migrates Azure SQL and deploys to Azure App Service. See [`docs/azure-deployment.md`](docs/azure-deployment.md).
+Every push to `main` builds, tests, migrates Azure SQL and deploys to Azure App Service and Azure Functions. See [`docs/azure-deployment.md`](docs/azure-deployment.md).

@@ -429,3 +429,4 @@ FodyWeavers.xsd
 
 # Personal development settings (see README.md)
 **/appsettings.Development.json
+**/local.settings.json

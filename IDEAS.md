@@ -93,7 +93,9 @@ The app shows the agent's session status and links to the resulting pull request
 
 An Azure Function polls GitHub on a CRON schedule (no webhooks), and only for repositories that have actual work in the app. Everything flows back into the app: issue state, labels, comments, linked pull requests and agent sessions. When both sides changed, **the app wins**.
 
-**Implemented (manual refresh):** accepted items have a **Refresh from GitHub** button on the list and detail pages. It stores the issue's title, description and state: closed becomes **Closed**, open becomes **In progress** when Copilot is assigned and otherwise **Accepted**. The Azure Function, labels, comments, linked pull requests and agent sessions are still to do.
+**Implemented (manual refresh):** accepted items have a **Refresh from GitHub** button on the list and detail pages. It stores the issue's title, description and state: closed becomes **Closed**, open becomes **In progress** when Copilot is assigned and otherwise **Accepted**.
+
+**Implemented (Azure Function):** `Djohnnie.SoftwareFactory.Sync` does the same refresh for every accepted item of every repository in the database on a CRON schedule, reading GitHub with a token from configuration. Labels, comments, linked pull requests and agent sessions are still to do.
 
 ### 4.8 DGHSF Copilot
 

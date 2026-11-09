@@ -42,6 +42,7 @@ public static class DependencyInjection
             services.AddScoped<AgentTemplateWorkflow>();
             services.AddScoped<AiModelService>();
             services.AddScoped<WorkItemService>();
+            services.AddScoped<WorkItemSyncService>();
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<WorkItemTemplateService>();
             services.AddScoped<GitHubService>();

@@ -1,12 +1,13 @@
 # Azure deployment
 
-The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web` on every push and pull request to `main`. On every **push to `main`** (or a manual run on `main`), the `deploy` job:
+The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web` and `Djohnnie.SoftwareFactory.Sync` on every push and pull request to `main`. On every **push to `main`** (or a manual run on `main`), the `deploy` job:
 
 1. Logs in to Azure with OpenID Connect (no Azure secret stored in GitHub).
 2. Opens a temporary Azure SQL firewall rule for the runner's IP.
 3. Applies EF Core migrations with a self-contained migrations bundle (`efbundle`).
 4. Removes the firewall rule (always, even on failure).
 5. Deploys the published web app to Azure App Service.
+6. Deploys the sync function app to the Function App `softwarefactory-sync`.
 
 The deployment is skipped when migrations fail.
 
@@ -14,6 +15,7 @@ The deployment is skipped when migrations fail.
 
 - A resource group containing:
   - An App Service (Web App) with the **.NET 10** runtime stack (Linux or Windows).
+  - A Function App named `softwarefactory-sync` on a **Flex Consumption** plan with the **.NET 10 isolated** runtime. Another name or plan needs a matching change to `SYNC_FUNCTION_APP` and the `sku` of the deploy step in the workflow.
   - An Azure SQL logical server and database.
 - A SQL login/user that can change the schema (for example `db_owner`) for migrations. The app can use the same or a less-privileged user at runtime.
 
@@ -26,7 +28,7 @@ Sign in with `az login` and `gh auth login`, then run:
     -WebAppName <web-app> -SqlServerName <sql-server> -SqlDatabaseName <database> -ConfigureWebApp
 ```
 
-The script creates the Entra app registration `github-DjohnnieGitHubSoftwareFactory` and a federated credential for the `production` environment. It reads the subject from the repository's OIDC settings. This repository uses immutable subjects, so the subject is `repo:Djohnnie@7031043/DjohnnieGitHubSoftwareFactory@1437143137:environment:production`, not `repo:Djohnnie/DjohnnieGitHubSoftwareFactory:...`. Check it with `gh api repos/Djohnnie/DjohnnieGitHubSoftwareFactory/actions/oidc/customization/sub`. The script also grants **Website Contributor** on the Web App and **SQL Server Contributor** on the SQL server so the workflow can manage firewall rules. It also creates the `production` GitHub environment and prompts for the SQL connection string without echoing it. With `-ConfigureWebApp`, it also stores that connection string on the Web App as `ConnectionStrings:Database`. The script can be re-run safely.
+The script creates the Entra app registration `github-DjohnnieGitHubSoftwareFactory` and a federated credential for the `production` environment. It reads the subject from the repository's OIDC settings. This repository uses immutable subjects, so the subject is `repo:Djohnnie@7031043/DjohnnieGitHubSoftwareFactory@1437143137:environment:production`, not `repo:Djohnnie/DjohnnieGitHubSoftwareFactory:...`. Check it with `gh api repos/Djohnnie/DjohnnieGitHubSoftwareFactory/actions/oidc/customization/sub`. The script also grants **Website Contributor** on the Web App and on the Function App (`-FunctionAppName`, default `softwarefactory-sync`) and **SQL Server Contributor** on the SQL server so the workflow can manage firewall rules. It also creates the `production` GitHub environment and prompts for the SQL connection string without echoing it. With `-ConfigureWebApp`, it also stores that connection string on the Web App as `ConnectionStrings:Database`. The script can be re-run safely.
 
 It sets these on the `production` environment:
 
@@ -58,6 +60,21 @@ Configure these on the Web App under **Settings > Environment variables**. Use `
 | `Speech__Language`, `Speech__Endpoint` | Optional; locale(s) to recognize (default `en-US`, or up to four comma-separated, e.g. `en-US,nl-BE`, to detect the spoken one) and a custom-domain endpoint to issue tokens from |
 
 Also turn on **Web sockets** (needed for Blazor Interactive Server) and **Session affinity (ARR affinity)** if you scale out to more than one instance. Authentication tickets are kept in memory, so users sign in again after a restart or redeployment.
+
+## Sync function app
+
+`Djohnnie.SoftwareFactory.Sync` is a timer-triggered Azure Function that refreshes every accepted work item of every repository in the database from its GitHub issue. The workflow deploys it to `softwarefactory-sync` after the web app. Its database must accept connections from Azure services.
+
+Configure these app settings on the Function App (`FUNCTIONS_WORKER_RUNTIME` is only for `local.settings.json`; a Flex Consumption app doesn't accept it):
+
+| Setting | Notes |
+| --- | --- |
+| `WorkItemSyncSchedule` | CRON expression with six fields (seconds first), in UTC, e.g. `0 */15 * * * *` for every 15 minutes. The function fails to start without it |
+| `ConnectionStrings__Database` | The same database as the Web App. The function reads and updates work items but doesn't migrate |
+| `GitHub__SyncToken` | GitHub token that can read the issues of every repository in the database: a classic token with `repo`, or a fine-grained token with read access to issues. The function fails to start without it |
+| `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
+
+Each run makes one GitHub request per accepted work item, so a token's limit of 5,000 requests per hour allows about 1,250 items at 15-minute intervals. A deleted issue or a repository the token can't read is logged as a warning and the run continues. An invalid token or a reached rate limit stops the run, which then shows as failed.
 
 ## Image uploads
 

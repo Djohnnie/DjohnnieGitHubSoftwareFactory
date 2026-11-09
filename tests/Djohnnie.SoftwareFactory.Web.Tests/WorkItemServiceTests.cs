@@ -391,6 +391,9 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>The issues as they were changed on GitHub, by number; a <c>null</c> value is an issue that was deleted.</summary>
         public Dictionary<int, IssueOnGitHub?> IssuesOnGitHub { get; } = [];
 
+        /// <summary>When set, every request that reads an issue is refused like this.</summary>
+        public (HttpStatusCode Status, string Message)? IssueReadFailure { get; set; }
+
         /// <summary>
         /// The status of the next issue creation. A client error creates nothing; a server error still creates the issue,
         /// like a gateway error after GitHub created it.
@@ -450,6 +453,7 @@ public partial class WorkItemServiceTests : IDisposable
             var number = int.Parse(match.Groups[1].Value);
             return (method, match.Groups[2].Value) switch
             {
+                ("GET", "") when IssueReadFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),
                 ("GET", "") when IssuesOnGitHub.TryGetValue(number, out var changed) => changed is null
                     ? Json(HttpStatusCode.NotFound, """{"message":"Not Found"}""")
                     : Json(HttpStatusCode.OK, JsonSerializer.Serialize(new

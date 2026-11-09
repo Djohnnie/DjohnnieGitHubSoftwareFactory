@@ -4,6 +4,7 @@
     <Project Path="src/Djohnnie.SoftwareFactory.Application/Djohnnie.SoftwareFactory.Application.csproj" />
     <Project Path="src/Djohnnie.SoftwareFactory.Contracts/Djohnnie.SoftwareFactory.Contracts.csproj" />
     <Project Path="src/Djohnnie.SoftwareFactory.DataAccess.Sql/Djohnnie.SoftwareFactory.DataAccess.Sql.csproj" />
+    <Project Path="src/Djohnnie.SoftwareFactory.Sync/Djohnnie.SoftwareFactory.Sync.csproj" />
     <Project Path="src/Djohnnie.SoftwareFactory.Web/Djohnnie.SoftwareFactory.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

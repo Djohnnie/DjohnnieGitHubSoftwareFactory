@@ -4,6 +4,8 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 public interface IRepositoryStore
 {
+    Task<List<RepositorySummary>> GetAllAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The most recently accessed repositories that are not favorites (those are listed separately).</summary>
     Task<List<RepositorySummary>> GetRecentAsync(CancellationToken cancellationToken = default);
 

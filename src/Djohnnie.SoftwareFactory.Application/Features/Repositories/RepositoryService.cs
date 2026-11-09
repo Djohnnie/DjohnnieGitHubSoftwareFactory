@@ -6,6 +6,12 @@ namespace Djohnnie.SoftwareFactory.Application.Features.Repositories;
 /// <summary>The repositories known to the app: recently accessed ones and favorites.</summary>
 public sealed class RepositoryService(ISender mediator)
 {
+    /// <summary>Every repository in the database, whether or not it was opened recently.</summary>
+    public async Task<IReadOnlyList<RepositorySummary>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetAllRepositoriesQuery(new()), cancellationToken)).Dto.Items;
+    }
+
     public async Task<IReadOnlyList<RepositorySummary>> GetRecentAsync(CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetRecentRepositoriesQuery(new()), cancellationToken)).Dto.Items;

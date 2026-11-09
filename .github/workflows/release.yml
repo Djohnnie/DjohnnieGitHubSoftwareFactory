@@ -14,6 +14,8 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   WEB_PROJECT: src/Djohnnie.SoftwareFactory.Web/Djohnnie.SoftwareFactory.Web.csproj
+  SYNC_PROJECT: src/Djohnnie.SoftwareFactory.Sync/Djohnnie.SoftwareFactory.Sync.csproj
+  SYNC_FUNCTION_APP: softwarefactory-sync
   DATA_PROJECT: src/Djohnnie.SoftwareFactory.DataAccess.Sql
   TEST_PROJECT: tests/Djohnnie.SoftwareFactory.Web.Tests/Djohnnie.SoftwareFactory.Web.Tests.csproj
   # The EF design-time factory requires a connection string; build-time EF commands never connect to it.
@@ -67,6 +69,9 @@ jobs:
       - name: Publish web app
         run: dotnet publish ${{ env.WEB_PROJECT }} --configuration Release --no-build --output ${{ runner.temp }}/web
 
+      - name: Publish sync function app
+        run: dotnet publish ${{ env.SYNC_PROJECT }} --configuration Release --no-build --output ${{ runner.temp }}/sync
+
       - name: Create migrations bundle
         env:
           ConnectionStrings__Database: ${{ env.PLACEHOLDER_CONNECTION }}
@@ -88,12 +93,20 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: sync
+          path: ${{ runner.temp }}/sync
+          if-no-files-found: error
+          # The Functions worker needs the .azurefunctions folder, which is left out by default.
+          include-hidden-files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
           name: migrations
           path: ${{ runner.temp }}/migrations
           if-no-files-found: error
 
   deploy:
-    name: Migrate database and deploy web app
+    name: Migrate database and deploy web and function apps
     needs: build
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -118,6 +131,11 @@ jobs:
         with:
           name: web
           path: web
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sync
+          path: sync
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -159,3 +177,10 @@ jobs:
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           package: web
+
+      - name: Deploy sync function app
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.SYNC_FUNCTION_APP }}
+          package: sync
+          sku: flexconsumption

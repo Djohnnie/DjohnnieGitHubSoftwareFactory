@@ -7,6 +7,15 @@ public sealed class RepositoryStore(IDbContextFactory<AppDbContext> dbFactory, T
 {
     public const int RecentCount = 5;
 
+    public async Task<List<RepositorySummary>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Repositories.AsNoTracking()
+            .OrderBy(repository => repository.FullName)
+            .Select(repository => new RepositorySummary(repository.Id, repository.FullName, repository.Name, repository.LastAccessedAt, repository.IsFavorite))
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>The most recently accessed repositories that are not favorites (those are listed separately).</summary>
     public async Task<List<RepositorySummary>> GetRecentAsync(CancellationToken cancellationToken = default)
     {
