@@ -31,6 +31,22 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity?.ToContract();
     }
 
+    public async Task<List<WorkItemCounts>> GetCountsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var normalized = Entities.Repository.Normalize(repositoryFullName);
+        var counts = await db.WorkItems.AsNoTracking()
+            .Where(e => e.Repository.FullName == normalized)
+            .GroupBy(e => e.Type)
+            .Select(g => new WorkItemCounts(
+                g.Key,
+                g.Count(),
+                g.Count(e => e.Status != WorkItemStatus.Draft),
+                g.Count(e => e.Status == WorkItemStatus.Done)))
+            .ToDictionaryAsync(c => c.Type, cancellationToken);
+        return WorkItemTypeRules.All.Select(type => counts.GetValueOrDefault(type) ?? new WorkItemCounts(type, 0, 0, 0)).ToList();
+    }
+
     public async Task<WorkItem> SaveAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

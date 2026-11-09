@@ -35,6 +35,8 @@
         <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
     </MudStack>
 
+    <RepositoryInfographic RepositoryFullName="@repo.FullName" />
+
     <MudGrid>
         @Tile(Icons.Material.Filled.IntegrationInstructions, "Copilot instructions",
               @<text>Edit the repository-wide custom instructions in <code>@CopilotInstructionsFile.Path</code> that Copilot adds to every chat, cloud agent and code review.</text>,

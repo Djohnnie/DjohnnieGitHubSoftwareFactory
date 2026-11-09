@@ -17,6 +17,12 @@ public sealed class WorkItemService(ISender mediator)
         return (await mediator.Send(new GetWorkItemQuery(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
 
+    /// <summary>The counts of a repository for every work item type.</summary>
+    public async Task<IReadOnlyList<WorkItemCounts>> GetCountsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetWorkItemCountsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items;
+    }
+
     public async Task<WorkItem> SaveAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveWorkItemCommand(item), cancellationToken)).Dto;

@@ -241,6 +241,26 @@ public class SqlServerStoreTests
         Assert.Empty(await db.AuthSessions.ToListAsync(_cancellationToken));
     }
 
+    [Fact]
+    public async Task GetCounts_CountsPerTypeCumulativelyAndForOneRepositoryOnly()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new WorkItemStore(database.Factory, TimeProvider.System);
+        await SaveAsync(store, WorkItemType.Task, "Draft");
+        var accepted = await SaveAsync(store, WorkItemType.Task, "Accepted");
+        await store.MarkAcceptedAsync(Repo, accepted.Id, 1, 1, "https://example.com/1", _cancellationToken);
+        var done = await SaveAsync(store, WorkItemType.Task, "Done");
+        await store.MarkAcceptedAsync(Repo, done.Id, 2, 2, "https://example.com/2", _cancellationToken);
+        await store.ApplyIssueAsync(Repo, done.Id, new WorkItemIssueSnapshot(2, "https://example.com/2", "Done", string.Empty, true, false), _cancellationToken);
+        await store.SaveAsync(new WorkItem { RepositoryFullName = "owner/other", Type = WorkItemType.Task, Title = "Elsewhere" }, _cancellationToken);
+
+        var counts = await store.GetCountsAsync("OWNER/repo", _cancellationToken);
+
+        Assert.Equal(WorkItemTypeRules.All, counts.Select(c => c.Type));
+        Assert.Equal(new WorkItemCounts(WorkItemType.Task, 3, 2, 1), counts.Single(c => c.Type == WorkItemType.Task));
+        Assert.Equal(new WorkItemCounts(WorkItemType.Epic, 0, 0, 0), counts.Single(c => c.Type == WorkItemType.Epic));
+    }
+
     private Task<WorkItem> SaveAsync(WorkItemStore store, WorkItemType type, string title, Guid? parentId = null)
     {
         return store.SaveAsync(new WorkItem

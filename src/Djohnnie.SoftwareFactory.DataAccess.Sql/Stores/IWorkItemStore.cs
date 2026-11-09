@@ -9,6 +9,9 @@ public interface IWorkItemStore
 
     Task<WorkItem?> GetAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>The counts of a repository for every work item type, also the types without items.</summary>
+    Task<List<WorkItemCounts>> GetCountsAsync(string repositoryFullName, CancellationToken cancellationToken = default);
+
     /// <summary>Creates or updates an item; enforces the hierarchy rules and what can still change after acceptance.</summary>
     Task<WorkItem> SaveAsync(WorkItem item, CancellationToken cancellationToken = default);
 

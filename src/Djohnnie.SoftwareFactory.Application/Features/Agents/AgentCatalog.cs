@@ -1,15 +1,22 @@
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
+using Djohnnie.SoftwareFactory.Contracts.GitHub;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.Agents;
 
 public static class AgentCatalog
 {
+    /// <summary>Whether an entry of the agents directory is listed as a custom agent, also when its file turns out to be invalid.</summary>
+    public static bool IsAgentFile(GitHubContentItem item)
+    {
+        return item.Type == "file" && item.Name.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Loads the custom agents of a repository, sorted by name. Invalid files are listed with a warning description.</summary>
     public static async Task<List<AgentSummary>> LoadAsync(GitHubApiClient gitHub, string repositoryFullName, CancellationToken cancellationToken = default)
     {
         var items = (await gitHub.GetDirectoryAsync(repositoryFullName, AgentDefinition.Directory, cancellationToken))
-            .Where(i => i.Type == "file" && i.Name.EndsWith(".md", StringComparison.OrdinalIgnoreCase));
+            .Where(IsAgentFile);
 
         var agents = await Task.WhenAll(items.Select(async item =>
         {

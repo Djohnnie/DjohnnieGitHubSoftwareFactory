@@ -1,0 +1,168 @@
+@using System.Globalization
+@inject GitHubService GitHub
+@inject WorkItemService WorkItems
+
+<div class="infographic mb-6">
+    <div class="infographic-stats">
+        <MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
+            <MudIcon Icon="@Icons.Material.Filled.IntegrationInstructions" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Copilot instructions</MudText>
+                @if (_loading)
+                {
+                    <MudSkeleton Width="6rem" Height="2rem" />
+                }
+                else if (_hasInstructions is { } hasInstructions)
+                {
+                    <div class="infographic-status">
+                        <MudIcon Icon="@(hasInstructions ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                                 Color="@(hasInstructions ? Color.Success : Color.Warning)" Size="Size.Small" />
+                        <MudText Typo="Typo.h6">@(hasInstructions ? "Available" : "Not available")</MudText>
+                    </div>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">Could not check</MudText>
+                }
+            </div>
+        </MudPaper>
+
+        <MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Custom agents</MudText>
+                @if (_loading)
+                {
+                    <MudSkeleton Width="3rem" Height="2rem" />
+                }
+                else if (_agentCount is { } agentCount)
+                {
+                    <MudText Typo="Typo.h6">@agentCount</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">Could not check</MudText>
+                }
+            </div>
+        </MudPaper>
+    </div>
+
+    <MudPaper Outlined="true" Elevation="0" Class="infographic-work-items">
+        @if (_loading)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="11rem" />
+        }
+        else if (_counts is null)
+        {
+            <MudText Typo="Typo.body1">Could not load the work items: @_countsError</MudText>
+        }
+        else
+        {
+            var largest = _counts.Max(c => c.Existing);
+            <table class="infographic-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Work items</th>
+                        <th scope="col" class="infographic-bar-column" aria-label="Chart"></th>
+                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-existing"></span>Existing</th>
+                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-accepted"></span>Accepted</th>
+                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Finished</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _counts)
+                    {
+                        <tr>
+                            <th scope="row">
+                                <span class="infographic-type">
+                                    <MudIcon Icon="@WorkItemRoutes.Icon(row.Type)" Color="Color.Secondary" Size="Size.Small" />
+                                    @row.Type.PluralName
+                                </span>
+                            </th>
+                            <td class="infographic-bar-column">
+                                @if (row.Existing > 0)
+                                {
+                                    @* All tracks share one scale, so the types can be compared; the numbers next to it are the accessible version. *@
+                                    <div class="infographic-track infographic-existing" style="width: @Percentage(row.Existing, largest)"
+                                         title="@($"{row.Accepted} of {row.Existing} accepted, {row.Finished} of {row.Existing} finished")" aria-hidden="true">
+                                        @if (row.Accepted > 0)
+                                        {
+                                            <div class="infographic-fill infographic-accepted" style="width: @Percentage(row.Accepted, row.Existing)"></div>
+                                        }
+                                        @if (row.Finished > 0)
+                                        {
+                                            <div class="infographic-fill infographic-finished" style="width: @Percentage(row.Finished, row.Existing)"></div>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td class="infographic-number">@row.Existing</td>
+                            <td class="infographic-number">@row.Accepted</td>
+                            <td class="infographic-number">@row.Finished</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </MudPaper>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string RepositoryFullName { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private bool? _hasInstructions;
+    private int? _agentCount;
+    private IReadOnlyList<WorkItemCounts>? _counts;
+    private string? _countsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Each part fails on its own: GitHub being unreachable doesn't hide the counts from the database.
+        await Task.WhenAll(LoadInstructionsAsync(), LoadAgentCountAsync(), LoadCountsAsync());
+        _loading = false;
+    }
+
+    private async Task LoadInstructionsAsync()
+    {
+        try
+        {
+            _hasInstructions = await GitHub.GetFileAsync(RepositoryFullName, CopilotInstructionsFile.Path) is not null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _hasInstructions = null;
+        }
+    }
+
+    private async Task LoadAgentCountAsync()
+    {
+        try
+        {
+            var items = await GitHub.GetDirectoryAsync(RepositoryFullName, AgentDefinition.Directory);
+            _agentCount = items.Count(AgentCatalog.IsAgentFile);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _agentCount = null;
+        }
+    }
+
+    private async Task LoadCountsAsync()
+    {
+        try
+        {
+            _counts = await WorkItems.GetCountsAsync(RepositoryFullName);
+        }
+        catch (Exception ex)
+        {
+            _countsError = ex.Message;
+        }
+    }
+
+    private static string Percentage(int part, int whole)
+    {
+        return (100d * part / whole).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+    }
+}
