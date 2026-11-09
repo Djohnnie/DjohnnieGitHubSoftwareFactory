@@ -571,6 +571,7 @@ else if (_item is not null)
         _models = models;
         _assistantTools = AssistantForms.ForWorkItem(
             () => _item!,
+            () => SelectedTemplate,
             models,
             async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
             change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }));

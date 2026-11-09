@@ -27,6 +27,13 @@ public sealed record WorkItemFormSnapshot(
     [property: JsonPropertyName("baseBranch"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BaseBranch,
     [property: JsonPropertyName("customInstructions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomInstructions);
 
+/// <remarks><c>selected</c> is <c>false</c> when the form has no template; the other fields are then left out.</remarks>
+public sealed record SelectedWorkItemTemplateSnapshot(
+    [property: JsonPropertyName("selected")] bool Selected,
+    [property: JsonPropertyName("name"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name,
+    [property: JsonPropertyName("titleExample"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TitleExample,
+    [property: JsonPropertyName("descriptionSkeleton"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DescriptionSkeleton);
+
 public sealed record ModelChoice(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,

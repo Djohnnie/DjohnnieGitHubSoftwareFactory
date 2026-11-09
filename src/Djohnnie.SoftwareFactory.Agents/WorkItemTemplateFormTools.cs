@@ -46,8 +46,45 @@ public sealed class WorkItemTemplateFormTools(Func<WorkItemTemplate> getTemplate
             - Write it in English.
 
             Recommended sections for {(type == WorkItemType.Epic ? "an" : "a")} {name}:
-            {WorkItemFormTools.StructureFor(type)}
+            {RecommendedSections(type)}
             """;
+    }
+
+    private static string RecommendedSections(WorkItemType type)
+    {
+        return type switch
+        {
+            WorkItemType.Epic => """
+                ## Goal  (why, and for whom)
+                ## Scope  (the capabilities included, as a bullet list; and what is explicitly out of scope)
+                ## Success criteria  (how we know the epic delivered its value)
+                """,
+            WorkItemType.Feature => """
+                ## Goal  (what the feature enables, and for whom)
+                ## Scope  (what is included, as a bullet list; and what is explicitly out of scope)
+                ## Requirements  (functional and non-functional requirements, constraints)
+                ## Acceptance criteria  (a checklist with `- [ ]` items that can be verified)
+                """,
+            WorkItemType.Story => """
+                As a <type of user>, I want <goal> so that <reason>.  (the first line)
+                ## Context  (background and affected areas)
+                ## Acceptance criteria  (a checklist with `- [ ]` items, or Given/When/Then scenarios, that can be verified)
+                ## Technical notes  (optional: hints, constraints, things to avoid)
+                """,
+            WorkItemType.Bug => """
+                ## Summary  (one or two sentences)
+                ## Steps to reproduce  (a numbered list)
+                ## Expected behavior
+                ## Actual behavior  (include error messages or logs when known)
+                ## Environment  (optional: version, browser, configuration)
+                ## Acceptance criteria  (a checklist with `- [ ]` items, including a regression test)
+                """,
+            _ => """
+                ## Goal  (what needs to be done, and why)
+                ## Details  (the concrete changes, affected areas and constraints)
+                ## Done when  (a checklist with `- [ ]` items that can be verified)
+                """
+        };
     }
 
     private static string TitleExample(WorkItemType type)

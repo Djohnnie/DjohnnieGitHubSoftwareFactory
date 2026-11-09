@@ -328,7 +328,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     {
         static IEnumerable<string> ToolNames(WorkItemType type)
         {
-            var tools = new WorkItemFormTools(() => new WorkItem { Type = type }, [], _ => Task.FromResult(new List<Contracts.Agents.AgentSummary>()), change =>
+            var tools = new WorkItemFormTools(() => new WorkItem { Type = type }, () => null, [], _ => Task.FromResult(new List<Contracts.Agents.AgentSummary>()), change =>
             {
                 change();
                 return Task.CompletedTask;
@@ -337,11 +337,88 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
             return ((IList<Microsoft.Extensions.AI.AITool>)property.GetValue(tools)!).Select(t => t.Name);
         }
 
-        Assert.Equal(["get_work_item_form", "update_work_item_form"], ToolNames(WorkItemType.Epic));
-        Assert.Equal(["get_work_item_form", "update_work_item_form"], ToolNames(WorkItemType.Feature));
-        Assert.Equal(["get_work_item_form", "update_work_item_form", "list_custom_agents", "list_models"], ToolNames(WorkItemType.Bug));
+        Assert.Equal(["get_work_item_form", "get_selected_template", "update_work_item_form"], ToolNames(WorkItemType.Epic));
+        Assert.Equal(["get_work_item_form", "get_selected_template", "update_work_item_form"], ToolNames(WorkItemType.Feature));
+        Assert.Equal(["get_work_item_form", "get_selected_template", "update_work_item_form", "list_custom_agents", "list_models"], ToolNames(WorkItemType.Bug));
         Assert.Contains("labelled `story`", WorkItemFormTools.InstructionsFor(WorkItemType.Story));
         Assert.Contains("never assigned", WorkItemFormTools.InstructionsFor(WorkItemType.Feature));
+    }
+
+    [Theory]
+    [InlineData(WorkItemType.Epic)]
+    [InlineData(WorkItemType.Feature)]
+    [InlineData(WorkItemType.Story)]
+    [InlineData(WorkItemType.Bug)]
+    [InlineData(WorkItemType.Task)]
+    public void Instructions_LeaveTheStructureToTheSelectedTemplate(WorkItemType type)
+    {
+        var instructions = WorkItemFormTools.InstructionsFor(type);
+
+        Assert.Contains("`get_selected_template`", instructions);
+        Assert.DoesNotContain("## ", instructions.Replace("## Your task", string.Empty));
+    }
+
+    [Fact]
+    public async Task Assistant_GetsTheSelectedTemplateAndCurrentFormWithEveryRequest()
+    {
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        await Services.GetRequiredService<WorkItemTemplateService>().SaveAsync(new WorkItemTemplate
+        {
+            Type = WorkItemType.Epic, Name = "Initiative", TitleTemplate = "Launch [capability]", Description = "## Outcome\n<!-- What changes? -->"
+        }, _cancellationToken);
+        _chatClient = new ScriptedChatClient(
+            ScriptedChatClient.ToolCall("get_selected_template", new Dictionary<string, object?>()),
+            ScriptedChatClient.Text("Using the template."),
+            ScriptedChatClient.Text("Still using it."));
+        Navigation.NavigateTo("/epics/new");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Launch passkeys");
+        await SendToCopilotAsync(cut, "Add passkeys");
+        cut.WaitForAssertion(() => Assert.Contains("Using the template.", cut.Markup), TimeSpan.FromSeconds(5));
+
+        var first = _chatClient.Requests[0].Last(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Text;
+        Assert.Contains("\"name\": \"Initiative\"", first);
+        Assert.Contains("\"titleExample\": \"Launch [capability]\"", first);
+        Assert.Contains("<!-- What changes? -->", first);
+        Assert.Contains("\"title\": \"Launch passkeys\"", first);
+        Assert.EndsWith("The user's message:\nAdd passkeys", first);
+        var toolResult = _chatClient.Requests[1].SelectMany(m => m.Contents).OfType<Microsoft.Extensions.AI.FunctionResultContent>().Single().Result?.ToString();
+        Assert.Contains("Initiative", toolResult);
+
+        // The next request carries the form as it is by then.
+        var editor = cut.FindComponent<MarkdownEditor>();
+        await cut.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync("## Outcome\nSign in without a password."));
+        await SendToCopilotAsync(cut, "Shorter please");
+        cut.WaitForAssertion(() => Assert.Contains("Still using it.", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("Sign in without a password.", _chatClient.Requests[2].Last(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Text);
+    }
+
+    [Fact]
+    public async Task Assistant_IsToldWhenNoTemplateIsSelected()
+    {
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("No template."));
+        Navigation.NavigateTo("/features/new");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+
+        await SendToCopilotAsync(cut, "Add passkeys");
+        cut.WaitForAssertion(() => Assert.Contains("No template.", cut.Markup), TimeSpan.FromSeconds(5));
+
+        var request = Assert.Single(_chatClient.Requests).Last(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Text;
+        Assert.Contains("\"selected\": false", request);
+        Assert.DoesNotContain("descriptionSkeleton", request);
+    }
+
+    private static async Task SendToCopilotAsync(IRenderedComponent<WorkItemEditor> cut, string text)
+    {
+        var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Describe what you want to build").Find("input");
+        input.Input(text);
+        await cut.InvokeAsync(() => input.KeyDown("Enter"));
     }
 
     [Fact]
