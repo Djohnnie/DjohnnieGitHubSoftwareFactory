@@ -41,6 +41,7 @@ public sealed class InternalAgentRegistry(IInternalAgentStore store)
             {
                 Id = stored.Id,
                 Instructions = stored.Instructions,
+                Model = stored.Model,
                 IsEnabled = stored.IsEnabled,
                 CreatedAt = stored.CreatedAt,
                 UpdatedAt = stored.UpdatedAt

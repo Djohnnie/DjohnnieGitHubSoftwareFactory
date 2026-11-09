@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 
-/// <summary>Manages DGHSF's own Copilots and background agents: their system prompts and whether they are enabled.</summary>
+/// <summary>Manages DGHSF's own Copilots and background agents: their system prompts, Copilot models and whether they are enabled.</summary>
 public sealed class InternalAgentService(ISender mediator)
 {
     public async Task<List<InternalAgent>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -17,10 +17,16 @@ public sealed class InternalAgentService(ISender mediator)
         return (await mediator.Send(new GetInternalAgentQuery(new(key)), cancellationToken)).Dto;
     }
 
-    /// <summary>Saves the system prompt and whether the agent is enabled.</summary>
+    /// <summary>Saves the system prompt, the model of a Copilot and whether the agent is enabled.</summary>
     public async Task<InternalAgent> SaveAsync(InternalAgent agent, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveInternalAgentCommand(new(agent)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Checks that the model responds on the configured endpoint.</summary>
+    public async Task<ModelTestResult> TestModelAsync(string model, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new TestInternalAgentModelQuery(new(model)), cancellationToken)).Dto;
     }
 
     /// <summary>Restores the default system prompt.</summary>

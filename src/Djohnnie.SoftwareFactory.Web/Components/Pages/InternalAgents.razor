@@ -11,7 +11,7 @@
         <MudText Typo="Typo.h4">Internal agents</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             DGHSF's own agents, built on the Microsoft Agent Framework and shared across repositories. Copilots help you fill in
-            a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt, or reset it to DGHSF's default.
+            a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt (and a Copilot by choosing its model), or reset the prompt to DGHSF's default.
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
@@ -24,7 +24,7 @@
 {
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
         The agents don't run until the model is configured: set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
-        <code>OpenAI:ApiKey</code> and restart the app. You can already change their prompts.
+        <code>OpenAI:ApiKey</code> and restart the app. You can already change the prompts of the background agents; a Copilot needs a tested model first.
     </MudAlert>
 }
 
@@ -41,6 +41,10 @@
         <HeaderContent>
             <MudTh>Agent</MudTh>
             <MudTh>@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")</MudTh>
+            @if (kind == InternalAgentKind.Copilot)
+            {
+                <MudTh>Model</MudTh>
+            }
             <MudTh>Prompt</MudTh>
             <MudTh>Updated</MudTh>
             <MudTh>Enabled</MudTh>
@@ -54,6 +58,12 @@
             <MudTd DataLabel="@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")">
                 <MudText Typo="Typo.body2" Style="white-space:nowrap">@UsedOn(context)</MudText>
             </MudTd>
+            @if (kind == InternalAgentKind.Copilot)
+            {
+                <MudTd DataLabel="Model">
+                    <MudText Typo="Typo.body2" Style="white-space:nowrap">@(string.IsNullOrEmpty(context.Model) ? "Default" : context.Model)</MudText>
+                </MudTd>
+            }
             <MudTd DataLabel="Prompt">
                 @if (context.IsCustomized)
                 {
@@ -70,7 +80,7 @@
                            Disabled="_saving" aria-label="@($"Enable {context.Name}")" />
             </MudTd>
             <MudTd Style="text-align:right; white-space:nowrap">
-                <MudTooltip Text="Edit the system prompt">
+                <MudTooltip Text="@(kind == InternalAgentKind.Copilot ? "Edit the model and system prompt" : "Edit the system prompt")">
                     <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
                                    Href="@($"/internal-agents/{context.Key}")" aria-label="@($"Edit {context.Name}")" />
                 </MudTooltip>

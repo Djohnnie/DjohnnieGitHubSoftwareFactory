@@ -22,6 +22,9 @@ public class InternalAgent
     [Required, MaxLength(Contracts.InternalAgents.InternalAgent.MaxInstructionsLength)]
     public string Instructions { get; set; } = string.Empty;
 
+    [Required, MaxLength(Contracts.InternalAgents.InternalAgent.MaxModelLength)]
+    public string Model { get; set; } = string.Empty;
+
     public bool IsEnabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }

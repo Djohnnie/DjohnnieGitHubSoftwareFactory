@@ -16,7 +16,10 @@ public sealed class AssistantService(
     public const string AgentName = AgentInfrastructure.AssistantAgentFactory.AgentName;
     public bool IsConfigured => factory.IsConfigured;
 
-    /// <summary>The Copilot with its current system prompt and enabled state.</summary>
+    /// <summary>The configured model, used by agents without a model of their own.</summary>
+    public string? DefaultModel => factory.DefaultModel;
+
+    /// <summary>The Copilot with its current system prompt, model and enabled state.</summary>
     public async Task<InternalAgent> GetCopilotAsync(string key, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetInternalAgentQuery(new(key)), cancellationToken)).Dto;
@@ -24,7 +27,7 @@ public sealed class AssistantService(
 
     public AssistantConversation CreateConversation(InternalAgent copilot, AssistantTools? tools = null)
     {
-        return new(factory.CreateConversation(copilot.Name, copilot.Instructions, tools?.Tools));
+        return new(factory.CreateConversation(copilot.Name, copilot.Instructions, tools?.Tools, copilot.Model));
     }
 
     /// <summary>

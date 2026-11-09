@@ -4,11 +4,12 @@ namespace Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 
 /// <summary>
 /// One of DGHSF's own (built-in) agents. The set of agents is fixed in code and seeded into the database;
-/// only the system prompt and whether the agent is enabled can be changed. Shared across repositories.
+/// only the system prompt, the model of a Copilot and whether the agent is enabled can be changed. Shared across repositories.
 /// </summary>
 public sealed record InternalAgent
 {
     public const int MaxInstructionsLength = 30_000;
+    public const int MaxModelLength = 200;
 
     public int Id { get; set; }
 
@@ -30,6 +31,10 @@ public sealed record InternalAgent
 
     /// <summary>The system prompt DGHSF proposes (read only).</summary>
     public string DefaultInstructions { get; set; } = string.Empty;
+
+    /// <summary>The model (or deployment) name of a Copilot. Empty until it is set: the agent then uses the configured model.</summary>
+    [MaxLength(MaxModelLength)]
+    public string Model { get; set; } = string.Empty;
 
     /// <summary>Disabled Copilots are hidden; disabled background agents don't run.</summary>
     public bool IsEnabled { get; set; } = true;

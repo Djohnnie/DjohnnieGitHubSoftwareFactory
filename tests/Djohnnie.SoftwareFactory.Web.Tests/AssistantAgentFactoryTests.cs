@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ChatClient = OpenAI.Chat.ChatClient;
 using OpenAI.Responses;
 
@@ -170,6 +171,20 @@ public class AssistantAgentFactoryTests
         Assert.NotNull(metadata);
         Assert.Equal(expected, metadata.ProviderUri!.AbsoluteUri);
         Assert.Equal("deployment-name", metadata.DefaultModelId);
+    }
+
+    [Theory]
+    [InlineData(null, "configured")]
+    [InlineData(" ", "configured")]
+    [InlineData(" copilot-model ", "copilot-model")]
+    public void Create_UsesTheModelOfTheAgent_OrTheConfiguredModel(string? model, string expected)
+    {
+        var factory = AssistantAgentFactory.Create(new OpenAIOptions { Model = "configured", ApiKey = "test-key" }, NullLoggerFactory.Instance);
+
+        var agent = factory.CreateAgent("Test", "Instructions", model: model);
+
+        Assert.Equal("configured", factory.DefaultModel);
+        Assert.Equal(expected, agent.GetService<ChatClientMetadata>()!.DefaultModelId);
     }
 
     [Theory]

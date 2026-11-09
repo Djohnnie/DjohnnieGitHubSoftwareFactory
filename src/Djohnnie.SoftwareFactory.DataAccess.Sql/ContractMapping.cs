@@ -14,6 +14,7 @@ internal static class ContractMapping
                 Description = value.Description,
                 Kind = value.Kind,
                 Instructions = value.Instructions,
+                Model = value.Model,
                 IsEnabled = value.IsEnabled,
                 CreatedAt = value.CreatedAt,
                 UpdatedAt = value.UpdatedAt

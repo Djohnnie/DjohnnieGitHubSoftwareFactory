@@ -15,6 +15,9 @@ public sealed class SaveInternalAgentValidator : AbstractValidator<SaveInternalA
                 .NotEmpty().WithMessage("The system prompt is required.")
                 .MaximumLength(InternalAgent.MaxInstructionsLength)
                 .WithMessage($"The system prompt cannot be longer than {InternalAgent.MaxInstructionsLength} characters.");
+            RuleFor(request => request.Dto.Agent.Model)
+                .MaximumLength(InternalAgent.MaxModelLength)
+                .WithMessage($"The model cannot be longer than {InternalAgent.MaxModelLength} characters.");
         });
     }
 }

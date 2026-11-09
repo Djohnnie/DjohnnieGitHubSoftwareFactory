@@ -26,6 +26,10 @@ public sealed class InternalAgentStore(IDbContextFactory<AppDbContext> dbFactory
         var agent = await db.InternalAgents.SingleOrDefaultAsync(a => a.Key == value.Key, cancellationToken)
             ?? throw new DomainRuleException($"The internal agent '{value.Key}' does not exist.");
         agent.Instructions = value.Instructions.Replace("\r\n", "\n").Trim();
+        if (agent.Kind == InternalAgentKind.Copilot)
+        {
+            agent.Model = value.Model.Trim();
+        }
         agent.IsEnabled = value.IsEnabled;
         agent.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(cancellationToken);

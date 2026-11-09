@@ -212,12 +212,14 @@ public class InternalAgentTests : BunitContext
     [Fact]
     public async Task EditorPage_SavesAndResetsThePrompt()
     {
+        await SetModelAsync(InternalAgentKeys.AgentCopilot, "stored-model");
         Render<MudPopoverProvider>();
         var dialogs = Render<MudDialogProvider>();
         var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.AgentCopilot));
 
-        cut.Find("textarea").Input("Be brief.");
-        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Trim() == "Save").Click());
+        Assert.True(cut.FindComponent<MarkdownEditor>().Instance.RawMarkdown);
+        await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("Be brief."));
+        await cut.InvokeAsync(() => Button(cut, "Save").Click());
         cut.WaitForAssertion(() => Assert.Contains("Customized", cut.Markup));
         Assert.Equal("Be brief.", (await Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken)).Instructions);
 
@@ -225,7 +227,82 @@ public class InternalAgentTests : BunitContext
         await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Reset").Click());
 
         cut.WaitForAssertion(() => Assert.False(Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken).Result.IsCustomized));
-        Assert.Equal(InternalAgentDefaults.Find(InternalAgentKeys.AgentCopilot)!.Instructions, cut.Find("textarea").GetAttribute("value") ?? cut.Find("textarea").TextContent);
+        Assert.Equal(InternalAgentDefaults.Find(InternalAgentKeys.AgentCopilot)!.Instructions, cut.FindComponent<MarkdownEditor>().Instance.Value);
+    }
+
+    [Fact]
+    public async Task EditorPage_OnlySavesACopilotModelThatPassedTheTest()
+    {
+        // The second test finds no scripted response, so the model call fails.
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("OK"));
+        Render<MudPopoverProvider>();
+        var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.AgentCopilot));
+        cut.WaitForAssertion(() => Assert.True(Button(cut, "Save").HasAttribute("disabled")));
+        Assert.True(Button(cut, "Test").HasAttribute("disabled"));
+
+        ModelInput(cut).Input("  good-model ");
+        Assert.True(Button(cut, "Save").HasAttribute("disabled"));
+        await cut.InvokeAsync(() => Button(cut, "Test").Click());
+        cut.WaitForAssertion(() => Assert.Contains("The model responded.", cut.Markup));
+        Assert.False(Button(cut, "Save").HasAttribute("disabled"));
+
+        ModelInput(cut).Input("untested-model");
+        Assert.True(Button(cut, "Save").HasAttribute("disabled"));
+        Assert.DoesNotContain("The model responded.", cut.Markup);
+
+        ModelInput(cut).Input("good-model");
+        Assert.False(Button(cut, "Save").HasAttribute("disabled"));
+        await cut.InvokeAsync(() => Button(cut, "Save").Click());
+        cut.WaitForAssertion(() => Assert.Equal("good-model", Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken).Result.Model));
+
+        ModelInput(cut).Input("bad-model");
+        await cut.InvokeAsync(() => Button(cut, "Test").Click());
+        cut.WaitForAssertion(() => Assert.Contains("mud-alert-outlined-error", cut.Markup));
+        Assert.True(Button(cut, "Save").HasAttribute("disabled"));
+        Assert.Equal("good-model", (await Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken)).Model);
+    }
+
+    [Fact]
+    public async Task EditorPage_NeedsNoNewTestForAnUnchangedModel_AndHasNoModelFieldForBackgroundAgents()
+    {
+        await SetModelAsync(InternalAgentKeys.AgentCopilot, "stored-model");
+        Render<MudPopoverProvider>();
+
+        var copilot = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.AgentCopilot));
+        copilot.WaitForAssertion(() => Assert.False(Button(copilot, "Save").HasAttribute("disabled")));
+
+        var background = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.ModelSelector));
+        background.WaitForAssertion(() => Assert.False(Button(background, "Save").HasAttribute("disabled")));
+        Assert.DoesNotContain(background.FindAll("button"), b => b.TextContent.Trim() == "Test");
+        Assert.Empty(background.FindComponents<MarkdownEditor>());
+        Assert.Single(background.FindAll("textarea"));
+    }
+
+    [Fact]
+    public async Task Save_KeepsTheModelOfACopilot_AndIgnoresItForBackgroundAgents()
+    {
+        var saved = await SetModelAsync(InternalAgentKeys.AgentCopilot, "  gpt-custom ");
+        Assert.Equal("gpt-custom", saved.Model);
+
+        var reset = await Agents.ResetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken);
+        Assert.Equal("gpt-custom", reset.Model);
+
+        await Assert.ThrowsAsync<DomainRuleException>(() => Agents.SaveAsync(saved with { Model = " " }, _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.SaveAsync(
+            saved with { Model = new string('a', InternalAgent.MaxModelLength + 1) }, _cancellationToken));
+        Assert.Equal("gpt-custom", (await Agents.GetAsync(InternalAgentKeys.AgentCopilot, _cancellationToken)).Model);
+
+        Assert.Equal(string.Empty, (await SetModelAsync(InternalAgentKeys.ModelSelector, "ignored")).Model);
+    }
+
+    [Fact]
+    public async Task TestModel_ReportsTheFailureOfTheModel_AndRequiresAModel()
+    {
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("OK"));
+
+        Assert.Null((await Agents.TestModelAsync("works", _cancellationToken)).Error);
+        Assert.False(string.IsNullOrEmpty((await Agents.TestModelAsync("fails", _cancellationToken)).Error));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.TestModelAsync(" ", _cancellationToken));
     }
 
     [Fact]
@@ -234,6 +311,21 @@ public class InternalAgentTests : BunitContext
         var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, "unknown"));
 
         cut.WaitForAssertion(() => Assert.Contains("This internal agent does not exist.", cut.Markup));
+    }
+
+    private async Task<InternalAgent> SetModelAsync(string key, string model)
+    {
+        return await Agents.SaveAsync(await Agents.GetAsync(key, _cancellationToken) with { Model = model }, _cancellationToken);
+    }
+
+    private static AngleSharp.Dom.IElement Button(IRenderedComponent<InternalAgentEditor> cut, string text)
+    {
+        return cut.FindAll("button").Single(b => b.TextContent.Trim() == text);
+    }
+
+    private static AngleSharp.Dom.IElement ModelInput(IRenderedComponent<InternalAgentEditor> cut)
+    {
+        return cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Model").Find("input");
     }
 
     /// <summary>The system prompt the agent sent with request <paramref name="index"/>.</summary>

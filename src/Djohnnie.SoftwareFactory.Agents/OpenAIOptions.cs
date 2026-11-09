@@ -20,4 +20,16 @@ public sealed class OpenAIOptions
     public bool UseResponsesApi { get; set; } = true;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Model) && !string.IsNullOrWhiteSpace(ApiKey);
+
+    /// <summary>The same endpoint and key with another model.</summary>
+    public OpenAIOptions ForModel(string model)
+    {
+        return new()
+        {
+            Endpoint = Endpoint,
+            Model = model,
+            ApiKey = ApiKey,
+            UseResponsesApi = UseResponsesApi
+        };
+    }
 }
