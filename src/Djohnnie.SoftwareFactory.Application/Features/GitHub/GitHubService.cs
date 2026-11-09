@@ -37,6 +37,16 @@ public sealed class GitHubService(ISender mediator)
         return (await mediator.Send(new DeleteFileCommand(new(repositoryFullName, path, message, sha)), cancellationToken)).Dto;
     }
 
+    public async Task<CopilotCodeReviewSettings> GetCopilotCodeReviewSettingsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetCopilotCodeReviewSettingsQuery(new(repositoryFullName)), cancellationToken)).Dto;
+    }
+
+    public async Task<CopilotCodeReviewSettings> UpdateCopilotCodeReviewSettingsAsync(string repositoryFullName, CopilotCodeReviewSettingsUpdate changes, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new UpdateCopilotCodeReviewSettingsCommand(new(repositoryFullName, changes)), cancellationToken)).Dto;
+    }
+
     public async Task<List<AgentSummary>> GetCustomAgentsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetCustomAgentsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items.ToList();

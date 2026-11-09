@@ -47,3 +47,28 @@ public sealed record CopilotAssignment(
     [property: JsonPropertyName("custom_agent"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomAgent,
     [property: JsonPropertyName("model"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Model);
 
+/// <param name="Configured">The level stored for the repository; <c>null</c> when it inherits one.</param>
+/// <param name="Effective">The level reviews use when the requester and the pull request don't choose one.</param>
+public sealed record CopilotCodeReviewEffort(
+    [property: JsonPropertyName("configured")] string? Configured,
+    [property: JsonPropertyName("effective")] string Effective);
+
+/// <summary>A repository's Copilot code review settings. They tune reviews; they don't enable Copilot code review.</summary>
+public sealed record CopilotCodeReviewSettings(
+    [property: JsonPropertyName("review_effort")] CopilotCodeReviewEffort ReviewEffort,
+    [property: JsonPropertyName("available_review_efforts")] IReadOnlyList<string> AvailableReviewEfforts,
+    [property: JsonPropertyName("severity_filter")] string SeverityFilter,
+    [property: JsonPropertyName("custom_instructions_enabled")] bool CustomInstructionsEnabled,
+    [property: JsonPropertyName("mcp_enabled")] bool McpEnabled)
+{
+    /// <summary>The review effort value that clears the repository's own level, so it inherits one again.</summary>
+    public const string InheritReviewEffort = "inherit";
+}
+
+/// <summary>The Copilot code review settings to change; GitHub leaves settings that are <c>null</c> here as they are.</summary>
+public sealed record CopilotCodeReviewSettingsUpdate(
+    [property: JsonPropertyName("review_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReviewEffort = null,
+    [property: JsonPropertyName("severity_filter"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SeverityFilter = null,
+    [property: JsonPropertyName("custom_instructions_enabled"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CustomInstructionsEnabled = null,
+    [property: JsonPropertyName("mcp_enabled"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? McpEnabled = null);
+

@@ -1,0 +1,185 @@
+@page "/copilot-code-review"
+@using System.Net
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+@inject ISnackbar Snackbar
+
+<PageTitle>Copilot code review</PageTitle>
+
+<PageBreadcrumbs Current="Copilot code review" BackDisabled="_saving" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Copilot code review</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            How Copilot reviews pull requests in <b>@Repository.Current?.FullName</b>. These settings live on GitHub and every change applies immediately.
+            They tune reviews but don't turn Copilot code review on, and changing them requires administrator access to the repository.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudButton Href="@($"{Repository.Current?.HtmlUrl}/settings/copilot/code_review")" Target="_blank" rel="noopener" Variant="Variant.Text" Color="Color.Primary"
+                   StartIcon="@Icons.Custom.Brands.GitHub">Code review settings on GitHub</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading || _saving" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+@if (_settings is not null)
+{
+    <MudStack Spacing="4" @key="_formVersion">
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudStack Spacing="4">
+                <MudSelect Variant="Variant.Outlined" T="string" Value="@(_settings.ReviewEffort.Configured ?? CopilotCodeReviewSettings.InheritReviewEffort)"
+                           ValueChanged="SetReviewEffortAsync" Label="Review effort level" ToStringFunc="EffortLabel" Disabled="_saving"
+                           HelperText="@($"Reviews use {EffortLabel(_settings.ReviewEffort.Effective)} unless the requester or the pull request chooses another level. Balanced and Max use more AI credits.")">
+                    <MudSelectItem T="string" Value="@CopilotCodeReviewSettings.InheritReviewEffort">@EffortLabel(CopilotCodeReviewSettings.InheritReviewEffort)</MudSelectItem>
+                    @foreach (var effort in _settings.AvailableReviewEfforts)
+                    {
+                        <MudSelectItem T="string" Value="@effort">@EffortLabel(effort)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect Variant="Variant.Outlined" T="string" Value="@_settings.SeverityFilter" ValueChanged="SetSeverityFilterAsync" Label="Severity filter"
+                           ToStringFunc="SeverityLabel" Disabled="_saving"
+                           HelperText="Which review comments Copilot leaves out. GitHub refuses a change when the filter isn't available for the repository.">
+                    @foreach (var severity in SeverityFilters)
+                    {
+                        <MudSelectItem T="string" Value="@severity">@SeverityLabel(severity)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <div>
+                    <MudSwitch T="bool" Value="_settings.CustomInstructionsEnabled" ValueChanged="SetCustomInstructionsAsync" Color="Color.Primary" Disabled="_saving"
+                               Label="Use custom instructions" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Reviews follow the repository's custom instructions.</MudText>
+                </div>
+
+                <div>
+                    <MudSwitch T="bool" Value="_settings.McpEnabled" ValueChanged="SetMcpAsync" Color="Color.Primary" Disabled="_saving"
+                               Label="Use MCP servers" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Reviews can use MCP servers.</MudText>
+                </div>
+            </MudStack>
+        </MudPaper>
+
+        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info">
+            GitHub's API doesn't expose maximum review effort and approvals. Change those on GitHub under Settings &gt; Copilot &gt; Code review.
+        </MudAlert>
+    </MudStack>
+}
+
+@code {
+    private const string NoSeverityFilter = "no_filter";
+    private const string LowSeverityFilter = "low";
+    private const string LowAndMediumSeverityFilter = "low_and_medium";
+
+    private static readonly string[] SeverityFilters = [NoSeverityFilter, LowSeverityFilter, LowAndMediumSeverityFilter];
+
+    private CopilotCodeReviewSettings? _settings;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    // MudBlazor inputs keep what the user picked when the bound value doesn't change, so a refused change recreates them.
+    private int _formVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _settings = await GitHub.GetCopilotCodeReviewSettingsAsync(Repository.Current!.FullName);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not load the Copilot code review settings: {Describe(ex)}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetReviewEffortAsync(string? effort)
+    {
+        await ApplyAsync(new(ReviewEffort: effort));
+    }
+
+    private async Task SetSeverityFilterAsync(string? severityFilter)
+    {
+        await ApplyAsync(new(SeverityFilter: severityFilter));
+    }
+
+    private async Task SetCustomInstructionsAsync(bool enabled)
+    {
+        await ApplyAsync(new(CustomInstructionsEnabled: enabled));
+    }
+
+    private async Task SetMcpAsync(bool enabled)
+    {
+        await ApplyAsync(new(McpEnabled: enabled));
+    }
+
+    private async Task ApplyAsync(CopilotCodeReviewSettingsUpdate changes)
+    {
+        _error = null;
+        _saving = true;
+        try
+        {
+            _settings = await GitHub.UpdateCopilotCodeReviewSettingsAsync(Repository.Current!.FullName, changes);
+            Snackbar.Add("Updated the Copilot code review settings on GitHub.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not update the Copilot code review settings: {Describe(ex)}";
+            _formVersion++;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string Describe(Exception exception)
+    {
+        return exception is GitHubApiException { StatusCode: HttpStatusCode.Forbidden or HttpStatusCode.NotFound }
+            ? $"{exception.Message} Managing these settings requires administrator access to the repository."
+            : exception.Message;
+    }
+
+    private static string? EffortLabel(string? effort)
+    {
+        if (effort == CopilotCodeReviewSettings.InheritReviewEffort)
+        {
+            return "Default (inherited)";
+        }
+
+        return string.IsNullOrEmpty(effort) ? effort : char.ToUpperInvariant(effort[0]) + effort[1..];
+    }
+
+    private static string? SeverityLabel(string? severityFilter)
+    {
+        return severityFilter switch
+        {
+            NoSeverityFilter => "Keep all comments",
+            LowSeverityFilter => "Leave out low-severity comments",
+            LowAndMediumSeverityFilter => "Leave out low- and medium-severity comments",
+            _ => severityFilter
+        };
+    }
+}

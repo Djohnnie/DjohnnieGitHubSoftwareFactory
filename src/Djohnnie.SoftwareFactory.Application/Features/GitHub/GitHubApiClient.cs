@@ -220,6 +220,28 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return issue.Assignees?.Any(a => a.Login.Contains("copilot", StringComparison.OrdinalIgnoreCase)) == true;
     }
 
+    public async Task<CopilotCodeReviewSettings> GetCopilotCodeReviewSettingsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, CopilotCodeReviewSettingsUrl(repositoryFullName), null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CopilotCodeReviewSettings>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    /// <summary>Changes only the settings set in <paramref name="changes"/> and returns all settings as they are now.</summary>
+    public async Task<CopilotCodeReviewSettings> UpdateCopilotCodeReviewSettingsAsync(string repositoryFullName, CopilotCodeReviewSettingsUpdate changes, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Patch, CopilotCodeReviewSettingsUrl(repositoryFullName), JsonContent.Create(changes), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CopilotCodeReviewSettings>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    private static string CopilotCodeReviewSettingsUrl(string repositoryFullName)
+    {
+        return $"repos/{repositoryFullName}/copilot/code-review/settings";
+    }
+
     /// <param name="accept">A media type instead of the client's default <c>application/vnd.github+json</c>.</param>
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken, string? accept = null)
     {
