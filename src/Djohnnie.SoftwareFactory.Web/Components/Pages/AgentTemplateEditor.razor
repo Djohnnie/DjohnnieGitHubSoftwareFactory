@@ -46,7 +46,8 @@ else if (_agent is not null)
     <AgentForm @ref="_agentForm" Agent="_agent" @bind-FileName="_fileName" HandoffAgents="_otherTemplates"
                FileNameHelperText="@($"Default file name when creating an agent: {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)}")">
         <Header>
-            <AssistantChat CopilotKey="@InternalAgentKeys.AgentTemplateCopilot" Tools="_assistantTools" Placeholder="Describe the agent you need"
+            <AssistantChat @ref="_chat" CopilotKey="@InternalAgentKeys.AgentTemplateCopilot" Tools="_assistantTools" Placeholder="Describe the agent you need"
+                           Owner="@(IsNew ? null : ChatOwner.ForAgentTemplate(Id!.Value))"
                            Subtitle="@(IsNew ? "Describe the reusable agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this template; I'll update the form.")"
                            Suggestions="@(IsNew ? TemplateSuggestions : [])" />
         </Header>
@@ -74,6 +75,7 @@ else if (_agent is not null)
     private AssistantTools? _assistantTools;
 
     private AgentForm? _agentForm;
+    private AssistantChat? _chat;
     private AgentDefinition? _agent;
     private string? _fileName;
     private string? _title;
@@ -187,6 +189,10 @@ else if (_agent is not null)
         try
         {
             var template = await Templates.SaveAsync(Id ?? 0, _fileName!, _agent!);
+            if (IsNew && _chat is not null)
+            {
+                await _chat.AttachAsync(ChatOwner.ForAgentTemplate(template.Id));
+            }
             Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
             Navigation.NavigateTo("/agent-templates");
         }

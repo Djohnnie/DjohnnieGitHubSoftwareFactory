@@ -55,7 +55,8 @@ else if (_agent is not null)
                ReadOnlyFile="@(IsNew ? null : _path)"
                FileNameHelperText="@($"Saved as {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)}")">
         <Header>
-            <AssistantChat CopilotKey="@InternalAgentKeys.AgentCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")" Tools="_assistantTools" Placeholder="Describe the agent you need"
+            <AssistantChat @ref="_chat" CopilotKey="@InternalAgentKeys.AgentCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")" Tools="_assistantTools" Placeholder="Describe the agent you need"
+                           Owner="@(IsNew ? null : ChatOwner.ForAgent(Repository.Current!.FullName, FileName!))"
                            Subtitle="@(IsNew && _template is null ? "Describe the agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this agent; I'll update the form.")"
                            Suggestions="@(IsNew && _template is null ? AgentSuggestions : [])" />
         </Header>
@@ -85,6 +86,7 @@ else if (_agent is not null)
     private AssistantTools? _assistantTools;
 
     private AgentForm? _agentForm;
+    private AssistantChat? _chat;
     private AgentDefinition? _agent;
     private AgentTemplate? _template;
     private string? _sha;
@@ -278,6 +280,10 @@ else if (_agent is not null)
             }
 
             var result = await GitHub.PutFileAsync(repo, path, content, message, _sha);
+            if (IsNew && _chat is not null)
+            {
+                await _chat.AttachAsync(ChatOwner.ForAgent(repo, path));
+            }
             Snackbar.Add($"Saved '{DisplayName}' and committed {Agents.Short(result.CommitSha)} to {repo}.", Severity.Success);
             Navigation.NavigateTo("/agents");
         }

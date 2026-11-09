@@ -98,6 +98,7 @@ else if (_item is not null)
                     @if (_item.IsDraft)
                     {
                         <AssistantChat @ref="_chat" @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItem(_type)" SuggestionContext="@($"Repository: {RepositoryName}")" Tools="_assistantTools"
+                                       Owner="@(IsNew ? null : ChatOwner.ForWorkItem(RepositoryName, Id!.Value))"
                                        Placeholder="@ChatPlaceholder"
                                        Subtitle="@($"Describe the {Name}; I'll ask what I need to know and fill in the form.")"
                                        Suggestions="@(IsNew ? Suggestions : [])" />
@@ -728,6 +729,10 @@ else if (_item is not null)
         _item = await WorkItemService.SaveAsync(_item);
         if (wasNew)
         {
+            if (_chat is not null)
+            {
+                await _chat.AttachAsync(ChatOwner.ForWorkItem(RepositoryName, _item.Id));
+            }
             Navigation.NavigateTo(WorkItemRoutes.ItemPath(_item.Type, _item.Id), replace: true);
         }
         return true;

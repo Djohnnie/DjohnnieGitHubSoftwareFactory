@@ -12,6 +12,12 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
 
     public List<ChatOptions?> Options { get; } = [];
 
+    /// <summary>Adds a response to the script; once the script runs out, a request fails.</summary>
+    public void Enqueue(ChatResponse response)
+    {
+        _responses.Enqueue(response);
+    }
+
     /// <summary>A response in which the model calls a tool.</summary>
     public static ChatResponse ToolCall(string name, IDictionary<string, object?> arguments)
     {

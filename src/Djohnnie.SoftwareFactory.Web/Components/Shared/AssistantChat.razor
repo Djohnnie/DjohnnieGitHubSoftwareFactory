@@ -1,10 +1,11 @@
 @implements IDisposable
 @inject AssistantService Assistant
+@inject ISnackbar Snackbar
 
 @*
     A chat with one of DGHSF's internal Copilots. The Copilot (system prompt, name, enabled state) is managed on the
-    internal agents page; the page supplies the tools that read and fill its form. The conversation (agent session) lives
-    as long as the component. Before the conversation starts, the Chat Suggestions agent writes suggestion chips in the
+    internal agents page; the page supplies the tools that read and fill its form. With an Owner the conversation is stored
+    with it and shown again when the page is reopened; a page without an Owner yet calls AttachAsync once it has one. Before the conversation starts, the Chat Suggestions agent writes suggestion chips in the
     background; the static suggestions are the fallback.
 *@
 @if (_copilot is { IsEnabled: false })
@@ -24,7 +25,7 @@ else
             </MudStack>
             @if (_messages.Count > 0)
             {
-                <MudIconButton Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RestartAlt" OnClick="Reset" Disabled="_busy" title="Start a new conversation" />
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="StartNewConversationAsync" Disabled="_busy">Start new conversation</MudButton>
             }
         </MudStack>
 
@@ -113,6 +114,9 @@ else
 
     [Parameter] public AssistantTools? Tools { get; set; }
 
+    /// <summary>What the conversation is stored with; <c>null</c> while that doesn't exist yet, such as on a new item.</summary>
+    [Parameter] public ChatOwner? Owner { get; set; }
+
     /// <summary>Example prompts shown before the conversation starts when the Chat Suggestions agent has none.</summary>
     [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
 
@@ -122,6 +126,7 @@ else
     private readonly List<ChatEntry> _messages = [];
     private InternalAgent? _copilot;
     private string? _loadedKey;
+    private ChatOwner? _loadedOwner;
     private string? _loadError;
     private AssistantConversation? _conversation;
     private CancellationTokenSource? _cancellation;
@@ -136,15 +141,25 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedKey != CopilotKey)
+        if (_loadedKey != CopilotKey || _loadedOwner != Owner)
         {
             _loadedKey = CopilotKey;
+            _loadedOwner = Owner;
             _copilot = null;
             _conversation = null;
             _loadError = null;
+            _messages.Clear();
             try
             {
-                _copilot = await Assistant.GetCopilotAsync(CopilotKey);
+                var copilot = await Assistant.GetCopilotAsync(CopilotKey);
+                if (Owner is not null)
+                {
+                    var history = await Assistant.GetHistoryAsync(Owner);
+                    _messages.AddRange(history.Select(m => new ChatEntry(m.Role == ChatMessageRole.User, m.Text) { IsError = m.IsError }));
+                }
+
+                // Last: the suggestions wait for it, and aren't written for a conversation that continues.
+                _copilot = copilot;
             }
             catch (Exception ex)
             {
@@ -229,7 +244,7 @@ else
 
         try
         {
-            _conversation ??= Assistant.CreateConversation(_copilot, Tools);
+            _conversation ??= Assistant.CreateConversation(_copilot, Tools, Owner);
             await foreach (var update in _conversation.RunStreamingAsync(text, _cancellation.Token))
             {
                 reply.Text += update;
@@ -250,11 +265,51 @@ else
             reply.IsError = true;
             reply.Text = $"Something went wrong: {ex.Message}";
         }
+
+        try
+        {
+            await SaveTurnAsync(text, reply);
+        }
         finally
         {
             _busy = false;
             _cancellation.Dispose();
             _cancellation = null;
+        }
+    }
+
+    private async Task SaveTurnAsync(string text, ChatEntry reply)
+    {
+        if (_conversation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _conversation.SaveTurnAsync(text, reply.Text, reply.IsError);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not save this message yet; it's tried again with the next one: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    /// <summary>Stores the conversation so far with its owner, once that exists; call it before leaving the page.</summary>
+    public async Task AttachAsync(ChatOwner owner)
+    {
+        if (_conversation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _conversation.AttachAsync(owner);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Saved, but the Copilot conversation could not be stored: {ex.Message}", Severity.Warning);
         }
     }
 
@@ -293,10 +348,24 @@ else
         StateHasChanged();
     }
 
-    private void Reset()
+    /// <summary>Closes the conversation; it stays stored, and the next message starts a new one.</summary>
+    private async Task StartNewConversationAsync()
     {
+        if (Owner is not null)
+        {
+            try
+            {
+                await Assistant.CloseConversationAsync(Owner);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Could not start a new conversation: {ex.Message}", Severity.Error);
+                return;
+            }
+        }
+
         _messages.Clear();
-        _conversation?.Reset();
+        _conversation = null;
         _input = null;
 
         // New suggestions for the form as it is now.

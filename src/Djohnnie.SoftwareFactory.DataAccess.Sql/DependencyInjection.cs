@@ -28,6 +28,7 @@ public static class DependencyInjection
             services.TryAddScoped<IAgentStore, AgentStore>();
             services.TryAddScoped<IInternalAgentStore, InternalAgentStore>();
             services.TryAddScoped<IAuthSessionStore, AuthSessionStore>();
+            services.TryAddScoped<IChatConversationStore, ChatConversationStore>();
             return services;
         }
     }

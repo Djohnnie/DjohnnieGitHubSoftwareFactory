@@ -188,6 +188,108 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.ToTable("AuthSessions");
                 });
 
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AgentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("AgentTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CopilotKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("RepositoryId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("WorkItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WorkItemTemplateId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId")
+                        .IsUnique()
+                        .HasFilter("[AgentId] IS NOT NULL AND [ClosedAt] IS NULL");
+
+                    b.HasIndex("AgentTemplateId")
+                        .IsUnique()
+                        .HasFilter("[AgentTemplateId] IS NOT NULL AND [ClosedAt] IS NULL");
+
+                    b.HasIndex("RepositoryId")
+                        .IsUnique()
+                        .HasFilter("[RepositoryId] IS NOT NULL AND [ClosedAt] IS NULL");
+
+                    b.HasIndex("WorkItemId")
+                        .IsUnique()
+                        .HasFilter("[WorkItemId] IS NOT NULL AND [ClosedAt] IS NULL");
+
+                    b.HasIndex("WorkItemTemplateId")
+                        .IsUnique()
+                        .HasFilter("[WorkItemTemplateId] IS NOT NULL AND [ClosedAt] IS NULL");
+
+                    b.ToTable("ChatConversations", t =>
+                        {
+                            t.HasCheckConstraint("CK_ChatConversations_ExactlyOneOwner", "(CASE WHEN [WorkItemId] IS NULL THEN 0 ELSE 1 END + CASE WHEN [WorkItemTemplateId] IS NULL THEN 0 ELSE 1 END + CASE WHEN [AgentTemplateId] IS NULL THEN 0 ELSE 1 END + CASE WHEN [AgentId] IS NULL THEN 0 ELSE 1 END + CASE WHEN [RepositoryId] IS NULL THEN 0 ELSE 1 END) = 1");
+                        });
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DisplayText")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsError")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("ChatMessages");
+                });
+
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgent", b =>
                 {
                     b.Property<int>("Id")
@@ -412,6 +514,55 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.Navigation("Repository");
                 });
 
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentTemplate", "AgentTemplate")
+                        .WithMany()
+                        .HasForeignKey("AgentTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", "Repository")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", "WorkItem")
+                        .WithMany()
+                        .HasForeignKey("WorkItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItemTemplate", "WorkItemTemplate")
+                        .WithMany()
+                        .HasForeignKey("WorkItemTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("AgentTemplate");
+
+                    b.Navigation("Repository");
+
+                    b.Navigation("WorkItem");
+
+                    b.Navigation("WorkItemTemplate");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatMessage", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>
                 {
                     b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", "Parent")
@@ -428,6 +579,11 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                     b.Navigation("Parent");
 
                     b.Navigation("Repository");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>
+                {
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>

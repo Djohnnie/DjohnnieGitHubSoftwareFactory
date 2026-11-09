@@ -46,7 +46,8 @@ else if (_template is not null)
 {
     <MudForm @ref="_form" Model="_template">
         <MudStack Spacing="4">
-            <AssistantChat @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItemTemplate(_type)" Tools="_assistantTools"
+            <AssistantChat @ref="_chat" @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItemTemplate(_type)" Tools="_assistantTools"
+                           Owner="@(Id is null ? null : ChatOwner.ForWorkItemTemplate(Id.Value))"
                            Placeholder="@($"Describe the {Name} template you need")"
                            Subtitle="@(Id is null ? $"Describe the {_type.PluralName.ToLowerInvariant()} this template is for; I'll ask what I need to know and fill in the form." : "Ask me to improve this template; I'll update the form.")"
                            Suggestions="@(Id is null ? Suggestions : [])" />
@@ -83,6 +84,7 @@ else if (_template is not null)
     private WorkItemType _type;
     private WorkItemTemplate? _template;
     private MudForm? _form;
+    private AssistantChat? _chat;
     private bool _loading = true;
     private bool _saving;
     private string? _error;
@@ -198,6 +200,10 @@ else if (_template is not null)
         try
         {
             var template = await Templates.SaveAsync(_template);
+            if (Id is null && _chat is not null)
+            {
+                await _chat.AttachAsync(ChatOwner.ForWorkItemTemplate(template.Id));
+            }
             Snackbar.Add($"Saved the template '{template.Name}'.", Severity.Success);
             Navigation.NavigateTo(WorkItemRoutes.TemplatesPath(_type));
         }

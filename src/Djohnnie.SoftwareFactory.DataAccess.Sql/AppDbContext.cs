@@ -14,6 +14,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
     public DbSet<InternalAgent> InternalAgents => Set<InternalAgent>();
     public DbSet<AuthSession> AuthSessions => Set<AuthSession>();
+    public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -41,6 +43,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureAgentTemplate()
             .ConfigureAiModel()
             .ConfigureInternalAgent()
-            .ConfigureAuthSession();
+            .ConfigureAuthSession()
+            .ConfigureChatConversation();
     }
 }

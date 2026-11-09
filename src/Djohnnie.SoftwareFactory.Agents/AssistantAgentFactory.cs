@@ -39,7 +39,8 @@ public sealed class AssistantAgentFactory(
     /// <param name="model">The model to use; empty for the configured model.</param>
     public AssistantConversation CreateConversation(string name, string instructions, AssistantTools? tools = null, string? model = null)
     {
-        return new(CreateAgent(name, instructions, tools?.Tools, model), tools?.RequestContext);
+        var agent = new ChatClientAgent(new LocalHistoryChatClient(ClientFor(model)), instructions, name, tools: tools?.Tools, loggerFactory: loggerFactory);
+        return new(agent, tools?.RequestContext, tools?.Snapshot);
     }
 
     /// <param name="name">The name of the agent.</param>
