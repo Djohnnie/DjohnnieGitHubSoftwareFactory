@@ -17,6 +17,7 @@ using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -544,6 +545,245 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         cut.WaitForAssertion(() => Assert.Contains("Suggestion: GPT-5 · high", cut.Markup), TimeSpan.FromSeconds(2));
         Assert.Contains("Orders are lost under load.", string.Join("\n", Assert.Single(_chatClient.Requests).Select(m => m.Text)));
         Assert.Null(cut.FindComponent<ModelPicker>().Instance.Value);
+    }
+
+    [Fact]
+    public async Task NewEpic_ProposesTheDefaultTemplate_OverTheFirstAlphabetically()
+    {
+        await SelectRepositoryAsync();
+        var templates = Services.GetRequiredService<WorkItemTemplateService>();
+        await templates.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Epic, Name = "A", TitleTemplate = "First", Description = "## First" }, _cancellationToken);
+        var preferred = await templates.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Epic, Name = "B", TitleTemplate = "Default", Description = "## Default", IsDefault = true }, _cancellationToken);
+        Navigation.NavigateTo("/epics/new");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>();
+
+        Assert.Equal(preferred.Description, cut.FindComponent<MarkdownEditor>().Instance.Value);
+    }
+
+    [Theory]
+    [InlineData(WorkItemType.Epic, "Generate features")]
+    [InlineData(WorkItemType.Story, "Generate tasks")]
+    public async Task GenerateButton_SavesTheChanges_AndOpensTheReviewPage(WorkItemType type, string text)
+    {
+        _chatClient = new ScriptedChatClient();
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        int? parentId = type == WorkItemType.Story ? (await SaveAsync(WorkItemType.Feature, "Feature", (await SaveAsync(WorkItemType.Epic, "Epic")).Id)).Id : null;
+        var item = await SaveAsync(type, "Stored", parentId);
+        Navigation.NavigateTo(WorkItemRoutes.ItemPath(type, item.Id));
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, item.Id));
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Edited");
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains(text)).Click());
+
+        Assert.EndsWith($"{WorkItemRoutes.ItemPath(type, item.Id)}/generate", Navigation.Uri);
+        Assert.True(WorkItemRoutes.IsItemPage(Navigation.Uri));
+        Assert.Equal("Edited", (await Items.GetAsync(Repo, item.Id, _cancellationToken))!.Title);
+    }
+
+    [Fact]
+    public async Task GenerateButton_IsHidden_WhenTheAssistantIsNotConfigured()
+    {
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Epic");
+        Navigation.NavigateTo($"/epics/{epic.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, epic.Id));
+
+        Assert.Contains("Add feature", cut.Markup);
+        Assert.DoesNotContain("Generate features", cut.Markup);
+    }
+
+    [Fact]
+    public async Task GenerateButton_IsHidden_WhenTheAgentIsDisabled()
+    {
+        _chatClient = new ScriptedChatClient();
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.WorkItemBreakdown);
+        var epic = await SaveAsync(WorkItemType.Epic, "Epic");
+        Navigation.NavigateTo($"/epics/{epic.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, epic.Id));
+
+        Assert.Contains("Add feature", cut.Markup);
+        Assert.DoesNotContain("Generate features", cut.Markup);
+    }
+
+    [Fact]
+    public async Task GenerateButton_IsHidden_OnNewItems_AndOnTypesThatAreNotSplit()
+    {
+        _chatClient = new ScriptedChatClient();
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        Navigation.NavigateTo("/epics/new");
+        Render<MudPopoverProvider>();
+        Assert.DoesNotContain("Generate features", Render<WorkItemEditor>().Markup);
+
+        var bug = await SaveAsync(WorkItemType.Bug, "Bug");
+        Navigation.NavigateTo($"/bugs/{bug.Id}");
+        Assert.DoesNotContain(Render<WorkItemEditor>(p => p.Add(e => e.Id, bug.Id)).FindAll("button"), b => b.TextContent.Contains("Generate"));
+    }
+
+    [Fact]
+    public async Task ChildGenerator_SavesOnlyTheSelectedProposals_AndNothingBefore()
+    {
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"items":[{"title":"Cart","description":"## Cart"},{"title":"Payment","description":"## Payment"}]}"""));
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Navigation.NavigateTo(WorkItemRoutes.GeneratePath(WorkItemType.Epic, epic.Id));
+
+        var cut = Render<WorkItemChildGenerator>(p => p.Add(e => e.Id, epic.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (2)", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("Generate features", cut.Markup);
+        Assert.Empty(await Items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken));
+
+        await cut.InvokeAsync(() => cut.Find("input[aria-label='Select Payment']").Change(false));
+        Assert.Contains("Save selected as draft (1)", cut.Markup);
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save selected as draft")).Click());
+
+        var saved = Assert.Single(await Items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken));
+        Assert.Equal(("Cart", "## Cart", WorkItemStatus.Draft, (int?)epic.Id), (saved.Title, saved.Description, saved.Status, saved.ParentId));
+        Assert.EndsWith($"/epics/{epic.Id}", Navigation.Uri);
+    }
+
+    [Fact]
+    public async Task ChildGenerator_ShowsProposalsInCollapsedPanels_ThatExpandTogether_AndTickingDoesNotToggleThem()
+    {
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"items":[{"title":"Cart","description":"A"},{"title":"Payment","description":"B"}]}"""));
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Navigation.NavigateTo(WorkItemRoutes.GeneratePath(WorkItemType.Epic, epic.Id));
+        var cut = Render<WorkItemChildGenerator>(p => p.Add(e => e.Id, epic.Id));
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<MudExpansionPanel>().Count), TimeSpan.FromSeconds(5));
+        var panels = cut.FindComponents<MudExpansionPanel>();
+        Assert.All(panels, panel => Assert.False(panel.Instance.GetState(x => x.Expanded)));
+
+        // bUnit bubbles the click up the tree: it stops at the checkbox, so it never finds the header's handler.
+        await Assert.ThrowsAsync<MissingEventHandlerException>(() => cut.InvokeAsync(() => panels[1].Find("input[type='checkbox']").Click()));
+        Assert.False(panels[1].Instance.GetState(x => x.Expanded));
+
+        await cut.InvokeAsync(() => panels[0].Find(".mud-expand-panel-header").Click());
+        await cut.InvokeAsync(() => panels[1].Find(".mud-expand-panel-header").Click());
+        Assert.All(panels, panel => Assert.True(panel.Instance.GetState(x => x.Expanded)));
+    }
+
+    [Fact]
+    public async Task ChildGenerator_SelectAll_TogglesEveryProposal_AndNeedsASelectionToSave()
+    {
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"items":[{"title":"Cart","description":"A"},{"title":"Payment","description":"B"}]}"""));
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Navigation.NavigateTo(WorkItemRoutes.GeneratePath(WorkItemType.Epic, epic.Id));
+        var cut = Render<WorkItemChildGenerator>(p => p.Add(e => e.Id, epic.Id));
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (2)", cut.Markup), TimeSpan.FromSeconds(5));
+
+        await cut.InvokeAsync(() => cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Select all").Instance.ValueChanged.InvokeAsync(false));
+
+        Assert.Contains("Save selected as draft (0)", cut.Markup);
+        Assert.True(cut.FindAll("button").Single(b => b.TextContent.Contains("Save selected as draft")).HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task ChildGenerator_ShowsAFailure_AndCanGenerateAgain()
+    {
+        _chatClient = new ScriptedChatClient();
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Navigation.NavigateTo(WorkItemRoutes.GeneratePath(WorkItemType.Epic, epic.Id));
+        var cut = Render<WorkItemChildGenerator>(p => p.Add(e => e.Id, epic.Id));
+        cut.WaitForAssertion(() => Assert.Contains("could not generate features", cut.Markup), TimeSpan.FromSeconds(5));
+
+        _chatClient.Enqueue(ScriptedChatClient.Text("""{"items":[{"title":"Cart","description":"A"}]}"""));
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Generate again")).Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (1)", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.DoesNotContain("could not generate features", cut.Markup);
+    }
+
+    [Fact]
+    public async Task ChildGenerator_OfAnItemOfAnotherType_ShowsAnErrorAndDoesNotCallTheAgent()
+    {
+        _chatClient = new ScriptedChatClient();
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Navigation.NavigateTo($"/features/{epic.Id}/generate");
+
+        var cut = Render<WorkItemChildGenerator>(p => p.Add(e => e.Id, epic.Id));
+
+        Assert.Contains("This feature does not exist", cut.Markup);
+        Assert.Empty(_chatClient.Requests);
+    }
+
+    [Fact]
+    public async Task Navigation_FromAnItemToTheOverviewOfAnotherType_StaysOnTheOverview()
+    {
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        Render<MudPopoverProvider>();
+        Navigation.NavigateTo($"/epics/{epic.Id}");
+        var cut = RenderWithRouter();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<WorkItemEditor>()), TimeSpan.FromSeconds(5));
+        var navigations = CountNavigations();
+
+        await cut.InvokeAsync(() => Navigation.NavigateTo("/features"));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<WorkItems>()), TimeSpan.FromSeconds(5));
+        await Task.Delay(200, _cancellationToken);
+        Assert.EndsWith("/features", Navigation.Uri);
+        Assert.Single(navigations);
+    }
+
+    [Fact]
+    public async Task Navigation_FromAnEpicToItsFeature_OpensTheFeatureWithoutRedirecting()
+    {
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Webshop");
+        var feature = await SaveAsync(WorkItemType.Feature, "Cart", epic.Id);
+        Render<MudPopoverProvider>();
+        Navigation.NavigateTo($"/epics/{epic.Id}");
+        var cut = RenderWithRouter();
+        cut.WaitForAssertion(() => Assert.Contains("Webshop", cut.Markup), TimeSpan.FromSeconds(5));
+        var navigations = CountNavigations();
+
+        await cut.InvokeAsync(() => Navigation.NavigateTo($"/features/{feature.Id}"));
+
+        cut.WaitForAssertion(() => Assert.Contains("Cart", cut.Find("h4").TextContent), TimeSpan.FromSeconds(5));
+        await Task.Delay(200, _cancellationToken);
+        Assert.EndsWith($"/features/{feature.Id}", Navigation.Uri);
+        Assert.Single(navigations);
+    }
+
+    /// <summary>The real router, set up like Routes.razor: the route data cascades to the page.</summary>
+    private IRenderedComponent<Router> RenderWithRouter()
+    {
+        return Render<Router>(parameters => parameters
+            .Add(router => router.AppAssembly, typeof(WorkItemEditor).Assembly)
+            .Add(router => router.Found, (RouteData routeData) => (RenderFragment)(builder =>
+            {
+                builder.OpenComponent<CascadingValue<RouteData>>(0);
+                builder.AddComponentParameter(1, "Value", routeData);
+                builder.AddComponentParameter(2, "ChildContent", (RenderFragment)(content =>
+                {
+                    content.OpenComponent<RouteView>(0);
+                    content.AddComponentParameter(1, "RouteData", routeData);
+                    content.CloseComponent();
+                }));
+                builder.CloseComponent();
+            })));
+    }
+
+    private List<string> CountNavigations()
+    {
+        var navigations = new List<string>();
+        Navigation.LocationChanged += (_, args) => navigations.Add(args.Location);
+        return navigations;
     }
 
     private Task<WorkItem> SaveAsync(WorkItemType type, string title, int? parentId = null)

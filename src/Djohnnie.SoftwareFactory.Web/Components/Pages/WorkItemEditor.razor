@@ -86,7 +86,7 @@ else if (_item is not null)
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                             <MudSelect T="int" Value="_templateChoiceId" ValueChanged="ChangeTemplateAsync" Label="@($"{_type.DisplayName} template")"
                                        Variant="Variant.Outlined" Disabled="_busy"
-                                       HelperText="The first template alphabetically is proposed. Choose another or start blank.">
+                                       HelperText="The default template is proposed, or else the first alphabetically. Choose another or start blank.">
                                 <MudSelectItem T="int" Value="0">No template</MudSelectItem>
                                 @foreach (var template in _templates)
                                 {
@@ -173,6 +173,13 @@ else if (_item is not null)
                                 {
                                     <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                                Href="@WorkItemRoutes.NewPath(childType, parentId: _item.Id)">Add @WorkItemActions.Name(childType)</MudButton>
+                                }
+                                @if (_generatorActive && _type.GeneratedChildType is { } generatedType)
+                                {
+                                    <MudSpacer />
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                               OnClick="GenerateChildrenAsync" Disabled="_busy"
+                                               title="@($"Saves your changes, then lets an agent propose {generatedType.PluralName.ToLowerInvariant()} for you to review.")">Generate @generatedType.PluralName.ToLowerInvariant()</MudButton>
                                 }
                             </MudStack>
                         </MudPaper>
@@ -339,6 +346,7 @@ else if (_item is not null)
 
     private List<AiModel> _models = [];
     private bool _modelSelectorActive;
+    private bool _generatorActive;
     private bool _suggestingModel;
     private ModelSelection? _modelSuggestion;
     private string? _suggestedDescription;
@@ -423,6 +431,11 @@ else if (_item is not null)
 
     protected override async Task OnParametersSetAsync()
     {
+        if (WorkItemRoutes.IsOutOfStep(RouteData, GetType(), Id))
+        {
+            return;
+        }
+
         var type = WorkItemRoutes.TypeOf(Navigation);
         var parameters = (type, Id, TemplateId, ParentIdQuery);
         if (_initialized && _loadedParameters == parameters)
@@ -461,6 +474,8 @@ else if (_item is not null)
                 {
                     await LoadTemplatesAsync();
                 }
+                _generatorActive = !IsNew && _type.GeneratedChildType is not null && Assistant.IsConfigured
+                    && (await InternalAgents.GetAsync(InternalAgentKeys.WorkItemBreakdown)).IsEnabled;
             }
         }
         catch (Exception ex)
@@ -507,7 +522,7 @@ else if (_item is not null)
             _templates = await Templates.GetAllAsync(_type);
             var template = TemplateId is { } id
                 ? _templates.FirstOrDefault(t => t.Id == id)
-                : _templates.FirstOrDefault();
+                : WorkItemTemplate.Proposed(_templates);
             if (TemplateId is not null && template is null)
             {
                 Snackbar.Add($"The requested {Name} template no longer exists. Start blank or choose another template.", Severity.Warning);
@@ -746,6 +761,27 @@ else if (_item is not null)
             if (await SaveCoreAsync())
             {
                 Snackbar.Add($"Saved '{_item!.Title}'.", Severity.Success);
+            }
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>The agent works from the stored item, so unsaved changes are saved first (they'd be lost by leaving the page anyway).</summary>
+    private async Task GenerateChildrenAsync()
+    {
+        _busy = true;
+        try
+        {
+            if ((!_item!.IsDraft && !_item.CanEditAssignment) || await SaveCoreAsync())
+            {
+                Navigation.NavigateTo(WorkItemRoutes.GeneratePath(_type, _item!.Id));
             }
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))

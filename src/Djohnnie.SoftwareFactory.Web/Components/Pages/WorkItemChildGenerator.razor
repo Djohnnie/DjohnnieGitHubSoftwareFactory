@@ -1,0 +1,218 @@
+@page "/epics/{Id:int}/generate"
+@page "/features/{Id:int}/generate"
+@page "/stories/{Id:int}/generate"
+@implements IDisposable
+@inject WorkItemService WorkItemService
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@Heading</PageTitle>
+
+<PageBreadcrumbs Parents="BreadcrumbParents" Current="@Heading" BackDisabled="_saving" />
+
+<MudText Typo="Typo.h4">@Heading</MudText>
+@if (_parent is not null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+        Proposed for <MudLink Href="@WorkItemRoutes.ItemPath(_parent.Type, _parent.Id)">@_parent.Title</MudLink>.
+        Nothing is stored until you save it as a draft; what you leave out is discarded.
+        @if (_templateName is not null)
+        {
+            <span>Following the template '@_templateName'.</span>
+        }
+    </MudText>
+
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveSelectedAsync" Disabled="@(_generating || _saving || SelectedCount == 0)"
+                   StartIcon="@Icons.Material.Filled.Save">Save selected as draft (@SelectedCount)</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RegenerateAsync" Disabled="@(_generating || _saving)"
+                   StartIcon="@Icons.Material.Filled.AutoAwesome">Generate again</MudButton>
+    </MudStack>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_generating)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+    <MudText Typo="Typo.body2" Color="Color.Secondary">The Work Item Breakdown agent is writing the @ChildNames…</MudText>
+}
+else if (_proposals.Count > 0)
+{
+    <MudCheckBox T="bool" Value="AllSelected" ValueChanged="SelectAll" Color="Color.Primary" Disabled="_saving" Label="Select all" />
+    <MudExpansionPanels MultiExpansion="true" Outlined="true" Elevation="0">
+        @foreach (var proposal in _proposals)
+        {
+            <MudExpansionPanel @key="proposal">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        @* MudCheckBox stops its click from reaching the header, so ticking doesn't expand the panel. *@
+                        <MudCheckBox T="bool" @bind-Value="proposal.Selected" Color="Color.Primary" Disabled="_saving" aria-label="@($"Select {proposal.Item.Title}")" />
+                        <WorkItemTypeChip Type="_childType" />
+                        <MudText Style="font-weight:bold">@proposal.Item.Title</MudText>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MarkdownViewer Value="@proposal.Item.Description" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+else if (_parent is not null && _error is null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info">
+        The agent has no new @ChildNames to propose. Add more detail to the @WorkItemActions.Name(_parent.Type) or generate again.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
+    [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private readonly CancellationTokenSource _cancellation = new();
+    private (WorkItemType Type, int Id)? _loadedParameters;
+    private WorkItemType _type;
+    private WorkItemType _childType;
+    private WorkItem? _parent;
+    private string? _templateName;
+    private List<Proposal> _proposals = [];
+    private bool _generating = true;
+    private bool _saving;
+    private string? _error;
+
+    private string RepositoryName => Repository.Current!.FullName;
+    private string ChildNames => _childType.PluralName.ToLowerInvariant();
+    private string Heading => $"Generate {ChildNames}";
+    private int SelectedCount => _proposals.Count(p => p.Selected);
+    private bool AllSelected => _proposals.All(p => p.Selected);
+
+    private IReadOnlyList<BreadcrumbItem> BreadcrumbParents
+    {
+        get
+        {
+            List<BreadcrumbItem> parents = [new(_type.PluralName, WorkItemRoutes.ListPath(_type))];
+            if (_parent is not null)
+            {
+                parents.Add(new(_parent.Title, WorkItemRoutes.ItemPath(_parent.Type, _parent.Id)));
+            }
+            return parents;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (WorkItemRoutes.IsOutOfStep(RouteData, GetType(), Id))
+        {
+            return;
+        }
+
+        var type = WorkItemRoutes.TypeOf(Navigation);
+        if (_loadedParameters == (type, Id))
+        {
+            return;
+        }
+        _loadedParameters = (type, Id);
+        _type = type;
+        _childType = type.GeneratedChildType ?? WorkItemType.Task;
+        _parent = null;
+
+        var cancellationToken = _cancellation.Token;
+        try
+        {
+            var parent = await WorkItemService.GetAsync(RepositoryName, Id, cancellationToken);
+            if (parent is null || parent.Type != type)
+            {
+                _error = $"This {WorkItemActions.Name(type)} does not exist in the selected repository.";
+                _generating = false;
+                return;
+            }
+            _parent = parent;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = $"Could not load the {WorkItemActions.Name(type)}: {ex.Message}";
+            _generating = false;
+            return;
+        }
+
+        await GenerateAsync(cancellationToken);
+    }
+
+    private async Task RegenerateAsync()
+    {
+        await GenerateAsync(_cancellation.Token);
+    }
+
+    private async Task GenerateAsync(CancellationToken cancellationToken)
+    {
+        _generating = true;
+        _error = null;
+        _proposals = [];
+        try
+        {
+            var result = await WorkItemService.GenerateChildrenAsync(RepositoryName, Id, cancellationToken);
+            _templateName = result.TemplateName;
+            _proposals = result.Items.Select(item => new Proposal(item)).ToList();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+
+    private void SelectAll(bool selected)
+    {
+        _proposals.ForEach(p => p.Selected = selected);
+    }
+
+    private async Task SaveSelectedAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            var selected = _proposals.Where(p => p.Selected).Select(p => p.Item).ToList();
+            var saved = await WorkItemService.SaveGeneratedChildrenAsync(RepositoryName, Id, selected);
+            Snackbar.Add(saved.Count == 1 ? $"Saved '{saved[0].Title}' as a draft." : $"Saved {saved.Count} {ChildNames} as drafts.", Severity.Success);
+            Navigation.NavigateTo(WorkItemRoutes.ItemPath(_type, Id));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = $"Could not save: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+
+    private sealed class Proposal(GeneratedWorkItem item)
+    {
+        public GeneratedWorkItem Item { get; } = item;
+        public bool Selected { get; set; } = true;
+    }
+}

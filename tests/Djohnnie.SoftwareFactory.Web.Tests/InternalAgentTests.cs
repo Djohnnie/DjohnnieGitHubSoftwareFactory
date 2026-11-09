@@ -50,7 +50,7 @@ public class InternalAgentTests : BunitContext
         var keys = InternalAgentDefaults.All.Select(a => a.Key).ToList();
 
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.Equal(16, keys.Count);
+        Assert.Equal(17, keys.Count);
         foreach (var type in WorkItemTypeRules.All)
         {
             Assert.Contains("`update_work_item_form`", InternalAgentDefaults.Find(InternalAgentKeys.ForWorkItem(type))!.Instructions);
@@ -58,7 +58,7 @@ public class InternalAgentTests : BunitContext
         }
         Assert.Contains("`update_agent_form`", InternalAgentDefaults.Find(InternalAgentKeys.AgentCopilot)!.Instructions);
         Assert.Contains("This is an agent template", InternalAgentDefaults.Find(InternalAgentKeys.AgentTemplateCopilot)!.Instructions);
-        Assert.Equal([InternalAgentKeys.ModelSelector, InternalAgentKeys.ChatSuggestions, InternalAgentKeys.DescriptionWriter],
+        Assert.Equal([InternalAgentKeys.ModelSelector, InternalAgentKeys.ChatSuggestions, InternalAgentKeys.DescriptionWriter, InternalAgentKeys.WorkItemBreakdown],
             InternalAgentDefaults.All.Where(a => a.Kind == InternalAgentKind.Background).Select(a => a.Key));
         Assert.Equal("User Story Copilot", InternalAgentDefaults.Find("story-copilot")!.Name);
         Assert.StartsWith("You are User Story Copilot,", InternalAgentDefaults.Find("story-copilot")!.Instructions);

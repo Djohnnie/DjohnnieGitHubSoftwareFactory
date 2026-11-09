@@ -33,10 +33,17 @@ public sealed class WorkItemTemplateStore(IDbContextFactory<AppDbContext> dbFact
         template.Name = value.Name.Trim();
         template.TitleTemplate = value.TitleTemplate.Trim();
         template.Description = value.Description;
+        template.IsDefault = value.IsDefault;
         template.UpdatedAt = now;
         if (value.Id == 0)
         {
             db.WorkItemTemplates.Add(template);
+        }
+        if (value.IsDefault)
+        {
+            // In the same save, so the switch to another default is atomic.
+            var previous = await db.WorkItemTemplates.Where(t => t.Type == template.Type && t.IsDefault && t.Id != value.Id).ToListAsync(cancellationToken);
+            previous.ForEach(t => t.IsDefault = false);
         }
         await db.SaveChangesAsync(cancellationToken);
         return template.ToContract();

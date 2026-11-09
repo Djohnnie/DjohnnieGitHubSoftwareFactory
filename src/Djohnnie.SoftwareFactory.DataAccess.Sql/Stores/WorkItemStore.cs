@@ -71,6 +71,31 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
+    public async Task<List<WorkItem>> AddGeneratedChildrenAsync(string repositoryFullName, int parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var parent = await FindAsync(db, repositoryFullName, parentId, cancellationToken);
+        if (parent.Type.GeneratedChildType is not { } childType)
+        {
+            throw new DomainRuleException($"A {Name(parent.Type)} can't be split into child items.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var children = items.Select(item => new Entities.WorkItem
+        {
+            Repository = parent.Repository,
+            Parent = parent,
+            Type = childType,
+            Title = item.Title.Trim(),
+            Description = item.Description,
+            CreatedAt = now,
+            UpdatedAt = now
+        }).ToList();
+        db.WorkItems.AddRange(children);
+        await db.SaveChangesAsync(cancellationToken);
+        return children.Select(child => child.ToContract()).ToList();
+    }
+
     public async Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

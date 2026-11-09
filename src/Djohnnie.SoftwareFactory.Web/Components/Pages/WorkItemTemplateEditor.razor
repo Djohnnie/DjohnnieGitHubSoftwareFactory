@@ -56,6 +56,10 @@ else if (_template is not null)
                               MaxLength="200" Immediate="true" />
                 <DictationTextField @bind-Value="_template.TitleTemplate" Label="Title example" Required="true"
                                     MaxLength="256" HelperText="@($"Shown as a placeholder for the {Name} title, not saved as its actual title.")" />
+                <MudSwitch T="bool" @bind-Value="_template.IsDefault" Color="Color.Primary" Class="mt-4" Label="Default template" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Proposed for new @_type.PluralName.ToLowerInvariant() and followed when they are generated. Each type has one default: this replaces the current one.
+                </MudText>
             </MudPaper>
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MarkdownEditor @bind-Value="_template.Description" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
@@ -113,6 +117,11 @@ else if (_template is not null)
 
     protected override async Task OnParametersSetAsync()
     {
+        if (WorkItemRoutes.IsOutOfStep(RouteData, GetType(), Id))
+        {
+            return;
+        }
+
         var parameters = (WorkItemRoutes.TypeOf(Navigation), Id);
         if (_loadedParameters == parameters)
         {

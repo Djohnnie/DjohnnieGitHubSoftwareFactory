@@ -34,6 +34,12 @@ public static class WorkItemRoutes
         return $"{ListPath(type)}/{id}";
     }
 
+    /// <summary>The page that generates and reviews the child items of a stored item.</summary>
+    public static string GeneratePath(WorkItemType type, int id)
+    {
+        return $"{ItemPath(type, id)}/generate";
+    }
+
     public static string TemplatesPath(WorkItemType type)
     {
         return $"/{TemplateSegment(type)}";
@@ -70,12 +76,23 @@ public static class WorkItemRoutes
         return TypeOf(navigation.Uri) ?? WorkItemType.Epic;
     }
 
+    /// <summary>
+    /// Whether a page's parameters are out of step with the route. On navigation the cascaded route data reaches the
+    /// current page before its own parameters are updated, or before it is removed: the URL is already the new one while
+    /// <paramref name="id"/> is still the old one. Such a combination means nothing and must not be loaded or acted on.
+    /// </summary>
+    public static bool IsOutOfStep(Microsoft.AspNetCore.Components.RouteData? routeData, Type page, int? id)
+    {
+        return routeData is not null && (routeData.PageType != page || !Equals(routeData.RouteValues.GetValueOrDefault("Id"), id));
+    }
+
     /// <summary>Whether the URI is a page of one existing work item, which belongs to the repository it was opened in.</summary>
     public static bool IsItemPage(string uri)
     {
         var path = Uri.TryCreate(uri, UriKind.Absolute, out var absolute) ? absolute.AbsolutePath : uri.Split('?', '#')[0];
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length == 2 && int.TryParse(segments[1], out _)
+        var isItemOrGeneratePath = segments.Length == 2 || (segments.Length == 3 && segments[2].Equals("generate", StringComparison.OrdinalIgnoreCase));
+        return isItemOrGeneratePath && int.TryParse(segments[1], out _)
             && WorkItemTypeRules.All.Any(type => segments[0].Equals(Segment(type), StringComparison.OrdinalIgnoreCase));
     }
 

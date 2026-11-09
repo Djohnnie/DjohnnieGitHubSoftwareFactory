@@ -20,6 +20,15 @@ public sealed record WorkItemTemplate
     [Required, MaxLength(WorkItem.MaxDescriptionLength)]
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>Whether this is the default template of its type; saving one as default clears the previous one.</summary>
+    public bool IsDefault { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>The template to use for new items: the default one, otherwise the first of <paramref name="templates"/>.</summary>
+    public static WorkItemTemplate? Proposed(IReadOnlyList<WorkItemTemplate> templates)
+    {
+        return templates.FirstOrDefault(t => t.IsDefault) ?? templates.FirstOrDefault();
+    }
 }

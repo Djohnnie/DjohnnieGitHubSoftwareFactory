@@ -43,6 +43,18 @@ public sealed class WorkItemService(ISender mediator)
         return (await mediator.Send(new SelectWorkItemModelQuery(new(item)), cancellationToken)).Dto.Selection;
     }
 
+    /// <summary>Lets the Work Item Breakdown agent propose the children of a stored epic, feature or user story; nothing is stored.</summary>
+    public async Task<GeneratedChildWorkItems> GenerateChildrenAsync(string repositoryFullName, int parentId, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GenerateChildWorkItemsQuery(new(repositoryFullName, parentId)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Saves proposed children as drafts under their parent, all or none.</summary>
+    public async Task<List<WorkItem>> SaveGeneratedChildrenAsync(string repositoryFullName, int parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new SaveGeneratedWorkItemsCommand(new(repositoryFullName, parentId, items)), cancellationToken)).Dto.Items.ToList();
+    }
+
     public async Task<WorkItemAcceptResult> AssignAgentAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new AssignWorkItemAgentCommand(new(repositoryFullName, id)), cancellationToken)).Dto;

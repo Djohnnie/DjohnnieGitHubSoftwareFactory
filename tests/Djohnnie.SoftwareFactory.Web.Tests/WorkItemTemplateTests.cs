@@ -75,6 +75,47 @@ public class WorkItemTemplateTests : BunitContext
         }
     }
 
+    [Fact]
+    public async Task SaveAsDefault_ReplacesTheDefaultOfTheSameTypeOnly()
+    {
+        var service = Services.GetRequiredService<WorkItemTemplateService>();
+        var ct = TestContext.Current.CancellationToken;
+        var bug = await service.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Bug, Name = "Bug", TitleTemplate = "Example", Description = "## Body", IsDefault = true }, ct);
+        var first = await service.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Epic, Name = "First", TitleTemplate = "Example", Description = "## Body", IsDefault = true }, ct);
+        var second = await service.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Epic, Name = "Second", TitleTemplate = "Example", Description = "## Body" }, ct);
+        Assert.Equal(first.Id, WorkItemTemplate.Proposed(await service.GetAllAsync(WorkItemType.Epic, ct))!.Id);
+
+        await service.SaveAsync(second with { IsDefault = true }, ct);
+
+        Assert.Equal([second.Id], (await service.GetAllAsync(WorkItemType.Epic, ct)).Where(t => t.IsDefault).Select(t => t.Id));
+        Assert.True((await service.GetAsync(bug.Id, ct))!.IsDefault);
+        Assert.Equal(first.UpdatedAt, (await service.GetAsync(first.Id, ct))!.UpdatedAt);
+
+        await service.SaveAsync((await service.GetAsync(second.Id, ct))! with { IsDefault = false }, ct);
+        var templates = await service.GetAllAsync(WorkItemType.Epic, ct);
+        Assert.DoesNotContain(templates, t => t.IsDefault);
+        Assert.Equal(first.Id, WorkItemTemplate.Proposed(templates)!.Id);
+        Assert.Null(WorkItemTemplate.Proposed([]));
+    }
+
+    [Fact]
+    public async Task EditorSwitch_StoresTheDefault_AndTheListMarksIt()
+    {
+        var service = Services.GetRequiredService<WorkItemTemplateService>();
+        var ct = TestContext.Current.CancellationToken;
+        var template = await service.SaveAsync(new WorkItemTemplate { Type = WorkItemType.Task, Name = "Chore", TitleTemplate = "Example", Description = "## Body" }, ct);
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/task-templates/edit/{template.Id}");
+        Render<MudPopoverProvider>();
+        var editor = Render<WorkItemTemplateEditor>(p => p.Add(e => e.Id, template.Id));
+
+        await editor.InvokeAsync(() => editor.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == "Default template").Instance.ValueChanged.InvokeAsync(true));
+        await editor.InvokeAsync(() => editor.FindAll("button").Single(b => b.TextContent.Contains("Save template")).Click());
+
+        Assert.True((await service.GetAsync(template.Id, ct))!.IsDefault);
+        var list = Render<WorkItemTemplates>();
+        Assert.Equal("Default", list.FindComponent<MudChip<string>>().Find(".mud-chip-content").TextContent.Trim());
+    }
+
     [Theory]
     [InlineData("name")]
     [InlineData("title")]

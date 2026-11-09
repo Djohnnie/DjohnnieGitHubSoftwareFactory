@@ -480,6 +480,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(60000)
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)

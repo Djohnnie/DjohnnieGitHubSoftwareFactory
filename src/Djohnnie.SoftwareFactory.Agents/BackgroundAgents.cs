@@ -5,6 +5,7 @@ using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.Speech;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Microsoft.Agents.AI;
 
 namespace Djohnnie.SoftwareFactory.Agents;
@@ -123,6 +124,46 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
         return string.IsNullOrEmpty(description) ? null : description;
     }
 
+    /// <summary>Proposes the children of an item, without repeating the ones it already has; empty when the agent returns nothing usable.</summary>
+    /// <param name="agent">The Work Item Breakdown agent.</param>
+    /// <param name="template">The template the children follow, if any.</param>
+    /// <param name="existingChildren">The children of <paramref name="childType"/> the item already has.</param>
+    public async Task<IReadOnlyList<GeneratedWorkItem>> GenerateChildrenAsync(InternalAgent agent, WorkItem parent, WorkItemType childType, WorkItemTemplate? template,
+        IReadOnlyList<WorkItem> existingChildren, CancellationToken cancellationToken = default)
+    {
+        var input = new
+        {
+            Parent = new
+            {
+                Type = parent.Type.DisplayName,
+                parent.Title,
+                Description = Truncate(parent.Description, MaxDescriptionLength),
+                PartOf = parent.Parent is { } grandparent ? $"{grandparent.Type.DisplayName}: {grandparent.Title}" : null
+            },
+            ChildType = childType.DisplayName,
+            Template = template is null ? null : new { TitleExample = template.TitleTemplate, DescriptionSkeleton = Truncate(template.Description, MaxDescriptionLength) },
+            ExistingChildren = existingChildren.Select(child => child.Title).ToList()
+        };
+        var message = $"""
+            Split this {parent.Type.DisplayName.ToLowerInvariant()} into {childType.PluralName.ToLowerInvariant()}.
+
+            ```json
+            {JsonSerializer.Serialize(input, JsonOptions)}
+            ```
+            """;
+
+        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+            .RunAsync<ChildrenOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var titles = new HashSet<string>(existingChildren.Select(child => child.Title.Trim()), StringComparer.OrdinalIgnoreCase);
+        return (response.Result?.Items ?? [])
+            .Select(item => new GeneratedWorkItem(
+                Truncate(item.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength),
+                Truncate(item.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength)))
+            .Where(item => item.Title.Length > 0 && titles.Add(item.Title))
+            .Take(GeneratedWorkItem.MaxPerRun)
+            .ToList();
+    }
+
     private static string Clean(string? suggestion)
     {
         var value = (suggestion ?? string.Empty).Trim().Trim('"', '\'').TrimEnd('.').Trim();
@@ -143,6 +184,15 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
     [Description("The description with the dictated text merged in.")]
     internal sealed record DescriptionWriterOutput(
         [property: Description("The complete new description as Markdown.")] string? Description);
+
+    [Description("The proposed child work items.")]
+    internal sealed record ChildrenOutput(
+        [property: Description("The child work items, in a sensible order of implementation.")] List<ChildOutput>? Items);
+
+    [Description("One proposed child work item.")]
+    internal sealed record ChildOutput(
+        [property: Description("The title; no placeholders.")] string? Title,
+        [property: Description("The description as Markdown.")] string? Description);
 
     [Description("Suggestion chips for a Copilot chat.")]
     internal sealed record SuggestionsOutput(

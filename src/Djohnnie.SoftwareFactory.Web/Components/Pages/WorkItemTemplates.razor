@@ -17,7 +17,7 @@
     <div>
         <MudText Typo="Typo.h4">@Title</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            Reusable title examples and Markdown skeletons, shared across repositories. New @_type.PluralName.ToLowerInvariant() start with the first template alphabetically.
+            Reusable title examples and Markdown skeletons, shared across repositories. New and generated @_type.PluralName.ToLowerInvariant() use the default template, or else the first alphabetically.
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
@@ -40,7 +40,13 @@
         <MudTh Style="text-align:right">Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Template"><MudLink Href="@WorkItemRoutes.EditTemplatePath(_type, context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Template">
+            <MudLink Href="@WorkItemRoutes.EditTemplatePath(_type, context.Id)">@context.Name</MudLink>
+            @if (context.IsDefault)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2">Default</MudChip>
+            }
+        </MudTd>
         <MudTd DataLabel="Title example">@context.TitleTemplate</MudTd>
         <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">

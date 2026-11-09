@@ -108,6 +108,21 @@ public static class WorkItemTypeRules
             }
         }
 
+        /// <summary>What the Work Item Breakdown agent splits an item of this type into; <c>null</c> when it isn't split up.</summary>
+        public WorkItemType? GeneratedChildType
+        {
+            get
+            {
+                return type switch
+                {
+                    WorkItemType.Epic => WorkItemType.Feature,
+                    WorkItemType.Feature => WorkItemType.Story,
+                    WorkItemType.Story => WorkItemType.Task,
+                    _ => null
+                };
+            }
+        }
+
         public bool CanHaveParent(WorkItemType parentType)
         {
             return type.ParentTypes.Contains(parentType);

@@ -33,6 +33,7 @@ internal static class ContractMapping
                 Name = value.Name,
                 TitleTemplate = value.TitleTemplate,
                 Description = value.Description,
+                IsDefault = value.IsDefault,
                 CreatedAt = value.CreatedAt,
                 UpdatedAt = value.UpdatedAt
             };

@@ -18,6 +18,8 @@ public class WorkItemTemplate
     [Required, MaxLength(Contracts.WorkItems.WorkItem.MaxDescriptionLength)]
     public string Description { get; set; } = string.Empty;
 
+    public bool IsDefault { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

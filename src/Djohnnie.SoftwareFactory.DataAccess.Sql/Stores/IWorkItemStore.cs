@@ -12,6 +12,9 @@ public interface IWorkItemStore
     /// <summary>Creates or updates an item; enforces the hierarchy rules and what can still change after acceptance.</summary>
     Task<WorkItem> SaveAsync(WorkItem item, CancellationToken cancellationToken = default);
 
+    /// <summary>Creates drafts of the type the parent is split into, all or none.</summary>
+    Task<List<WorkItem>> AddGeneratedChildrenAsync(string repositoryFullName, int parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default);
+
     /// <summary>Deletes an item that has no children.</summary>
     Task DeleteAsync(string repositoryFullName, int id, CancellationToken cancellationToken = default);
 
