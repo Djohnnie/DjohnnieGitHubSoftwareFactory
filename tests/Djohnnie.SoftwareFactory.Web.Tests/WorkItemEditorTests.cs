@@ -129,6 +129,40 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reset_LoadsTheStoredItemAfterConfirming_AndKeepsTheCopilotConversation()
+    {
+        await SelectRepositoryAsync();
+        var epic = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Stored title", Description = "Stored" }, _cancellationToken);
+        Navigation.NavigateTo($"/epics/{epic.Id}");
+        Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, epic.Id));
+        var chat = cut.FindComponent<AssistantChat>().Instance;
+        Assert.Equal("/epics", cut.Find("a[aria-label='Back']").GetAttribute("href"));
+        Assert.DoesNotContain(cut.FindAll("button, a"), b => b.TextContent.Trim() is "Back" or "Cancel");
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Edited title");
+        await cut.InvokeAsync(() => { _ = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Reset").ClickAsync(new()); });
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Reset").Click());
+
+        cut.WaitForAssertion(() => Assert.Equal("Stored title",
+            cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").GetAttribute("value")));
+        Assert.Same(chat, cut.FindComponent<AssistantChat>().Instance);
+    }
+
+    [Fact]
+    public async Task Reset_IsNotOfferedOnANewItem()
+    {
+        await SelectRepositoryAsync();
+        Navigation.NavigateTo("/epics/new");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+
+        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Save draft"));
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Trim() == "Reset");
+    }
+
+    [Fact]
     public async Task NewEpic_MissingRequestedTemplate_DoesNotSilentlyApplyAnother()
     {
         await SelectRepositoryAsync();

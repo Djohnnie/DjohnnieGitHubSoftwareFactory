@@ -5,6 +5,8 @@
 
 @if (Repository.Current is { } repo)
 {
+    <PageBreadcrumbs />
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-6">
         <MudAvatar Size="Size.Large"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
         <div>

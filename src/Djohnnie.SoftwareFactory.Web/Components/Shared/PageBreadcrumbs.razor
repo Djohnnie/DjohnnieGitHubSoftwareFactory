@@ -1,0 +1,38 @@
+@* The trail above every page title, starting at the overview, with a back arrow to the page one level up. *@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+    @if (BackTarget is { } back)
+    {
+        <MudIconButton Href="@back" Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Edge="Edge.Start" Disabled="BackDisabled"
+                       aria-label="Back" title="Back" />
+    }
+    <MudBreadcrumbs Items="_items" Class="pa-0" />
+</MudStack>
+
+@code {
+    private const string OverviewText = "Overview";
+    private const string OverviewPath = "/";
+
+    /// <summary>The links between the overview and this page, outermost first.</summary>
+    [Parameter] public IReadOnlyList<BreadcrumbItem> Parents { get; set; } = [];
+
+    /// <summary>The label of this page. Leave empty on the overview itself, which has nothing to go back to.</summary>
+    [Parameter] public string? Current { get; set; }
+
+    /// <summary>Where the back arrow goes when that isn't the last of <see cref="Parents"/>.</summary>
+    [Parameter] public string? BackHref { get; set; }
+
+    /// <summary>Disables the back arrow, for example while the page is saving.</summary>
+    [Parameter] public bool BackDisabled { get; set; }
+
+    private List<BreadcrumbItem> _items = [];
+
+    private string? BackTarget => Current is null ? null : BackHref ?? (Parents.Count > 0 ? Parents[^1].Href : OverviewPath);
+
+    protected override void OnParametersSet()
+    {
+        _items = Current is null
+            ? [new(OverviewText, null, disabled: true)]
+            : [new(OverviewText, OverviewPath), .. Parents, new(Current, null, disabled: true)];
+    }
+}

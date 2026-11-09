@@ -8,7 +8,7 @@
 
 <PageTitle>@(_agent?.Name ?? "Internal agent")</PageTitle>
 
-<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+<PageBreadcrumbs Parents="@([new("Internal agents", "/internal-agents")])" Current="@(_agent?.Name ?? Key)" BackDisabled="_saving" />
 
 @if (_error is not null)
 {
@@ -32,6 +32,17 @@ else if (_agent is not null)
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
         @_agent.Description Used: @InternalAgents.UsedOn(_agent).
     </MudText>
+
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="@(!CanSave)"
+                   StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetToStoredAsync" Disabled="_saving || _testing"
+                   StartIcon="@Icons.Material.Filled.Undo" title="Discard your changes and load the saved version">Reset</MudButton>
+    </MudStack>
+    @if (_saving)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
 
     <MudGrid>
         <MudItem xs="12" md="8">
@@ -99,17 +110,6 @@ else if (_agent is not null)
                     }
                 </MudPaper>
                 <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                    <MudStack Row="true" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
-                        <MudButton Variant="Variant.Outlined" Href="/internal-agents" Disabled="_saving">Back</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="@(!CanSave)"
-                                   StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
-                    </MudStack>
-                    @if (_saving)
-                    {
-                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
-                    }
-                </MudPaper>
-                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                     <MudText Typo="Typo.h6">Default prompt</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                         @(_agent.IsCustomized ? "The prompt differs from DGHSF's default." : "The prompt is DGHSF's default.")
@@ -148,7 +148,6 @@ else if (_agent is not null)
     private string? _testError;
     private string? _error;
     private string? _loadedKey;
-    private List<BreadcrumbItem> _breadcrumbs = [];
 
     private string CurrentModel => _agent?.Model?.Trim() ?? string.Empty;
     private bool ModelPassedTest => _testedModel == CurrentModel && _testError is null;
@@ -194,7 +193,6 @@ else if (_agent is not null)
         }
         finally
         {
-            _breadcrumbs = [new("Internal agents", "/internal-agents"), new(_agent?.Name ?? Key, null, disabled: true)];
             _loading = false;
         }
     }
@@ -251,6 +249,34 @@ else if (_agent is not null)
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
             Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Loads the stored agent again and discards unsaved changes.</summary>
+    private async Task ResetToStoredAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset changes",
+                $"Discard your changes to {_agent!.Name} and load the saved version again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            _stored = await Agents.GetAsync(_agent.Key);
+            _agent = Editable(_stored);
+            _testedModel = null;
+            _testError = null;
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not reset: {ex.Message}", Severity.Error);
         }
         finally
         {

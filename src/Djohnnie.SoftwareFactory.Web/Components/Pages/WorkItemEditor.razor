@@ -23,12 +23,48 @@
 
 <PageTitle>@Heading</PageTitle>
 
-<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+<PageBreadcrumbs Parents="BreadcrumbParents" Current="@BreadcrumbCurrent" BackHref="@BackPath" BackDisabled="_busy" />
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h4">@Heading</MudText>
     <WorkItemTypeChip Type="_type" />
 </MudStack>
+
+@if (!_loading && _item is not null)
+{
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        @if (_item.IsDraft || _item.CanEditAssignment)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.Save">@(_item.IsDraft ? "Save draft" : "Save")</MudButton>
+        }
+        @if (_item.IsDraft)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
+        }
+        else if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Warning" OnClick="AssignAsync" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
+        }
+        @if (!IsNew && (_item.IsDraft || _item.CanEditAssignment))
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.Undo">Reset</MudButton>
+        }
+        <MudSpacer />
+        @if (!IsNew)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync"
+                       Disabled="_busy">Delete @Name</MudButton>
+        }
+    </MudStack>
+    @if (_busy)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+}
 
 @if (_error is not null)
 {
@@ -279,37 +315,6 @@ else if (_item is not null)
                                           HelperText="Extra guidance for Copilot on top of the issue." />
                         </MudPaper>
                     }
-
-                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
-                            <MudButton Variant="Variant.Outlined" Href="@BackPath" Disabled="_busy">Back</MudButton>
-                            @if (_item.IsDraft || _item.CanEditAssignment)
-                            {
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_busy"
-                                           StartIcon="@Icons.Material.Filled.Save">@(_item.IsDraft ? "Save draft" : "Save")</MudButton>
-                            }
-                            @if (_item.IsDraft)
-                            {
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="AcceptAsync" Disabled="_busy"
-                                           StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
-                            }
-                            else if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
-                            {
-                                <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="AssignAsync" Disabled="_busy"
-                                           StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
-                            }
-                        </MudStack>
-                        @if (_busy)
-                        {
-                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
-                        }
-                    </MudPaper>
-
-                    @if (!IsNew)
-                    {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync"
-                                   Disabled="_busy">Delete @Name</MudButton>
-                    }
                 </MudStack>
             </MudItem>
         </MudGrid>
@@ -344,7 +349,6 @@ else if (_item is not null)
     private bool _loading = true;
     private bool _busy;
     private string? _error;
-    private List<BreadcrumbItem> _breadcrumbs = [];
     private List<WorkItemTemplate> _templates = [];
     private List<WorkItem> _parents = [];
     private List<WorkItem> _children = [];
@@ -379,6 +383,21 @@ else if (_item is not null)
     private string BackPath => _item?.Parent is { } parent && !IsNew
         ? WorkItemRoutes.ItemPath(parent.Type, parent.Id)
         : SelectedParent is { } selected ? WorkItemRoutes.ItemPath(selected.Type, selected.Id) : WorkItemRoutes.ListPath(_type);
+
+    private IReadOnlyList<BreadcrumbItem> BreadcrumbParents
+    {
+        get
+        {
+            List<BreadcrumbItem> parents = [new(_type.PluralName, WorkItemRoutes.ListPath(_type))];
+            if (_item?.Parent is { } parent)
+            {
+                parents.Add(new(parent.Title, WorkItemRoutes.ItemPath(parent.Type, parent.Id)));
+            }
+            return parents;
+        }
+    }
+
+    private string BreadcrumbCurrent => _item is { Id: > 0 } ? _item.Title : IsNew ? "New" : $"#{Id}";
 
     private string ParentHelp => _type.RequiresParent
         ? $"Every {Name} is part of {(_type.ParentTypes[0] == WorkItemType.Epic ? "an" : "a")} {ParentNames}; its issue becomes a sub-issue of the parent's issue."
@@ -451,8 +470,6 @@ else if (_item is not null)
         {
             _loading = false;
         }
-
-        SetBreadcrumbs();
 
         // The suggestion only follows changes made to the description from here on.
         CancelModelSuggestion();
@@ -698,16 +715,6 @@ else if (_item is not null)
             : _item?.Parent?.Title ?? $"#{parentId}";
     }
 
-    private void SetBreadcrumbs()
-    {
-        _breadcrumbs = [new(_type.PluralName, WorkItemRoutes.ListPath(_type))];
-        if (_item?.Parent is { } parent)
-        {
-            _breadcrumbs.Add(new(parent.Title, WorkItemRoutes.ItemPath(parent.Type, parent.Id)));
-        }
-        _breadcrumbs.Add(new(_item is { Id: > 0 } ? _item.Title : IsNew ? "New" : $"#{Id}", null, disabled: true));
-    }
-
     private async Task<bool> SaveCoreAsync()
     {
         await _form!.ValidateAsync();
@@ -718,7 +725,6 @@ else if (_item is not null)
 
         var wasNew = _item!.Id == 0;
         _item = await WorkItemService.SaveAsync(_item);
-        SetBreadcrumbs();
         if (wasNew)
         {
             Navigation.NavigateTo(WorkItemRoutes.ItemPath(_item.Type, _item.Id), replace: true);
@@ -739,6 +745,46 @@ else if (_item is not null)
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Loads the stored item again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    private async Task ResetAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset changes", $"Discard your changes and load the saved {Name} again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var stored = await WorkItemService.GetAsync(RepositoryName, _item!.Id);
+            if (stored is null)
+            {
+                Snackbar.Add($"This {Name} no longer exists.", Severity.Warning);
+                return;
+            }
+
+            _item = stored;
+            await LoadHierarchyAsync();
+            await _form!.ResetValidationAsync();
+
+            // Like opening the item: the suggestions follow the stored title and description.
+            CancelModelSuggestion();
+            _modelSuggestion = null;
+            _suggestedDescription = _item.Description;
+            OnFieldBlur();
+            SuggestModelOnOpen();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not reset: {ex.Message}", Severity.Error);
         }
         finally
         {

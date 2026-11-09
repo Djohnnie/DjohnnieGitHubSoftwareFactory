@@ -165,7 +165,7 @@
                     </MudAlert>
                 }
 
-                @Actions
+                @SidePanel
 
                 <MudExpansionPanels Outlined="true" Elevation="0">
                     <MudExpansionPanel Text="Preview file" @bind-Expanded="_previewExpanded">
@@ -200,8 +200,8 @@
     /// <summary>Content above the profile, such as DGHSF Copilot.</summary>
     [Parameter] public RenderFragment? Header { get; set; }
 
-    /// <summary>The save panel in the side column.</summary>
-    [Parameter] public RenderFragment? Actions { get; set; }
+    /// <summary>Page-specific content in the side column, such as the commit message.</summary>
+    [Parameter] public RenderFragment? SidePanel { get; set; }
 
     private static readonly (string Alias, string Description)[] ToolAliases =
     [
@@ -245,6 +245,12 @@
         return Agent.Prompt.Length > AgentDefinition.MaxPromptLength
             ? $"The instructions are longer than {AgentDefinition.MaxPromptLength:N0} characters."
             : null;
+    }
+
+    /// <summary>Clears the validation messages, after the page replaced the agent with its stored version.</summary>
+    public Task ResetValidationAsync()
+    {
+        return _form!.ResetValidationAsync();
     }
 
     // The file name follows the name until it is changed by hand.

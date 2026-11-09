@@ -5,13 +5,33 @@
 @inject AiModelService ModelService
 @inject AgentTemplateService Templates
 @inject NavigationManager Navigation
+@inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 
 <PageTitle>@(IsNew ? "New agent" : $"Edit {FileName}")</PageTitle>
 
-<MudBreadcrumbs Items="_breadcrumbs" Class="px-0 pt-0" />
+<PageBreadcrumbs Parents="@([new("Custom agents", "/agents")])" Current="@(IsNew ? "New" : FileName!)" BackDisabled="_saving" />
 
 <MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New custom agent" : $"Edit {_agent?.Name ?? FileName}")</MudText>
+
+@if (!_loading && _agent is not null)
+{
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save &amp; commit
+        </MudButton>
+        @if (!IsNew)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving"
+                       StartIcon="@Icons.Material.Filled.Undo">Reset</MudButton>
+        }
+    </MudStack>
+}
 
 @if (_error is not null)
 {
@@ -39,24 +59,13 @@ else if (_agent is not null)
                            Subtitle="@(IsNew && _template is null ? "Describe the agent you need; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this agent; I'll update the form.")"
                            Suggestions="@(IsNew && _template is null ? AgentSuggestions : [])" />
         </Header>
-        <Actions>
+        <SidePanel>
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MudText Typo="Typo.h6" GutterBottom="true">Commit</MudText>
                 <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message" Placeholder="@DefaultCommitMessage"
                               HelperText="@($"Committed directly to {Repository.Current?.DefaultBranch ?? "the default branch"}.")" />
-                <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
-                    <MudButton Variant="Variant.Outlined" Href="/agents" Disabled="_saving">Cancel</MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
-                               StartIcon="@Icons.Material.Filled.Save">
-                        @if (_saving)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        }
-                        Save &amp; commit
-                    </MudButton>
-                </MudStack>
             </MudPaper>
-        </Actions>
+        </SidePanel>
     </AgentForm>
 }
 
@@ -86,7 +95,6 @@ else if (_agent is not null)
     private bool _saving;
     private string? _error;
     private List<string> _otherAgents = [];
-    private List<BreadcrumbItem> _breadcrumbs = [];
 
     private bool IsNew => FileName is null;
 
@@ -98,12 +106,6 @@ else if (_agent is not null)
 
     protected override async Task OnInitializedAsync()
     {
-        _breadcrumbs =
-        [
-            new("Agents", "/agents"),
-            new(IsNew ? "New" : FileName!, null, disabled: true)
-        ];
-
         var repo = Repository.Current!.FullName;
         await CreateAssistantToolsAsync();
         try
@@ -129,19 +131,11 @@ else if (_agent is not null)
             }
 
             _path = $"{AgentDefinition.Directory}/{FileName}";
-            var file = await GitHub.GetFileAsync(repo, _path);
-            if (file is null)
-            {
-                _error = $"{_path} does not exist in {repo}.";
-                return;
-            }
-
-            _sha = file.Sha;
-            _agent = AgentFileSerializer.Parse(file.Content);
+            await LoadFileAsync(repo);
         }
         catch (FormatException ex)
         {
-            _error = $"{_path} cannot be edited here because it is not a valid agent file: {ex.Message}";
+            _error = InvalidFileError(ex);
         }
         catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
         {
@@ -151,6 +145,24 @@ else if (_agent is not null)
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadFileAsync(string repo)
+    {
+        var file = await GitHub.GetFileAsync(repo, _path);
+        if (file is null)
+        {
+            _error = $"{_path} does not exist in {repo}.";
+            return;
+        }
+
+        _sha = file.Sha;
+        _agent = AgentFileSerializer.Parse(file.Content);
+    }
+
+    private string InvalidFileError(FormatException ex)
+    {
+        return $"{_path} cannot be edited here because it is not a valid agent file: {ex.Message}";
     }
 
     private async Task LoadTemplateAsync()
@@ -197,6 +209,39 @@ else if (_agent is not null)
             IsNew ? fileName => _fileName = fileName : null,
             models,
             change => InvokeAsync(() => { change(); StateHasChanged(); }));
+    }
+
+    /// <summary>Loads the committed file again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    private async Task ResetAsync()
+    {
+        var repo = Repository.Current!.FullName;
+        if (await Dialogs.ShowMessageBoxAsync("Reset agent",
+                $"Discard your changes and load {_path} from {repo} again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            await LoadFileAsync(repo);
+            _commitMessage = null;
+            await _agentForm!.ResetValidationAsync();
+        }
+        catch (FormatException ex)
+        {
+            _error = InvalidFileError(ex);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _error = $"Could not reset the agent: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task SaveAsync()

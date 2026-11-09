@@ -231,6 +231,21 @@ public class InternalAgentTests : BunitContext
     }
 
     [Fact]
+    public async Task EditorPage_ResetLoadsTheStoredVersion_NotTheDefault()
+    {
+        var stored = await Agents.SaveAsync(await SetModelAsync(InternalAgentKeys.AgentCopilot, "stored-model") with { Instructions = "Stored prompt." }, _cancellationToken);
+        Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
+        var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.AgentCopilot));
+
+        await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("Unsaved prompt."));
+        await cut.InvokeAsync(() => { _ = Button(cut, "Reset").ClickAsync(new()); });
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Reset").Click());
+
+        cut.WaitForAssertion(() => Assert.Equal(stored.Instructions, cut.FindComponent<MarkdownEditor>().Instance.Value));
+    }
+
+    [Fact]
     public async Task EditorPage_OnlySavesACopilotModelThatPassedTheTest()
     {
         // The second test finds no scripted response, so the model call fails.

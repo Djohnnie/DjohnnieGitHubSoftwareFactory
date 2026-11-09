@@ -3,9 +3,12 @@
 @inject GitHubService GitHub
 @inject GitHubMcpService GitHubMcp
 @inject RepositoryContext Repository
+@inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 
 <PageTitle>Copilot instructions</PageTitle>
+
+<PageBreadcrumbs Current="Copilot instructions" BackDisabled="_saving" />
 
 <MudStack Class="mb-4">
     <div>
@@ -15,11 +18,28 @@
             GitHub Copilot adds them to every chat, cloud agent and code review request. Every change is committed directly to the default branch.
         </MudText>
     </div>
-    <MudStack Row="true" Wrap="Wrap.Wrap">
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        @if (_loaded)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
+                       StartIcon="@Icons.Material.Filled.Save">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Save &amp; commit
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving || _loading || !IsDirty"
+                       StartIcon="@Icons.Material.Filled.Undo">Reset</MudButton>
+        }
         @if (_htmlUrl is not null)
         {
             <MudButton Href="@_htmlUrl" Target="_blank" rel="noopener" Variant="Variant.Text" Color="Color.Primary"
                        StartIcon="@Icons.Custom.Brands.GitHub">View on GitHub</MudButton>
+        }
+        @if (_loaded && IsDirty)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Unsaved changes</MudText>
         }
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync" Disabled="_loading || _saving" title="Reload" />
@@ -69,21 +89,6 @@
             <MudText Typo="Typo.h6" GutterBottom="true">Commit</MudText>
             <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message" Placeholder="@DefaultCommitMessage"
                           HelperText="@($"Committed directly to {Repository.Current?.DefaultBranch ?? "the default branch"}.")" />
-            <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
-                @if (IsDirty)
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Unsaved changes</MudText>
-                }
-                <MudButton Variant="Variant.Outlined" OnClick="ReloadAsync" Disabled="_saving || !IsDirty">Discard changes</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving"
-                           StartIcon="@Icons.Material.Filled.Save">
-                    @if (_saving)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Save &amp; commit
-                </MudButton>
-            </MudStack>
         </MudPaper>
     </MudStack>
 }
@@ -199,6 +204,19 @@
     private async Task ReloadAsync()
     {
         await LoadAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset instructions",
+                $"Discard your changes and load {CopilotInstructionsFile.Path} from the repository again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _commitMessage = null;
+        await ReloadAsync();
     }
 
     private async Task<IReadOnlyList<RepositoryEntry>> ListDirectoryAsync(string path, CancellationToken cancellationToken)

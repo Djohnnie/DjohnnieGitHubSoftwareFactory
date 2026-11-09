@@ -39,6 +39,7 @@ The app targets .NET 10. Development startup applies EF migrations automatically
 - Write extension methods with C# 14 `extension(...)` blocks.
 - Use block bodies (`{ ... }`) for methods, constructors, operators and local functions, also in Razor `@code` blocks; expression bodies only where a block is not possible. `.editorconfig` enforces this for C# files.
 - UI pages are Razor components using MudBlazor. Tests use xUnit and bUnit in `tests\Djohnnie.SoftwareFactory.Web.Tests`.
+- Every page in the main layout starts with `PageBreadcrumbs`: the trail from the overview and a back arrow to the page one level up (`BackHref` overrides it). Page actions go in a row of text buttons between the title and the first box, as on the overview pages; detail pages have no Cancel, because the back arrow does that. Pages editing something stored have a Reset that confirms, loads the stored version again without setting `_loading` (which would tear down the form and its Copilot conversation), and isn't shown on new items.
 
 ## Repository guidance
 
