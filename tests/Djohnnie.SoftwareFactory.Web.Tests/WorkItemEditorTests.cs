@@ -353,7 +353,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         await cut.InvokeAsync(() => cut.Find("button[aria-label='Refresh from GitHub']").Click());
 
         cut.WaitForAssertion(() => Assert.Contains("Renamed on GitHub", cut.Markup));
-        Assert.Contains("Done", cut.Markup);
+        Assert.Contains("Closed", cut.Markup);
     }
 
     private async Task<WorkItem> SaveAcceptedTaskAsync()

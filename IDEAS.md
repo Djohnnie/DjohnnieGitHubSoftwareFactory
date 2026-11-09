@@ -72,7 +72,7 @@ Items live in the app's database as drafts. Nothing reaches GitHub until I **man
 
 ![Lifecycle](docs/lifecycle.svg)
 
-An item moves from **Draft** to **Accepted** (issue created), then **In progress** (agent assigned), and finally **Done** (issue closed and/or pull request merged).
+An item moves from **Draft** to **Accepted** (issue created), then **In progress** (agent assigned), and finally **Closed** (issue closed and/or pull request merged).
 
 Accepted items are not edited in place on GitHub. If I change an accepted item, the app automatically creates a **linked "diff" issue** that summarises what changed and links back to the original issue. The original issue stays as it was.
 
@@ -93,7 +93,7 @@ The app shows the agent's session status and links to the resulting pull request
 
 An Azure Function polls GitHub on a CRON schedule (no webhooks), and only for repositories that have actual work in the app. Everything flows back into the app: issue state, labels, comments, linked pull requests and agent sessions. When both sides changed, **the app wins**.
 
-**Implemented (manual refresh):** accepted items have a **Refresh from GitHub** button on the list and detail pages. It stores the issue's title, description and state: closed becomes **Done**, open becomes **In progress** when Copilot is assigned and otherwise **Accepted**. The Azure Function, labels, comments, linked pull requests and agent sessions are still to do.
+**Implemented (manual refresh):** accepted items have a **Refresh from GitHub** button on the list and detail pages. It stores the issue's title, description and state: closed becomes **Closed**, open becomes **In progress** when Copilot is assigned and otherwise **Accepted**. The Azure Function, labels, comments, linked pull requests and agent sessions are still to do.
 
 ### 4.8 DGHSF Copilot
 

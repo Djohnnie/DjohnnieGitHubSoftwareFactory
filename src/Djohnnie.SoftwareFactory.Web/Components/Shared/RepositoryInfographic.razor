@@ -58,15 +58,14 @@
         }
         else
         {
-            var largest = _counts.Max(c => c.Existing);
             <table class="infographic-table">
                 <thead>
                     <tr>
                         <th scope="col">Work items</th>
                         <th scope="col" class="infographic-bar-column" aria-label="Chart"></th>
-                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-existing"></span>Existing</th>
+                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-existing"></span>Draft</th>
                         <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-accepted"></span>Accepted</th>
-                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Finished</th>
+                        <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Closed</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -80,25 +79,26 @@
                                 </span>
                             </th>
                             <td class="infographic-bar-column">
-                                @if (row.Existing > 0)
+                                @if (row.Total > 0)
                                 {
-                                    @* All tracks share one scale, so the types can be compared; the numbers next to it are the accessible version. *@
-                                    <div class="infographic-track infographic-existing" style="width: @Percentage(row.Existing, largest)"
-                                         title="@($"{row.Accepted} of {row.Existing} accepted, {row.Finished} of {row.Existing} finished")" aria-hidden="true">
+                                    @* Every track is full width and split by the items of its own type; the numbers next to it are the accessible version. *@
+                                    <div class="infographic-track infographic-existing"
+                                         title="@($"{row.Draft} draft, {row.Accepted} accepted, {row.Closed} closed")" aria-hidden="true">
+                                        @* The fills overlap from the left, so the accepted fill reaches past the closed one by the number of accepted items. *@
                                         @if (row.Accepted > 0)
                                         {
-                                            <div class="infographic-fill infographic-accepted" style="width: @Percentage(row.Accepted, row.Existing)"></div>
+                                            <div class="infographic-fill infographic-accepted" style="width: @Percentage(row.Accepted + row.Closed, row.Total)"></div>
                                         }
-                                        @if (row.Finished > 0)
+                                        @if (row.Closed > 0)
                                         {
-                                            <div class="infographic-fill infographic-finished" style="width: @Percentage(row.Finished, row.Existing)"></div>
+                                            <div class="infographic-fill infographic-finished" style="width: @Percentage(row.Closed, row.Total)"></div>
                                         }
                                     </div>
                                 }
                             </td>
-                            <td class="infographic-number">@row.Existing</td>
+                            <td class="infographic-number">@row.Draft</td>
                             <td class="infographic-number">@row.Accepted</td>
-                            <td class="infographic-number">@row.Finished</td>
+                            <td class="infographic-number">@row.Closed</td>
                         </tr>
                     }
                 </tbody>

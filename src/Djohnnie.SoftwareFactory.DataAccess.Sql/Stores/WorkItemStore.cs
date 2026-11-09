@@ -40,8 +40,8 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .GroupBy(e => e.Type)
             .Select(g => new WorkItemCounts(
                 g.Key,
-                g.Count(),
-                g.Count(e => e.Status != WorkItemStatus.Draft),
+                g.Count(e => e.Status == WorkItemStatus.Draft),
+                g.Count(e => e.Status == WorkItemStatus.Accepted || e.Status == WorkItemStatus.InProgress),
                 g.Count(e => e.Status == WorkItemStatus.Done)))
             .ToDictionaryAsync(c => c.Type, cancellationToken);
         return WorkItemTypeRules.All.Select(type => counts.GetValueOrDefault(type) ?? new WorkItemCounts(type, 0, 0, 0)).ToList();

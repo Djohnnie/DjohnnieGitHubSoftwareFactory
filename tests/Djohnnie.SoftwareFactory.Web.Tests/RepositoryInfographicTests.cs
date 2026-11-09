@@ -55,14 +55,14 @@ public class RepositoryInfographicTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("Available", cut.Markup));
         Assert.Equal("2", Stat(cut, "Custom agents"));
-        Assert.Equal(["4", "3", "1"], Numbers(cut, "Bugs"));
+        Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
         Assert.Equal(["0", "0", "0"], Numbers(cut, "Epics"));
         Assert.Equal(WorkItemTypeRules.All.Count, cut.FindAll("tbody tr").Count);
         // The count comes from the listing alone, not from reading every agent file.
         Assert.Equal(2, _gitHub.Requests.Count);
 
         var track = cut.Find("tbody .infographic-track");
-        Assert.Equal("width: 100%", track.GetAttribute("style"));
+        Assert.Null(track.GetAttribute("style"));
         Assert.Equal("width: 75%", track.QuerySelector(".infographic-accepted")!.GetAttribute("style"));
         Assert.Equal("width: 25%", track.QuerySelector(".infographic-finished")!.GetAttribute("style"));
     }
@@ -87,7 +87,7 @@ public class RepositoryInfographicTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".infographic-stat").Count(s => s.TextContent.Contains("Could not check"))));
         Assert.DoesNotContain("Not available", cut.Markup);
-        Assert.Equal(["4", "3", "1"], Numbers(cut, "Bugs"));
+        Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
     }
 
     /// <summary>One bug per status.</summary>

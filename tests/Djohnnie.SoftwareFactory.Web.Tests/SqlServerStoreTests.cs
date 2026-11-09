@@ -242,7 +242,7 @@ public class SqlServerStoreTests
     }
 
     [Fact]
-    public async Task GetCounts_CountsPerTypeCumulativelyAndForOneRepositoryOnly()
+    public async Task GetCounts_CountsPerTypeByCurrentStatusAndForOneRepositoryOnly()
     {
         await using var database = await SqlServerDatabase.CreateAsync();
         var store = new WorkItemStore(database.Factory, TimeProvider.System);
@@ -257,7 +257,7 @@ public class SqlServerStoreTests
         var counts = await store.GetCountsAsync("OWNER/repo", _cancellationToken);
 
         Assert.Equal(WorkItemTypeRules.All, counts.Select(c => c.Type));
-        Assert.Equal(new WorkItemCounts(WorkItemType.Task, 3, 2, 1), counts.Single(c => c.Type == WorkItemType.Task));
+        Assert.Equal(new WorkItemCounts(WorkItemType.Task, 1, 1, 1), counts.Single(c => c.Type == WorkItemType.Task));
         Assert.Equal(new WorkItemCounts(WorkItemType.Epic, 0, 0, 0), counts.Single(c => c.Type == WorkItemType.Epic));
     }
 

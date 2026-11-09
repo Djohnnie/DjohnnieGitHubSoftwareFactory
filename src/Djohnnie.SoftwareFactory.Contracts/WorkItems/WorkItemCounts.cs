@@ -1,7 +1,16 @@
 namespace Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
-/// <summary>How far the items of one type got in a repository; each number includes the next.</summary>
-/// <param name="Existing">All items, including drafts.</param>
-/// <param name="Accepted">The items with a GitHub issue, whether they are accepted, in progress or done.</param>
-/// <param name="Finished">The items that are done.</param>
-public sealed record WorkItemCounts(WorkItemType Type, int Existing, int Accepted, int Finished);
+/// <summary>The items of one type in a repository by their current status; every item is in exactly one number.</summary>
+/// <param name="Draft">The items without a GitHub issue.</param>
+/// <param name="Accepted">The items with an open GitHub issue, whether they are accepted or in progress.</param>
+/// <param name="Closed">The items whose GitHub issue is closed.</param>
+public sealed record WorkItemCounts(WorkItemType Type, int Draft, int Accepted, int Closed)
+{
+    public int Total
+    {
+        get
+        {
+            return Draft + Accepted + Closed;
+        }
+    }
+}
