@@ -172,7 +172,28 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
             .Single(button => button.TextContent.Contains("Switch")).Click());
 
         cut.WaitForAssertion(() =>
-            Assert.Equal("owner/repo", cut.FindComponent<RepositoryPickerDialog>().Instance.SelectedFullName));
+            Assert.Equal("owner/repo", cut.FindComponent<RepositoryPicker>().Instance.SelectedFullName));
+        Assert.Empty(cut.FindAll(".mud-dialog"));
+        Assert.True(PageContainer(cut).HasAttribute("hidden"));
+
+        await cut.InvokeAsync(() => cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Cancel")).Click());
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<RepositoryPicker>()));
+        Assert.False(PageContainer(cut).HasAttribute("hidden"));
+
+        await cut.InvokeAsync(() => cut.Find(".mud-appbar").QuerySelectorAll("button")
+            .Single(button => button.TextContent.Contains("Switch")).Click());
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<RepositoryPicker>()));
+
+        await cut.InvokeAsync(() => Services.GetRequiredService<NavigationManager>().NavigateTo("/agents"));
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<RepositoryPicker>()));
+    }
+
+    private static AngleSharp.Dom.IElement PageContainer(IRenderedComponent<MainLayout> layout)
+    {
+        return layout.Find(".mud-main-content .mud-container > div:last-child");
     }
 
     private sealed class NotFoundHandler : HttpMessageHandler
