@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>
-/// An AI model that can be used by custom agents. Prices are in USD per 1 million tokens.
+/// An AI model that can be used by custom agents. Prices are in euro per 1 million tokens.
 /// </summary>
 public class AiModel : Entity
 {

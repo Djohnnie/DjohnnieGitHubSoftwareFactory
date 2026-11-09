@@ -12,6 +12,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.Assistant;
 public sealed class AssistantService(
     AgentInfrastructure.AssistantAgentFactory factory,
     AgentInfrastructure.BackgroundAgents backgroundAgents,
+    AgentInfrastructure.IAgentUsageRecorder usageRecorder,
     ISender mediator,
     ILogger<AssistantService> logger)
 {
@@ -32,7 +33,8 @@ public sealed class AssistantService(
     /// <param name="owner">What the conversation is stored with; <c>null</c> until that exists, see <see cref="AssistantConversation.AttachAsync"/>.</param>
     public AssistantConversation CreateConversation(InternalAgent copilot, AssistantTools? tools = null, ChatOwner? owner = null)
     {
-        return new(factory.CreateConversation(copilot.Name, copilot.Instructions, tools?.Tools, copilot.Model), copilot.Key, owner, mediator);
+        return new(factory.CreateConversation(copilot.Name, copilot.Instructions, tools?.Tools, copilot.Model, usage => usageRecorder.RecordAsync(copilot, usage, InternalAgentUsageSources.ForCopilot(copilot.Key))),
+            copilot.Key, owner, mediator);
     }
 
     /// <summary>What the chat shows of the owner's open conversation; empty when there is none.</summary>

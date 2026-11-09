@@ -143,7 +143,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Equal(new[]
             {
                 "/", "/copilot-instructions", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
-                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/copilot-code-review", "/models", "/internal-agents"
+                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/copilot-code-review", "/models", "/internal-agents", "/internal-models"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal(new[] { "/agents", "/agent-templates" },

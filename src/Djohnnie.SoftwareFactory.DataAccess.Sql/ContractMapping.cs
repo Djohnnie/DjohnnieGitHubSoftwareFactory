@@ -4,6 +4,7 @@ internal static class ContractMapping
 {
     extension(Entities.InternalAgent value)
     {
+        /// <summary>Requires <see cref="Entities.InternalAgent.InternalModel"/> to be loaded.</summary>
         public Djohnnie.SoftwareFactory.Contracts.InternalAgents.InternalAgent ToContract()
         {
             return new()
@@ -14,8 +15,48 @@ internal static class ContractMapping
                 Description = value.Description,
                 Kind = value.Kind,
                 Instructions = value.Instructions,
-                Model = value.Model,
+                ModelId = value.InternalModelId,
+                Model = value.InternalModel?.Name ?? string.Empty,
+                ModelLabel = value.InternalModel?.Label ?? string.Empty,
                 IsEnabled = value.IsEnabled,
+                CreatedAt = value.CreatedAt,
+                UpdatedAt = value.UpdatedAt,
+                RequestCount = value.RequestCount,
+                TotalInputTokens = value.TotalInputTokens,
+                TotalOutputTokens = value.TotalOutputTokens,
+                TotalCachedInputTokens = value.TotalCachedInputTokens,
+                TotalReasoningTokens = value.TotalReasoningTokens,
+                TotalInputCost = value.TotalInputCost,
+                TotalOutputCost = value.TotalOutputCost
+            };
+        }
+    }
+
+    extension(Entities.InternalAgentUsage value)
+    {
+        /// <summary>Requires <see cref="Entities.InternalAgentUsage.InternalAgent"/> to be loaded.</summary>
+        public Djohnnie.SoftwareFactory.Contracts.InternalAgents.InternalAgentUsage ToContract()
+        {
+            return new(value.OccurredAt, value.InternalAgent.Key, value.InternalAgent.Name, value.Source, value.Model, value.InputTokens, value.OutputTokens, value.CachedInputTokens, value.ReasoningTokens,
+                value.InputPricePerMillion, value.OutputPricePerMillion, value.CachedInputPricePerMillion, value.InputCost, value.OutputCost);
+        }
+    }
+
+    extension(Entities.InternalModel value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.InternalModels.InternalModel ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                Name = value.Name,
+                Label = value.Label,
+                Description = value.Description,
+                InputPricePerMillion = value.InputPricePerMillion,
+                OutputPricePerMillion = value.OutputPricePerMillion,
+                CachedInputPricePerMillion = value.CachedInputPricePerMillion,
+                IsFlagship = value.IsFlagship,
+                IsDefault = value.IsDefault,
                 CreatedAt = value.CreatedAt,
                 UpdatedAt = value.UpdatedAt
             };

@@ -44,7 +44,7 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
         Render<MudPopoverProvider>();
         var cut = Render<Models>();
         cut.WaitForAssertion(() => Assert.Contains("grok-4.7", cut.Markup));
-        Assert.Contains("$6.00", cut.Markup);
+        Assert.Contains("€6.000", cut.Markup);
 
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("New model")).Click());
         provider.WaitForElement(".mud-dialog input");

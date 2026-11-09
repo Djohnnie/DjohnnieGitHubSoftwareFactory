@@ -276,6 +276,65 @@ public class ChatHistoryTests : BunitContext, IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamedTurn_OverHttp_ReportsTheTokensOfTheService(bool useResponsesApi)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        var requests = new List<JsonElement>();
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        await using var app = builder.Build();
+        app.MapPost("/openai/v1/{**path}", async context =>
+        {
+            using var body = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+            requests.Add(body.RootElement.Clone());
+            context.Response.ContentType = "text/event-stream";
+            if (useResponsesApi)
+            {
+                var item = new { id = "msg_1", type = "message", status = "completed", role = "assistant", content = new[] { new { type = "output_text", text = "Hello.", annotations = Array.Empty<object>() } } };
+                var usage = new { input_tokens = 21, output_tokens = 5, total_tokens = 26, input_tokens_details = new { cached_tokens = 7 }, output_tokens_details = new { reasoning_tokens = 3 } };
+                var response = new { id = "resp_1", @object = "response", created_at = 1, status = "completed", model = "m", output = new[] { item }, usage };
+                await context.Response.WriteAsync($"event: response.completed\ndata: {JsonSerializer.Serialize(new { type = "response.completed", sequence_number = 0, response })}\n\n", context.RequestAborted);
+                return;
+            }
+
+            var chunk = new { id = "c1", @object = "chat.completion.chunk", created = 1, model = "m", choices = new[] { new { index = 0, delta = new { role = "assistant", content = "Hello." }, finish_reason = (string?)null } } };
+            var final = new { id = "c1", @object = "chat.completion.chunk", created = 1, model = "m", choices = Array.Empty<object>(), usage = new { prompt_tokens = 21, completion_tokens = 5, total_tokens = 26, prompt_tokens_details = new { cached_tokens = 7 }, completion_tokens_details = new { reasoning_tokens = 3 } } };
+            await context.Response.WriteAsync($"data: {JsonSerializer.Serialize(chunk)}\n\ndata: {JsonSerializer.Serialize(final)}\n\ndata: [DONE]\n\n", context.RequestAborted);
+        });
+        await app.StartAsync(timeout.Token);
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var client = AssistantAgentFactory.CreateChatClient(new OpenAIOptions { Endpoint = $"{address}/openai/v1/", Model = "m", ApiKey = "key", UseResponsesApi = useResponsesApi });
+            var factory = new AssistantAgentFactory(client, NullLoggerFactory.Instance);
+            var reported = new List<ModelUsage>();
+
+            var conversation = factory.CreateConversation("Copilot", "Be brief.", onUsage: usage =>
+            {
+                reported.Add(usage);
+                return Task.CompletedTask;
+            });
+            await foreach (var _ in conversation.RunStreamingAsync("Question", timeout.Token))
+            {
+            }
+
+            Assert.Equal([new ModelUsage(21, 5, 7, 3)], reported);
+            if (!useResponsesApi)
+            {
+                Assert.True(Assert.Single(requests).GetProperty("stream_options").GetProperty("include_usage").GetBoolean());
+            }
+        }
+        finally
+        {
+            await app.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static ChatOwner Owner(WorkItem item)
     {
         return ChatOwner.ForWorkItem(Repo, item.Id);

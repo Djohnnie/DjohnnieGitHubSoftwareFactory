@@ -1,6 +1,9 @@
+using Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AuthSessions;
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts.InternalModels;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +95,112 @@ public class SqlServerStoreTests
         // Even without the store's check, the restricted foreign key keeps the child's parent.
         await using var db = database.Factory.CreateDbContext();
         db.WorkItems.Remove(await db.WorkItems.SingleAsync(e => e.Id == epic.Id, _cancellationToken));
+        await Assert.ThrowsAsync<PersistenceException>(() => db.SaveChangesAsync(_cancellationToken));
+    }
+
+    [Fact]
+    public async Task RecordUsage_FromConcurrentRequests_LosesNoUpdate()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var agents = new InternalAgentStore(database.Factory, TimeProvider.System);
+        await new InternalModelStore(database.Factory, TimeProvider.System).SaveAsync(
+            new InternalModel { Name = "gpt", InputPricePerMillion = 0.000001m, OutputPricePerMillion = 1m }, _cancellationToken);
+        await agents.EnsureAsync([InternalAgentDefaults.Find(InternalAgentKeys.ChatSuggestions)!], _cancellationToken);
+
+        await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Task.Run(() =>
+            agents.RecordUsageAsync(InternalAgentKeys.ChatSuggestions, "gpt", new ModelUsage(1_000_000, 10), InternalAgentUsageSource.ModelTest, _cancellationToken))));
+
+        var agent = (await agents.GetAsync(InternalAgentKeys.ChatSuggestions, _cancellationToken))!;
+        Assert.Equal((12L, 12_000_000L, 120L), (agent.RequestCount, agent.TotalInputTokens, agent.TotalOutputTokens));
+        Assert.Equal((0.000012m, 0.00012m), (agent.TotalInputCost, agent.TotalOutputCost));
+        await using var db = database.Factory.CreateDbContext();
+        Assert.Equal(12, await db.InternalAgentUsages.CountAsync(_cancellationToken));
+    }
+
+    [Fact]
+    public async Task Migration_TurnsFreeTextModelsIntoLinkedCatalogEntries()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync("20261109122056_UseGuidPrimaryKeysAndSysId");
+        await using (var old = database.Factory.CreateDbContext())
+        {
+            await old.Database.ExecuteSqlRawAsync("""
+                INSERT INTO [InternalAgents] ([Id], [Key], [Name], [Description], [Kind], [Instructions], [Model], [IsEnabled], [CreatedAt], [UpdatedAt])
+                VALUES (NEWID(), 'one', 'One', '', 'Copilot', 'P', 'gpt-shared', 1, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET()),
+                       (NEWID(), 'two', 'Two', '', 'Copilot', 'P', 'GPT-Shared', 1, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET()),
+                       (NEWID(), 'three', 'Three', '', 'Background', 'P', '', 1, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET());
+                """, _cancellationToken);
+        }
+
+        await using var db = database.Factory.CreateDbContext();
+        await db.Database.MigrateAsync(_cancellationToken);
+
+        var model = await db.InternalModels.SingleAsync(_cancellationToken);
+        Assert.Equal("gpt-shared", model.Name, ignoreCase: true);
+        Assert.Equal(model.Name, model.Label);
+        Assert.Equal((0m, 0m, (decimal?)null), (model.InputPricePerMillion, model.OutputPricePerMillion, model.CachedInputPricePerMillion));
+        var linked = await db.InternalAgents.OrderBy(a => a.Key).Select(a => a.InternalModelId).ToListAsync(_cancellationToken);
+        Assert.Equal([model.Id, null, model.Id], linked);
+    }
+
+    [Fact]
+    public async Task Migration_KeepsTheInputPriceAsTheCachedPriceOfRecordedRequests()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync("20261109125325_AddInternalModelsAndUsage");
+        await using (var old = database.Factory.CreateDbContext())
+        {
+            await old.Database.ExecuteSqlRawAsync("""
+                DECLARE @agent uniqueidentifier = NEWID();
+                INSERT INTO [InternalAgents] ([Id], [Key], [Name], [Description], [Kind], [Instructions], [IsEnabled], [CreatedAt], [UpdatedAt])
+                VALUES (@agent, 'one', 'One', '', 'Copilot', 'P', 1, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET());
+                INSERT INTO [InternalAgentUsages] ([Id], [InternalAgentId], [Model], [InputTokens], [OutputTokens], [InputPricePerMillion], [OutputPricePerMillion], [InputCost], [OutputCost], [OccurredAt])
+                VALUES (NEWID(), @agent, 'gpt', 1, 1, 2.5, 10, 0, 0, SYSDATETIMEOFFSET());
+                """, _cancellationToken);
+        }
+
+        await using var db = database.Factory.CreateDbContext();
+        await db.Database.MigrateAsync(_cancellationToken);
+
+        Assert.Equal(2.5m, (await db.InternalAgentUsages.SingleAsync(_cancellationToken)).CachedInputPricePerMillion);
+    }
+
+    [Fact]
+    public async Task Migration_MarksRequestsRecordedBeforeSourcesAsUnknown()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync("20261109133036_AddInternalModelFlags");
+        await using (var old = database.Factory.CreateDbContext())
+        {
+            await old.Database.ExecuteSqlRawAsync("""
+                DECLARE @agent uniqueidentifier = NEWID();
+                INSERT INTO [InternalAgents] ([Id], [Key], [Name], [Description], [Kind], [Instructions], [IsEnabled], [CreatedAt], [UpdatedAt])
+                VALUES (@agent, 'one', 'One', '', 'Copilot', 'P', 1, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET());
+                INSERT INTO [InternalAgentUsages] ([Id], [InternalAgentId], [Model], [InputTokens], [OutputTokens], [InputPricePerMillion], [OutputPricePerMillion], [InputCost], [OutputCost], [OccurredAt])
+                VALUES (NEWID(), @agent, 'gpt', 1, 1, 2.5, 10, 0, 0, SYSDATETIMEOFFSET());
+                """, _cancellationToken);
+        }
+
+        await using var db = database.Factory.CreateDbContext();
+        await db.Database.MigrateAsync(_cancellationToken);
+
+        Assert.Equal(InternalAgentUsageSource.Unknown, (await db.InternalAgentUsages.SingleAsync(_cancellationToken)).Source);
+    }
+
+    [Fact]
+    public async Task DeletingAModelInUse_IsRefusedByTheDatabase_AndNamesAreCaseInsensitive()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var models = new InternalModelStore(database.Factory, TimeProvider.System);
+        var agents = new InternalAgentStore(database.Factory, TimeProvider.System);
+        var model = await models.SaveAsync(new InternalModel { Name = "GPT-Used" }, _cancellationToken);
+        await Assert.ThrowsAsync<DomainRuleException>(() => models.SaveAsync(new InternalModel { Name = "gpt-used" }, _cancellationToken));
+        var defaults = InternalAgentDefaults.Find(InternalAgentKeys.AgentCopilot)!;
+        await agents.EnsureAsync([defaults], _cancellationToken);
+        await agents.SaveAsync(defaults with { ModelId = model.Id }, _cancellationToken);
+
+        await Assert.ThrowsAsync<DomainRuleException>(() => models.DeleteAsync(model.Id, _cancellationToken));
+
+        // Even without the store's check, the restricted foreign key keeps the agent's model.
+        await using var db = database.Factory.CreateDbContext();
+        db.InternalModels.Remove(await db.InternalModels.SingleAsync(m => m.Id == model.Id, _cancellationToken));
         await Assert.ThrowsAsync<PersistenceException>(() => db.SaveChangesAsync(_cancellationToken));
     }
 

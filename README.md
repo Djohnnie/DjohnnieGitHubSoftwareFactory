@@ -11,6 +11,7 @@ DGHSF is a personal software factory for GitHub: a single-user web app to plan w
 - **Manage custom agents** (`.github/agents/*.agent.md`) and the repository's `.github/copilot-instructions.md`, and share agent templates across repositories.
 - **DGHSF Copilot** chats on every editor help fill in the form. Background agents suggest a model per item and write suggestion chips. Their prompts are editable on the internal agents page.
 - **Manage the AI models** Copilot can use, including importing GitHub's model pricing.
+- **Track token spend** of the internal agents: a catalog of Microsoft Foundry models with their prices, a cost per request, and a running cost per agent that later price changes don't affect.
 
 See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and planned features.
 

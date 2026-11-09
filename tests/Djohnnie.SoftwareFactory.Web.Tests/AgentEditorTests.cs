@@ -149,8 +149,8 @@ public class AgentEditorTests : BunitContext, IAsyncLifetime
         cut.FindAll("textarea")[0].Change("Reviews pull requests");
         var modelSelect = cut.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Model");
         await cut.InvokeAsync(() => modelSelect.Instance.ValueChanged.InvokeAsync("claude-sonnet-4.6"));
-        cut.WaitForAssertion(() => Assert.Contains("$3.00 in / $15.00 out per 1M tokens", cut.Markup));
-        Assert.Equal("Claude Sonnet 4.6 — $3.00 in / $15.00 out", modelSelect.Instance.ToStringFunc!("claude-sonnet-4.6"));
+        cut.WaitForAssertion(() => Assert.Contains("€3.000 in / €15.000 out per 1M tokens", cut.Markup));
+        Assert.Equal("Claude Sonnet 4.6 — €3.000 in / €15.000 out", modelSelect.Instance.ToStringFunc!("claude-sonnet-4.6"));
         await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("Review carefully."));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save")).Click());
 

@@ -12,7 +12,7 @@
     <div>
         <MudText Typo="Typo.h4">Models</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            AI models available to custom agents, with their price in USD per 1M tokens. Shared by all repositories.
+            AI models available to custom agents, with their price in EUR per 1M tokens. Shared by all repositories.
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
@@ -35,7 +35,8 @@
         <MudText Typo="Typo.h6">Import from GitHub docs</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
             Paste the link to the Copilot "Models and pricing" page. New models are added; pricing of existing models
-            (matched on name and tier) is refreshed. Model ids and enabled state you changed are kept.
+            (matched on name and tier) is refreshed. Model ids and enabled state you changed are kept. GitHub lists prices
+            in US dollars; the amounts are imported as they are, without conversion.
         </MudText>
         <MudStack Row="true" AlignItems="AlignItems.Center">
             <MudTextField @bind-Value="_importUrl" Label="Documentation URL" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />

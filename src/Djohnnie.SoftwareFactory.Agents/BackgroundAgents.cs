@@ -14,7 +14,7 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// Runs the internal agents that work without a chat. They use structured output, so the result format doesn't depend
 /// on the (editable) system prompt.
 /// </summary>
-public sealed class BackgroundAgents(AssistantAgentFactory factory)
+public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageRecorder usageRecorder)
 {
     public const int SuggestionCount = 3;
     private const int MaxDescriptionLength = 20_000;
@@ -53,7 +53,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             ```
             """;
 
-        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+        var response = await CreateAgent(agent, InternalAgentUsageSource.ModelSelector)
             .RunAsync<ModelSelectorOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var output = response.Result;
         if (output is null || string.IsNullOrWhiteSpace(output.ModelId)
@@ -88,7 +88,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             ```
             """;
 
-        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+        var response = await CreateAgent(agent, InternalAgentUsageSource.ChatSuggestions)
             .RunAsync<SuggestionsOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         return (response.Result?.Suggestions ?? [])
             .Select(Clean)
@@ -118,7 +118,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             ```
             """;
 
-        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+        var response = await CreateAgent(agent, InternalAgentUsageSource.DescriptionWriter)
             .RunAsync<DescriptionWriterOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var description = response.Result?.Description?.Trim();
         return string.IsNullOrEmpty(description) ? null : description;
@@ -152,7 +152,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             ```
             """;
 
-        var response = await factory.CreateAgent(agent.Name, agent.Instructions)
+        var response = await CreateAgent(agent, InternalAgentUsageSource.WorkItemBreakdown)
             .RunAsync<ChildrenOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var titles = new HashSet<string>(existingChildren.Select(child => child.Title.Trim()), StringComparer.OrdinalIgnoreCase);
         return (response.Result?.Items ?? [])
@@ -162,6 +162,11 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory)
             .Where(item => item.Title.Length > 0 && titles.Add(item.Title))
             .Take(GeneratedWorkItem.MaxPerRun)
             .ToList();
+    }
+
+    private AIAgent CreateAgent(InternalAgent agent, InternalAgentUsageSource source)
+    {
+        return factory.CreateAgent(agent.Name, agent.Instructions, model: agent.Model, onUsage: usage => usageRecorder.RecordAsync(agent, usage, source));
     }
 
     private static string Clean(string? suggestion)

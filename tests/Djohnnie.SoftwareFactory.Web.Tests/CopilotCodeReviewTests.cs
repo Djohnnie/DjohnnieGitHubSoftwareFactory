@@ -143,7 +143,8 @@ public class CopilotCodeReviewTests : BunitContext
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
 
         Assert.Equal(links.IndexOf("/models") - 1, links.IndexOf("/copilot-code-review"));
-        Assert.Equal(links.Count - 1, links.IndexOf("/internal-agents"));
+        Assert.Equal(links.Count - 2, links.IndexOf("/internal-agents"));
+        Assert.Equal(links.Count - 1, links.IndexOf("/internal-models"));
     }
 
     [Fact]

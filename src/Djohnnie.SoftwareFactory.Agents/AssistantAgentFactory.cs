@@ -1,4 +1,5 @@
 using System.ClientModel;
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -37,9 +38,10 @@ public sealed class AssistantAgentFactory(
     /// <param name="instructions">The system prompt.</param>
     /// <param name="tools">The tools of the agent.</param>
     /// <param name="model">The model to use; empty for the configured model.</param>
-    public AssistantConversation CreateConversation(string name, string instructions, AssistantTools? tools = null, string? model = null)
+    /// <param name="onUsage">Called with the tokens of every model request.</param>
+    public AssistantConversation CreateConversation(string name, string instructions, AssistantTools? tools = null, string? model = null, Func<ModelUsage, Task>? onUsage = null)
     {
-        var agent = new ChatClientAgent(new LocalHistoryChatClient(ClientFor(model)), instructions, name, tools: tools?.Tools, loggerFactory: loggerFactory);
+        var agent = new ChatClientAgent(new LocalHistoryChatClient(TrackedClientFor(model, onUsage)), instructions, name, tools: tools?.Tools, loggerFactory: loggerFactory);
         return new(agent, tools?.RequestContext, tools?.Snapshot);
     }
 
@@ -47,15 +49,22 @@ public sealed class AssistantAgentFactory(
     /// <param name="instructions">The system prompt.</param>
     /// <param name="tools">The tools of the agent.</param>
     /// <param name="model">The model to use; empty for the configured model.</param>
-    public AIAgent CreateAgent(string name, string instructions, IList<AITool>? tools = null, string? model = null)
+    /// <param name="onUsage">Called with the tokens of every model request.</param>
+    public AIAgent CreateAgent(string name, string instructions, IList<AITool>? tools = null, string? model = null, Func<ModelUsage, Task>? onUsage = null)
     {
-        return new ChatClientAgent(ClientFor(model), instructions, name, tools: tools, loggerFactory: loggerFactory);
+        return new ChatClientAgent(TrackedClientFor(model, onUsage), instructions, name, tools: tools, loggerFactory: loggerFactory);
     }
 
     /// <summary>Sends a short message to the model; throws when the model can't be used.</summary>
-    public async Task TestModelAsync(string model, CancellationToken cancellationToken = default)
+    public async Task TestModelAsync(string model, Func<ModelUsage, Task>? onUsage = null, CancellationToken cancellationToken = default)
     {
-        await ClientFor(model).GetResponseAsync("Reply with the single word OK.", cancellationToken: cancellationToken);
+        await TrackedClientFor(model, onUsage).GetResponseAsync("Reply with the single word OK.", cancellationToken: cancellationToken);
+    }
+
+    private IChatClient TrackedClientFor(string? model, Func<ModelUsage, Task>? onUsage)
+    {
+        var client = ClientFor(model);
+        return onUsage is null ? client : new UsageTrackingChatClient(client, onUsage);
     }
 
     private IChatClient ClientFor(string? model)

@@ -5,7 +5,7 @@ namespace Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 public sealed record InternalAgentKeyRequest(string Key);
 public sealed record SaveInternalAgentRequest(InternalAgent Agent);
 public sealed record SelectWorkItemModelRequest(WorkItem WorkItem);
-public sealed record TestInternalAgentModelRequest(string Model);
+public sealed record TestInternalAgentModelRequest(string Key, string Model);
 
 /// <param name="Error">Why the model could not be used, or <c>null</c> when it responded.</param>
 public sealed record ModelTestResult(string? Error);

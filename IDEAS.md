@@ -116,7 +116,7 @@ I want to list the available models and their cost. What I found:
 
 **Implemented:** a **Models** page (`/models`) keeps a managed list of models in our own database (EF Core, SQL Server / LocalDB in development). Models are shared across repositories.
 
-- Full CRUD: name, model id (the value written to an agent's `model` key), provider, release status, category, tier/threshold, and USD prices per 1M tokens (input, cached input, cache write, output). Models can be enabled or disabled.
+- Full CRUD: name, model id (the value written to an agent's `model` key), provider, release status, category, tier/threshold, and prices per 1M tokens in euro (input, cached input, cache write, output). Models can be enabled or disabled.
 - **Import from GitHub docs**: paste the link to the Copilot "Models and pricing" page (only `https://docs.github.com/...` is allowed). The pricing tables are scraped and shown as a preview (new / price change / unchanged), and the selected rows are imported. Existing models are matched on name + tier; their prices are refreshed, but a changed model id or enabled state is kept. The model id is derived from the name (e.g. "Claude Sonnet 4.6" → `claude-sonnet-4.6`) and can be edited.
 - The **agent editor** offers the enabled models in a dropdown that shows the name, provider and input/output cost, plus the long-context pricing. A `model` value that isn't in the list stays visible and is kept.
 

@@ -20,11 +20,20 @@ public class InternalAgent : Entity
     [Required, MaxLength(Contracts.InternalAgents.InternalAgent.MaxInstructionsLength)]
     public string Instructions { get; set; } = string.Empty;
 
-    [Required, MaxLength(Contracts.InternalAgents.InternalAgent.MaxModelLength)]
-    public string Model { get; set; } = string.Empty;
+    public Guid? InternalModelId { get; set; }
+    public InternalModel? InternalModel { get; set; }
 
     public bool IsEnabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>The number of requests so far; also the concurrency token that keeps simultaneous requests from losing an update.</summary>
+    public long RequestCount { get; set; }
+    public long TotalInputTokens { get; set; }
+    public long TotalOutputTokens { get; set; }
+    public long TotalCachedInputTokens { get; set; }
+    public long TotalReasoningTokens { get; set; }
+    public decimal TotalInputCost { get; set; }
+    public decimal TotalOutputCost { get; set; }
 }

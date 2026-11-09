@@ -1,0 +1,89 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" Model="_model">
+            <MudGrid Spacing="2">
+                <MudItem xs="12">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Name" Label="Model" Required="true" MaxLength="InternalModel.MaxNameLength" Class="mono"
+                                  HelperText="The Microsoft Foundry model or deployment name on the configured endpoint." />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Label" Label="Label" Required="true" MaxLength="InternalModel.MaxLabelLength"
+                                  HelperText="The human-readable name shown when choosing a model." />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Description" Label="Description" Lines="3" MaxLength="InternalModel.MaxDescriptionLength" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSwitch @bind-Value="_model.IsFlagship" Color="Color.Primary" Label="Flagship" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSwitch @bind-Value="_model.IsDefault" Color="Color.Primary" Label="Default" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Selected automatically for new agents. Replaces the current default.</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Price in EUR per 1M tokens</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField @bind-Value="_model.InputPricePerMillion" Label="Input" Min="0m" Max="InternalModel.MaxPrice" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField @bind-Value="_model.CachedInputPricePerMillion" Label="Cached input" Min="0m" Max="InternalModel.MaxPrice" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true"
+                                     HelperText="Empty: same as input." />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField @bind-Value="_model.OutputPricePerMillion" Label="Output" Min="0m" Max="InternalModel.MaxPrice" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+        @if (_error is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="() => MudDialog.Cancel()" Disabled="_saving">Cancel</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Inject] private InternalModelService Models { get; set; } = default!;
+
+    [Parameter] public InternalModel? Model { get; set; }
+
+    private MudForm? _form;
+    private InternalModel _model = new();
+    private bool _saving;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        _model = Model?.Copy() ?? new InternalModel();
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            MudDialog.Close(DialogResult.Ok(await Models.SaveAsync(_model)));
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

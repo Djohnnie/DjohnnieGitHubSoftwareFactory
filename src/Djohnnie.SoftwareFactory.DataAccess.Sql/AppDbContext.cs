@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
     public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
     public DbSet<InternalAgent> InternalAgents => Set<InternalAgent>();
+    public DbSet<InternalModel> InternalModels => Set<InternalModel>();
+    public DbSet<InternalAgentUsage> InternalAgentUsages => Set<InternalAgentUsage>();
     public DbSet<AuthSession> AuthSessions => Set<AuthSession>();
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();

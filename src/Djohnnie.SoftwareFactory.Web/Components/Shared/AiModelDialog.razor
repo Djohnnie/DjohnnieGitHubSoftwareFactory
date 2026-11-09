@@ -32,19 +32,19 @@
                     <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Threshold" Label="Threshold (input tokens)" MaxLength="50" Placeholder="e.g. > 200K" />
                 </MudItem>
                 <MudItem xs="12">
-                    <MudText Typo="Typo.subtitle2" Class="mt-2">Price in USD per 1M tokens</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Price in EUR per 1M tokens</MudText>
                 </MudItem>
                 <MudItem xs="6" sm="3">
-                    <MudNumericField @bind-Value="_model.InputPrice" Label="Input" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                    <MudNumericField @bind-Value="_model.InputPrice" Label="Input" Min="0m" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
                 </MudItem>
                 <MudItem xs="6" sm="3">
-                    <MudNumericField @bind-Value="_model.CachedInputPrice" Label="Cached input" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                    <MudNumericField @bind-Value="_model.CachedInputPrice" Label="Cached input" Min="0m" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
                 </MudItem>
                 <MudItem xs="6" sm="3">
-                    <MudNumericField @bind-Value="_model.CacheWritePrice" Label="Cache write" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                    <MudNumericField @bind-Value="_model.CacheWritePrice" Label="Cache write" Min="0m" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
                 </MudItem>
                 <MudItem xs="6" sm="3">
-                    <MudNumericField @bind-Value="_model.OutputPrice" Label="Output" Min="0m" Format="0.####" Adornment="Adornment.Start" AdornmentText="$" HideSpinButtons="true" />
+                    <MudNumericField @bind-Value="_model.OutputPrice" Label="Output" Min="0m" Format="0.000" Adornment="Adornment.Start" AdornmentText="€" HideSpinButtons="true" />
                 </MudItem>
                 <MudItem xs="12">
                     <MudSwitch @bind-Value="_model.IsEnabled" Color="Color.Primary" Label="Available in the agent editor" />

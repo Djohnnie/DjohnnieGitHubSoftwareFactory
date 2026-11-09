@@ -1,6 +1,7 @@
 @page "/internal-agents/{Key}"
 @attribute [RepositoryIndependent]
 @inject InternalAgentService Agents
+@inject InternalModelService Models
 @inject AssistantService Assistant
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -55,39 +56,73 @@ else if (_agent is not null)
         </MudItem>
         <MudItem xs="12" md="4">
             <MudStack Spacing="4" Class="sticky-side">
-                @if (_agent.Kind == InternalAgentKind.Copilot)
-                {
-                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                        <MudText Typo="Typo.h6">Model</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                            The model or deployment name this Copilot uses on the configured endpoint. A new or changed model must pass the test before you can save.
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                    <MudText Typo="Typo.h6">Model</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                        The internal model this agent runs on. A new or changed model must pass the test before you can save.
+                    </MudText>
+                    <MudSelect T="Guid?" @bind-Value="_agent.ModelId" Variant="Variant.Outlined" Label="Model" Required="@(_agent.Kind == InternalAgentKind.Copilot)"
+                               ToStringFunc="ModelLabel" Disabled="_saving || _testing" AnchorOrigin="Origin.BottomCenter" MaxHeight="420">
+                        @if (_agent.Kind == InternalAgentKind.Background)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">@DefaultModelLabel</MudSelectItem>
+                        }
+                        @foreach (var model in _models)
+                        {
+                            <MudSelectItem T="Guid?" Value="@model.Id">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width:100%">
+                                    <div>
+                                        <MudText Typo="Typo.body2"><b>@model.Label</b>@(model.IsFlagship ? " · Flagship" : string.Empty)@(model.IsDefault ? " · Default" : string.Empty)</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@model.Name</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Align="Align.Right" Class="ml-4">
+                                        @AiModel.FormatPrice(model.InputPricePerMillion) in<br />@AiModel.FormatPrice(model.OutputPricePerMillion) out
+                                    </MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_models.FirstOrDefault(m => m.Id == _agent.ModelId) is { Description.Length: > 0 } selected)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">@selected.Description</MudText>
+                    }
+                    @if (_models.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                            No models yet. <MudLink Href="/internal-models" Typo="Typo.caption">Manage internal models</MudLink>
                         </MudText>
-                        <MudTextField T="string" @bind-Value="_agent.Model" Variant="Variant.Outlined" Label="Model" Required="true"
-                                      MaxLength="InternalAgent.MaxModelLength" Immediate="true" Disabled="_saving || _testing" />
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="TestModelAsync" StartIcon="@Icons.Material.Filled.PlayArrow"
-                                       Disabled="@(_saving || _testing || CurrentModel.Length == 0 || !Assistant.IsConfigured)">Test</MudButton>
-                        </MudStack>
-                        @if (_testing)
-                        {
-                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
-                        }
-                        else if (ModelPassedTest)
-                        {
-                            <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mt-2">The model responded.</MudAlert>
-                        }
-                        else if (ModelFailedTest)
-                        {
-                            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_testError</MudAlert>
-                        }
-                        @if (!Assistant.IsConfigured)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
-                                Models can't be tested until <code>OpenAI:Model</code> and <code>OpenAI:ApiKey</code> are configured.
-                            </MudText>
-                        }
-                    </MudPaper>
-                }
+                    }
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="TestModelAsync" StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   Disabled="@(_saving || _testing || CurrentModel.Length == 0 || !Assistant.IsConfigured)">Test</MudButton>
+                    </MudStack>
+                    @if (_testing)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+                    }
+                    else if (ModelPassedTest)
+                    {
+                        <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mt-2">The model responded.</MudAlert>
+                    }
+                    else if (ModelFailedTest)
+                    {
+                        <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_testError</MudAlert>
+                    }
+                    @if (!Assistant.IsConfigured)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                            Models can't be tested until <code>OpenAI:Model</code> and <code>OpenAI:ApiKey</code> are configured.
+                        </MudText>
+                    }
+                </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Usage">
+                    <MudText Typo="Typo.h6">Usage</MudText>
+                    <MudText Typo="Typo.h5">@InternalAgentUsage.FormatCost(_stored.TotalCost)</MudText>
+                    <UsageTiles Totals="_stored.UsageTotals" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                        Includes model tests. Each request keeps the price of that moment; reasoning is already in the output cost.
+                    </MudText>
+                </MudPaper>
                 <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                     <MudText Typo="Typo.h6">Status</MudText>
                     <MudSwitch T="bool" @bind-Value="_agent.IsEnabled" Color="Color.Primary" Disabled="_saving"
@@ -123,6 +158,13 @@ else if (_agent is not null)
                 </MudPaper>
             </MudItem>
         }
+        @if (_usage.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">Recent requests</MudText>
+                <UsageRequestsTable Items="_usage" />
+            </MudItem>
+        }
     </MudGrid>
 }
 
@@ -139,12 +181,15 @@ else if (_agent is not null)
     private string? _testError;
     private string? _error;
     private string? _loadedKey;
+    private List<InternalModel> _models = [];
+    private IReadOnlyList<InternalAgentUsage> _usage = [];
 
-    private string CurrentModel => _agent?.Model?.Trim() ?? string.Empty;
-    private bool ModelPassedTest => _testedModel == CurrentModel && _testError is null;
-    private bool ModelFailedTest => _testedModel == CurrentModel && _testError is not null;
-    private bool ModelIsVerified => CurrentModel.Length > 0 && (CurrentModel == _stored.Model || ModelPassedTest);
-    private bool CanSave => !_saving && !_testing && (_agent!.Kind != InternalAgentKind.Copilot || ModelIsVerified);
+    private string CurrentModel => _models.FirstOrDefault(m => m.Id == _agent?.ModelId)?.Name ?? string.Empty;
+    private string DefaultModelLabel => string.IsNullOrEmpty(Assistant.DefaultModel) ? "Configured model" : $"Configured model ({Assistant.DefaultModel})";
+    private bool ModelPassedTest => _testedModel is not null && _testedModel == CurrentModel && _testError is null;
+    private bool ModelFailedTest => _testedModel is not null && _testedModel == CurrentModel && _testError is not null;
+    private bool ModelIsVerified => CurrentModel.Length > 0 && (_agent!.ModelId == _stored.ModelId || ModelPassedTest);
+    private bool CanSave => !_saving && !_testing && (ModelIsVerified || (_agent!.Kind == InternalAgentKind.Background && _agent.ModelId is null));
 
     private string PromptHelp => _agent!.Kind == InternalAgentKind.Copilot
         ? "Markdown instructions for the chat. Keep the tool names (in backticks) as they are: the Copilot uses those tools to read and fill in the form."
@@ -173,6 +218,8 @@ else if (_agent is not null)
         try
         {
             _stored = await Agents.GetAsync(Key);
+            _models = await Models.GetAllAsync();
+            _usage = await Agents.GetUsageAsync(Key);
             _agent = Editable(_stored);
         }
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException)
@@ -189,15 +236,39 @@ else if (_agent is not null)
         }
     }
 
-    /// <summary>An editable copy; a Copilot without a model starts from the configured model.</summary>
+    /// <summary>
+    /// An editable copy. A Copilot without a model starts from the default model, or else the configured model when that
+    /// is in the catalog. A background agent may stay on the configured model, so it only gets the default until its first save.
+    /// </summary>
     private InternalAgent Editable(InternalAgent stored)
     {
         var agent = stored.Copy();
-        if (agent.Kind == InternalAgentKind.Copilot && string.IsNullOrWhiteSpace(agent.Model))
+        if (agent.ModelId is not null)
         {
-            agent.Model = Assistant.DefaultModel ?? string.Empty;
+            return agent;
+        }
+
+        if (agent.Kind == InternalAgentKind.Copilot)
+        {
+            agent.ModelId = (_models.FirstOrDefault(m => m.IsDefault)
+                ?? _models.FirstOrDefault(m => string.Equals(m.Name, Assistant.DefaultModel, StringComparison.OrdinalIgnoreCase)))?.Id;
+        }
+        else if (agent.UpdatedAt == agent.CreatedAt)
+        {
+            agent.ModelId = _models.FirstOrDefault(m => m.IsDefault)?.Id;
         }
         return agent;
+    }
+
+    private string ModelLabel(Guid? id)
+    {
+        if (id is null)
+        {
+            return _agent?.Kind == InternalAgentKind.Background ? DefaultModelLabel : string.Empty;
+        }
+
+        var model = _models.FirstOrDefault(m => m.Id == id);
+        return model is null ? string.Empty : $"{model.Label} — {AiModel.FormatPrice(model.InputPricePerMillion)} in / {AiModel.FormatPrice(model.OutputPricePerMillion)} out";
     }
 
     private async Task TestModelAsync()
@@ -208,7 +279,7 @@ else if (_agent is not null)
         _testError = null;
         try
         {
-            var result = await Agents.TestModelAsync(model);
+            var result = await Agents.TestModelAsync(_agent!.Key, model);
             _testedModel = model;
             _testError = result.Error;
         }
@@ -220,6 +291,22 @@ else if (_agent is not null)
         finally
         {
             _testing = false;
+        }
+
+        await RefreshUsageAsync();
+    }
+
+    /// <summary>Loads the usage again; the form stays as it is, so unsaved changes are kept.</summary>
+    private async Task RefreshUsageAsync()
+    {
+        try
+        {
+            _stored = await Agents.GetAsync(Key);
+            _usage = await Agents.GetUsageAsync(Key);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not refresh the usage: {ex.Message}", Severity.Warning);
         }
     }
 

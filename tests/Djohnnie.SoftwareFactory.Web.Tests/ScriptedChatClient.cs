@@ -29,6 +29,19 @@ internal sealed class ScriptedChatClient(params ChatResponse[] responses) : ICha
         return new(new ChatMessage(ChatRole.Assistant, text));
     }
 
+    /// <summary>Adds the tokens the service reports for a response.</summary>
+    public static ChatResponse WithUsage(ChatResponse response, long inputTokens, long outputTokens, long cachedInputTokens = 0, long reasoningTokens = 0)
+    {
+        response.Usage = new UsageDetails
+        {
+            InputTokenCount = inputTokens,
+            OutputTokenCount = outputTokens,
+            CachedInputTokenCount = cachedInputTokens,
+            ReasoningTokenCount = reasoningTokens
+        };
+        return response;
+    }
+
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         Requests.Add(messages.ToList());

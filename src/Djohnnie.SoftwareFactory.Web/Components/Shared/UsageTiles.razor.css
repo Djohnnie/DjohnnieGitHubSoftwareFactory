@@ -1,0 +1,80 @@
+.usage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.usage-grid:not(.usage-grid-row) .usage-requests {
+    grid-column: 1 / -1;
+}
+
+.usage-grid-row {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.usage-grid-row .usage-value {
+    font-size: 1.1rem;
+}
+
+/* One color per kind of figure: cost and tokens of the same side share it. */
+.usage-total {
+    --usage-color: #24292f;
+}
+
+.usage-requests {
+    --usage-color: #8250df;
+}
+
+.usage-input {
+    --usage-color: #0969da;
+}
+
+.usage-output {
+    --usage-color: #bc4c00;
+}
+
+.usage-cached {
+    --usage-color: #0a7b83;
+}
+
+.usage-reasoning {
+    --usage-color: #bf3989;
+}
+
+.usage-stat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 8px 10px;
+    border-left: 3px solid var(--usage-color);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--usage-color) 8%, transparent);
+}
+
+.usage-label {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+}
+
+.usage-value {
+    color: var(--usage-color);
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1280px) {
+    .usage-grid-row {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .usage-grid-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

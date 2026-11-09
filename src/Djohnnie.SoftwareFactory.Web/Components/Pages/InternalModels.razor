@@ -1,0 +1,141 @@
+@page "/internal-models"
+@attribute [RepositoryIndependent]
+@inject InternalModelService ModelService
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>Internal models</PageTitle>
+
+<PageBreadcrumbs Current="Internal models" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Internal models</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            The Microsoft Foundry models DGHSF's own Copilots and background agents can run on, with their price in EUR per 1M tokens.
+            A new price applies to new requests only: what an agent already spent doesn't change.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="() => EditAsync(null)">New model</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" Striped="true" T="InternalModel" Items="_models" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" aria-label="Internal models">
+    <HeaderContent>
+        <MudTh>Model</MudTh>
+        <MudTh>Flagship</MudTh>
+        <MudTh>Default</MudTh>
+        <MudTh>Description</MudTh>
+        <MudTh Style="text-align:right">Input</MudTh>
+        <MudTh Style="text-align:right">Cached input</MudTh>
+        <MudTh Style="text-align:right">Output</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Model">
+            <MudText Typo="Typo.body1"><b>@context.Label</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.Name</MudText>
+            @if (!context.HasPrice)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">No price</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Flagship">
+            @if (context.IsFlagship)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">Flagship</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Default">
+            @if (context.IsDefault)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">Default</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Input" Style="text-align:right">@AiModel.FormatPrice(context.InputPricePerMillion)</MudTd>
+        <MudTd DataLabel="Cached input" Style="text-align:right">@AiModel.FormatPrice(context.CachedInputPricePerMillion)</MudTd>
+        <MudTd DataLabel="Output" Style="text-align:right">@AiModel.FormatPrice(context.OutputPricePerMillion)</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => EditAsync(context)" aria-label="@($"Edit {context.Name}")" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)" aria-label="@($"Delete {context.Name}")" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>No models yet. Add the models of your Microsoft Foundry resource to choose them on the internal agents.</MudText>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<InternalModel> _models = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _models = await ModelService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the models: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task EditAsync(InternalModel? model)
+    {
+        var dialog = await Dialogs.ShowAsync<InternalModelDialog>(
+            model is null ? "New internal model" : $"Edit {model.Name}",
+            new DialogParameters<InternalModelDialog> { { d => d.Model, model } },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: InternalModel saved })
+        {
+            Snackbar.Add($"Saved '{saved.Name}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteAsync(InternalModel model)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete model", $"Delete '{model.Name}'? What agents already spent on it is kept.",
+                yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await ModelService.DeleteAsync(model.Id);
+            _models.Remove(model);
+            Snackbar.Add($"Deleted '{model.Name}'.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not delete '{model.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+}

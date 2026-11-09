@@ -3,7 +3,8 @@ using System.ComponentModel.DataAnnotations;
 namespace Djohnnie.SoftwareFactory.Contracts.AiModels;
 
 /// <summary>
-/// An AI model that can be used by custom agents. Prices are in USD per 1 million tokens.
+/// An AI model that can be used by custom agents. Prices are in euro per 1 million tokens; importing them from GitHub's
+/// docs copies the amounts as they are, without converting from US dollars.
 /// </summary>
 public sealed record AiModel
 {
@@ -60,7 +61,7 @@ public sealed record AiModel
 
     public static string FormatPrice(decimal? price)
     {
-        return price is null ? "–" : price.Value.ToString(price.Value < 0.1m && price.Value != 0 ? "$0.000" : "$0.00", System.Globalization.CultureInfo.InvariantCulture);
+        return price is null ? "–" : price.Value.ToString("€#,0.000", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public AiModel Copy()

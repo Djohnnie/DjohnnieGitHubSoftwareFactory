@@ -379,6 +379,9 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(30000)
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("InternalModelId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit");
 
@@ -392,15 +395,174 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<long>("RequestCount")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
+                    b.Property<long>("TotalCachedInputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("TotalInputCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<long>("TotalInputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("TotalOutputCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<long>("TotalOutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TotalReasoningTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
+
+                    b.HasIndex("InternalModelId");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("InternalAgents");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgentUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("CachedInputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<long>("CachedInputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("InputCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("InputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("InternalAgentId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Model")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("OutputCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("OutputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ReasoningTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SysId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SysId"));
+
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasAlternateKey("SysId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
+
+                    b.HasIndex("InternalAgentId");
+
+                    b.ToTable("InternalAgentUsages");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("CachedInputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("InputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFlagship")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("OutputPricePerMillion")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
 
                     b.Property<int>("SysId")
                         .ValueGeneratedOnAdd()
@@ -419,10 +581,10 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
 
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("SysId"));
 
-                    b.HasIndex("Key")
+                    b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("InternalAgents");
+                    b.ToTable("InternalModels");
                 });
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
@@ -674,6 +836,27 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgent", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalModel", "InternalModel")
+                        .WithMany()
+                        .HasForeignKey("InternalModelId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("InternalModel");
+                });
+
+            modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgentUsage", b =>
+                {
+                    b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.InternalAgent", "InternalAgent")
+                        .WithMany()
+                        .HasForeignKey("InternalAgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("InternalAgent");
                 });
 
             modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>

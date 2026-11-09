@@ -1,0 +1,30 @@
+@* The colored token usage and cost figures of one internal agent, or of all of them together. *@
+
+<div class="usage-grid @(SingleRow ? "usage-grid-row" : string.Empty)">
+    @if (SingleRow)
+    {
+        @Tile("Total cost", InternalAgentUsage.FormatCost(Totals.TotalCost), "usage-total")
+    }
+    @Tile("Requests", Totals.RequestCount.ToString("N0"), "usage-requests")
+    @Tile("Input cost", InternalAgentUsage.FormatCost(Totals.InputCost), "usage-input")
+    @Tile("Output cost", InternalAgentUsage.FormatCost(Totals.OutputCost), "usage-output")
+    @Tile("Input tokens", Totals.InputTokens.ToString("N0"), "usage-input")
+    @Tile("Output tokens", Totals.OutputTokens.ToString("N0"), "usage-output")
+    @Tile("Of which cached", Totals.CachedInputTokens.ToString("N0"), "usage-cached")
+    @Tile("Of which reasoning", Totals.ReasoningTokens.ToString("N0"), "usage-reasoning")
+</div>
+
+@code {
+    [Parameter, EditorRequired] public InternalAgentUsageTotals Totals { get; set; } = default!;
+
+    /// <summary>Shows the tiles next to each other, with the total cost as the first tile.</summary>
+    [Parameter] public bool SingleRow { get; set; }
+
+    private RenderFragment Tile(string label, string value, string colorClass)
+    {
+        return @<div class="usage-stat @colorClass">
+            <span class="usage-label">@label</span>
+            <span class="usage-value">@value</span>
+        </div>;
+    }
+}

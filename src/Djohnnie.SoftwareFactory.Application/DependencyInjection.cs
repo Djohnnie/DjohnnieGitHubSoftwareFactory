@@ -6,6 +6,7 @@ using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Application.Features.AuthSessions;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
 using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
+using Djohnnie.SoftwareFactory.Application.Features.InternalModels;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
@@ -50,9 +51,11 @@ public static class DependencyInjection
             services.AddScoped<AssistantService>();
             services.AddScoped<InternalAgentRegistry>();
             services.AddScoped<InternalAgentService>();
+            services.AddScoped<InternalModelService>();
             services.AddScoped<WorkItemModelSelector>();
             // AddAssistantAgents replaces this unconfigured factory with the one for the OpenAI settings.
             services.TryAddSingleton(sp => new AssistantAgentFactory(null, sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance));
+            services.TryAddSingleton<IAgentUsageRecorder, InternalAgentUsageRecorder>();
             services.TryAddSingleton<BackgroundAgents>();
             services.AddOptions<GitHubMcpOptions>();
             services.TryAddSingleton<GitHubMcpConnector>();

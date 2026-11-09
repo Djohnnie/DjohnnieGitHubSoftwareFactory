@@ -13,7 +13,7 @@
         <MudText Typo="Typo.h4">Internal agents</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             DGHSF's own agents, built on the Microsoft Agent Framework and shared across repositories. Copilots help you fill in
-            a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt (and a Copilot by choosing its model), or reset the prompt to DGHSF's default.
+            a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt and choosing its model, or reset the prompt to DGHSF's default.
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
@@ -21,6 +21,8 @@
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
 </MudStack>
+
+<UsageTiles Totals="InternalAgentUsageTotals.Sum(_agents)" SingleRow="true" />
 
 @if (!Assistant.IsConfigured)
 {
@@ -43,10 +45,8 @@
         <HeaderContent>
             <MudTh>Agent</MudTh>
             <MudTh>@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")</MudTh>
-            @if (kind == InternalAgentKind.Copilot)
-            {
-                <MudTh>Model</MudTh>
-            }
+            <MudTh>Model</MudTh>
+            <MudTh Style="text-align:right">Spent</MudTh>
             <MudTh>Prompt</MudTh>
             <MudTh>Updated</MudTh>
             <MudTh>Enabled</MudTh>
@@ -60,12 +60,13 @@
             <MudTd DataLabel="@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")">
                 <MudText Typo="Typo.body2" Style="white-space:nowrap">@UsedOn(context)</MudText>
             </MudTd>
-            @if (kind == InternalAgentKind.Copilot)
-            {
-                <MudTd DataLabel="Model">
-                    <MudText Typo="Typo.body2" Style="white-space:nowrap">@(string.IsNullOrEmpty(context.Model) ? "Default" : context.Model)</MudText>
-                </MudTd>
-            }
+            <MudTd DataLabel="Model">
+                <MudText Typo="Typo.body2" Style="white-space:nowrap">@(string.IsNullOrEmpty(context.ModelLabel) ? "Default" : context.ModelLabel)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Spent" Style="text-align:right; white-space:nowrap">
+                <MudText Typo="Typo.body2">@InternalAgentUsage.FormatCost(context.TotalCost)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.RequestCount.ToString("N0") requests</MudText>
+            </MudTd>
             <MudTd DataLabel="Prompt">
                 @if (context.IsCustomized)
                 {
@@ -82,7 +83,7 @@
                            Disabled="_saving" aria-label="@($"Enable {context.Name}")" />
             </MudTd>
             <MudTd Style="text-align:right; white-space:nowrap">
-                <MudTooltip Text="@(kind == InternalAgentKind.Copilot ? "Edit the model and system prompt" : "Edit the system prompt")">
+                <MudTooltip Text="Edit the model and system prompt">
                     <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
                                    Href="@($"/internal-agents/{context.Key}")" aria-label="@($"Edit {context.Name}")" />
                 </MudTooltip>
@@ -91,8 +92,16 @@
     </MudTable>
 }
 
+@if (_usage.Count > 0)
+{
+    <MudText Typo="Typo.h6" Class="mt-4 mb-2">Recent requests of all agents</MudText>
+    <UsageRequestsTable Items="_usage" ShowAgent="true" Label="All recent requests" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">The latest @InternalAgentUsage.RecentOverallCount requests. The totals above include every request.</MudText>
+}
+
 @code {
     private List<InternalAgent> _agents = [];
+    private IReadOnlyList<InternalAgentUsage> _usage = [];
     private bool _loading = true;
     private bool _saving;
     private string? _error;
@@ -109,6 +118,7 @@
         try
         {
             _agents = await Agents.GetAllAsync();
+            _usage = await Agents.GetAllUsageAsync();
         }
         catch (Exception ex)
         {

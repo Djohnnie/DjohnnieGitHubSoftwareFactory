@@ -1,0 +1,45 @@
+@* The recent model requests of one internal agent, or of all of them together. *@
+
+<MudTable Outlined="true" Striped="true" Dense="true" T="InternalAgentUsage" Items="Items" Elevation="0" aria-label="@Label">
+    <HeaderContent>
+        <MudTh>When</MudTh>
+        @if (ShowAgent)
+        {
+            <MudTh>Agent</MudTh>
+        }
+        <MudTh>Source</MudTh>
+        <MudTh>Model</MudTh>
+        <MudTh Style="text-align:right">Input tokens</MudTh>
+        <MudTh Style="text-align:right">Cached</MudTh>
+        <MudTh Style="text-align:right">Output tokens</MudTh>
+        <MudTh Style="text-align:right">Of which reasoning</MudTh>
+        <MudTh Style="text-align:right">Input cost</MudTh>
+        <MudTh Style="text-align:right">Output cost</MudTh>
+        <MudTh Style="text-align:right">Total</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="When" Style="white-space:nowrap">@context.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        @if (ShowAgent)
+        {
+            <MudTd DataLabel="Agent"><MudLink Href="@($"/internal-agents/{context.AgentKey}")" Typo="Typo.body2">@context.AgentName</MudLink></MudTd>
+        }
+        <MudTd DataLabel="Source">@context.Source.Description()</MudTd>
+        <MudTd DataLabel="Model" Class="mono">@context.Model</MudTd>
+        <MudTd DataLabel="Input tokens" Style="text-align:right">@context.InputTokens.ToString("N0")</MudTd>
+        <MudTd DataLabel="Cached" Style="text-align:right">@context.CachedInputTokens.ToString("N0")</MudTd>
+        <MudTd DataLabel="Output tokens" Style="text-align:right">@context.OutputTokens.ToString("N0")</MudTd>
+        <MudTd DataLabel="Of which reasoning" Style="text-align:right">@context.ReasoningTokens.ToString("N0")</MudTd>
+        <MudTd DataLabel="Input cost" Style="text-align:right">@InternalAgentUsage.FormatCost(context.InputCost)</MudTd>
+        <MudTd DataLabel="Output cost" Style="text-align:right">@InternalAgentUsage.FormatCost(context.OutputCost)</MudTd>
+        <MudTd DataLabel="Total" Style="text-align:right">@InternalAgentUsage.FormatCost(context.TotalCost)</MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<InternalAgentUsage> Items { get; set; } = [];
+
+    /// <summary>Adds a column with the agent of each request, for a list that combines agents.</summary>
+    [Parameter] public bool ShowAgent { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Recent requests";
+}

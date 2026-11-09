@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 
-/// <summary>Manages DGHSF's own Copilots and background agents: their system prompts, Copilot models and whether they are enabled.</summary>
+/// <summary>Manages DGHSF's own Copilots and background agents: their system prompts, models and whether they are enabled.</summary>
 public sealed class InternalAgentService(ISender mediator)
 {
     public async Task<List<InternalAgent>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -17,16 +17,28 @@ public sealed class InternalAgentService(ISender mediator)
         return (await mediator.Send(new GetInternalAgentQuery(new(key)), cancellationToken)).Dto;
     }
 
-    /// <summary>Saves the system prompt, the model of a Copilot and whether the agent is enabled.</summary>
+    /// <summary>Saves the system prompt, the model and whether the agent is enabled.</summary>
     public async Task<InternalAgent> SaveAsync(InternalAgent agent, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveInternalAgentCommand(new(agent)), cancellationToken)).Dto;
     }
 
-    /// <summary>Checks that the model responds on the configured endpoint.</summary>
-    public async Task<ModelTestResult> TestModelAsync(string model, CancellationToken cancellationToken = default)
+    /// <summary>The most recent model requests of the agent, newest first.</summary>
+    public async Task<IReadOnlyList<InternalAgentUsage>> GetUsageAsync(string key, CancellationToken cancellationToken = default)
     {
-        return (await mediator.Send(new TestInternalAgentModelQuery(new(model)), cancellationToken)).Dto;
+        return (await mediator.Send(new GetInternalAgentUsageQuery(new(key)), cancellationToken)).Dto.Items;
+    }
+
+    /// <summary>The most recent model requests of all agents, newest first.</summary>
+    public async Task<IReadOnlyList<InternalAgentUsage>> GetAllUsageAsync(CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetAllInternalAgentUsageQuery(new()), cancellationToken)).Dto.Items;
+    }
+
+    /// <summary>Checks that the model responds on the configured endpoint; the request counts towards the usage of the agent.</summary>
+    public async Task<ModelTestResult> TestModelAsync(string key, string model, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new TestInternalAgentModelQuery(new(key, model)), cancellationToken)).Dto;
     }
 
     /// <summary>Restores the default system prompt.</summary>

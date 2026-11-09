@@ -41,10 +41,19 @@ public sealed class InternalAgentRegistry(IInternalAgentStore store)
             {
                 Id = stored.Id,
                 Instructions = stored.Instructions,
+                ModelId = stored.ModelId,
                 Model = stored.Model,
+                ModelLabel = stored.ModelLabel,
                 IsEnabled = stored.IsEnabled,
                 CreatedAt = stored.CreatedAt,
-                UpdatedAt = stored.UpdatedAt
+                UpdatedAt = stored.UpdatedAt,
+                RequestCount = stored.RequestCount,
+                TotalInputTokens = stored.TotalInputTokens,
+                TotalOutputTokens = stored.TotalOutputTokens,
+                TotalCachedInputTokens = stored.TotalCachedInputTokens,
+                TotalReasoningTokens = stored.TotalReasoningTokens,
+                TotalInputCost = stored.TotalInputCost,
+                TotalOutputCost = stored.TotalOutputCost
             };
     }
 }
