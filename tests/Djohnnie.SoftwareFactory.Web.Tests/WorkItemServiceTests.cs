@@ -371,6 +371,8 @@ public partial class WorkItemServiceTests : IDisposable
 
     private sealed record Request(string Method, string Path, string? Body);
 
+    private sealed record IssueOnGitHub(string Title, string? Body, string State, params string[] Assignees);
+
     [GeneratedRegex(@"^/repos/owner/repo/issues/(\d+)(/\w+)?$")]
     private static partial Regex IssuePath();
 
@@ -385,6 +387,9 @@ public partial class WorkItemServiceTests : IDisposable
         public bool CopilotAssignable { get; set; } = true;
         public bool SubIssuesFail { get; set; }
         public List<(int Number, string Body)> CreatedIssues { get; } = [];
+
+        /// <summary>The issues as they were changed on GitHub, by number; a <c>null</c> value is an issue that was deleted.</summary>
+        public Dictionary<int, IssueOnGitHub?> IssuesOnGitHub { get; } = [];
 
         /// <summary>
         /// The status of the next issue creation. A client error creates nothing; a server error still creates the issue,
@@ -445,6 +450,18 @@ public partial class WorkItemServiceTests : IDisposable
             var number = int.Parse(match.Groups[1].Value);
             return (method, match.Groups[2].Value) switch
             {
+                ("GET", "") when IssuesOnGitHub.TryGetValue(number, out var changed) => changed is null
+                    ? Json(HttpStatusCode.NotFound, """{"message":"Not Found"}""")
+                    : Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                    {
+                        id = 1000 + number,
+                        number,
+                        title = changed.Title,
+                        html_url = $"https://github.com/owner/repo/issues/{number}",
+                        state = changed.State,
+                        body = changed.Body,
+                        assignees = changed.Assignees.Select(login => new { login })
+                    })),
                 ("GET", "") => Json(HttpStatusCode.OK, Issue(number, [])),
                 ("POST", "/assignees") => Json(HttpStatusCode.Created, Issue(number, CopilotAssignable ? ["""{"login":"Copilot"}"""] : [])),
                 ("POST", "/sub_issues") when SubIssuesFail => Json(HttpStatusCode.UnprocessableEntity, """{"message":"Validation Failed"}"""),

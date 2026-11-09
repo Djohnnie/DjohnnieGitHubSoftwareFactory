@@ -107,6 +107,13 @@
                                    Disabled="_busy" OnClick="() => AssignAsync(context)" aria-label="Assign agent" />
                 </MudTooltip>
             }
+            @if (context.HasIssue)
+            {
+                <MudTooltip Text="@WorkItemActions.RefreshText">
+                    <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.Sync"
+                                   Disabled="_busy" OnClick="() => RefreshAsync(context)" aria-label="@WorkItemActions.RefreshText" />
+                </MudTooltip>
+            }
             <MudIconButton Variant="Variant.Text" Icon="@(context.IsDraft ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
                            Href="@WorkItemRoutes.ItemPath(context.Type, context.Id)" title="@(context.IsDraft ? "Edit" : "View")" />
             <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Disabled="_busy" OnClick="() => DeleteAsync(context)" title="Delete" />
@@ -217,6 +224,24 @@
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not assign '{item.Title}': {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private async Task RefreshAsync(WorkItem item)
+    {
+        _busy = true;
+        try
+        {
+            WorkItemActions.Report(Snackbar, await WorkItemService.RefreshAsync(Repository.Current!.FullName, item.Id));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not refresh '{item.Title}': {ex.Message}", Severity.Error);
         }
         finally
         {

@@ -37,6 +37,13 @@ public interface IWorkItemStore
 
     Task<WorkItem> MarkAssignedAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Stores the current state of the item's GitHub issue: its title, description and ids, and the status that follows
+    /// from it (closed is done; open is in progress when Copilot is assigned, otherwise accepted).
+    /// <see cref="WorkItem.UpdatedAt"/> only changes when something differs.
+    /// </summary>
+    Task<WorkItem> ApplyIssueAsync(string repositoryFullName, Guid id, WorkItemIssueSnapshot issue, CancellationToken cancellationToken);
+
     /// <summary>Remembers GitHub's issue id of an item that was accepted before the id was stored.</summary>
     Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken);
 }

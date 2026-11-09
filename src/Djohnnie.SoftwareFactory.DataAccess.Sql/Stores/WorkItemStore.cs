@@ -197,6 +197,38 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
+    public async Task<WorkItem> ApplyIssueAsync(string repositoryFullName, Guid id, WorkItemIssueSnapshot issue, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        if (entity.IssueNumber is null)
+        {
+            throw new DomainRuleException($"This {Name(entity.Type)} has no GitHub issue yet.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        entity.Title = issue.Title;
+        entity.Description = issue.Description;
+        entity.IssueId = issue.IssueId;
+        entity.IssueUrl = issue.IssueUrl;
+        entity.Status = issue.IsClosed
+            ? WorkItemStatus.Done
+            : entity.Type.CanBeAssigned && issue.IsAssignedToCopilot ? WorkItemStatus.InProgress : WorkItemStatus.Accepted;
+        entity.AssignedAt = entity.Status switch
+        {
+            WorkItemStatus.Accepted => null,
+            WorkItemStatus.InProgress => entity.AssignedAt ?? now,
+            _ => entity.AssignedAt
+        };
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            entity.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return entity.ToContract();
+    }
+
     public async Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

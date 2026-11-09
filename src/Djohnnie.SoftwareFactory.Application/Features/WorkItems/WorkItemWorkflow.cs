@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
@@ -8,7 +9,7 @@ using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
 /// <summary>Turns accepted work items into GitHub issues and hands stories, bugs and tasks to the Copilot cloud agent.</summary>
-public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHub)
+public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHub)
 {
     /// <summary>
     /// Creates the issue with the label of the item's type (the label is created when missing), makes it a sub-issue
@@ -86,6 +87,56 @@ public sealed class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHu
         }
         return await TryAssignAsync(item, cancellationToken);
     }
+
+    /// <summary>Stores the current title, description and state of the item's GitHub issue; nothing is sent to GitHub.</summary>
+    public async Task<WorkItemRefreshResult> RefreshFromIssueAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        var item = await FindAsync(repositoryFullName, id, cancellationToken);
+        if (item.IssueNumber is not { } number)
+        {
+            throw new DomainRuleException($"Only an accepted {item.Type.DisplayName.ToLowerInvariant()} has a GitHub issue to refresh from.");
+        }
+
+        GitHubIssue issue;
+        try
+        {
+            issue = await gitHub.GetIssueAsync(repositoryFullName, number, cancellationToken);
+        }
+        catch (GitHubApiException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+        {
+            throw new DomainRuleException($"GitHub issue #{number} no longer exists or can't be read with your account.");
+        }
+
+        var description = DescriptionFromIssue(item, issue);
+        if (description.Length > WorkItem.MaxDescriptionLength)
+        {
+            throw new DomainRuleException($"The description of GitHub issue #{number} is longer than the {WorkItem.MaxDescriptionLength:N0} characters DGHSF can store, so nothing was refreshed.");
+        }
+
+        var refreshed = await store.ApplyIssueAsync(repositoryFullName, id,
+            new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, GitHubApiClient.IsAssignedToCopilot(issue)),
+            cancellationToken);
+        return new(refreshed, refreshed != item);
+    }
+
+    /// <summary>
+    /// The issue body without the marker. GitHub's web editor changes line endings and <see cref="IssueBody"/> trims, so
+    /// the stored text is kept when only those differ; otherwise every refresh would count as a change.
+    /// </summary>
+    private static string DescriptionFromIssue(WorkItem item, GitHubIssue issue)
+    {
+        var description = Normalized(AnyMarker().Replace(issue.Body ?? string.Empty, string.Empty));
+        return description == Normalized(item.Description) ? item.Description : description;
+    }
+
+    private static string Normalized(string text)
+    {
+        return text.ReplaceLineEndings("\n").Trim();
+    }
+
+    /// <summary>Any DGHSF marker, including the older formats without a creation time.</summary>
+    [GeneratedRegex(@"<!--\s*dghsf:.*?-->")]
+    private static partial Regex AnyMarker();
 
     /// <summary>
     /// How long an acceptance that is going on blocks other attempts. Longer than an attempt takes (label and issue

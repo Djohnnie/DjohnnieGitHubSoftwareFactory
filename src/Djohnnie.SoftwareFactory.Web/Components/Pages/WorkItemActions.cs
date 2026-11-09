@@ -55,6 +55,21 @@ internal static class WorkItemActions
             yesText: "Delete", cancelText: "Cancel");
     }
 
+    public const string RefreshText = "Refresh from GitHub";
+
+    public static void Report(ISnackbar snackbar, WorkItemRefreshResult result)
+    {
+        var item = result.WorkItem;
+        if (result.Changed)
+        {
+            snackbar.Add($"Updated '{item.Title}' from issue #{item.IssueNumber}.", Severity.Success);
+        }
+        else
+        {
+            snackbar.Add($"'{item.Title}' is up to date with issue #{item.IssueNumber}.", Severity.Info);
+        }
+    }
+
     public static void Report(ISnackbar snackbar, WorkItemAcceptResult result)
     {
         var issue = $"#{result.WorkItem.IssueNumber}";

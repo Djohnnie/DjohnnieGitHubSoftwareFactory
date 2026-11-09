@@ -172,10 +172,10 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
             await EnsureSuccessAsync(response, cancellationToken);
 
-            var issues = await response.Content.ReadFromJsonAsync<List<Api.IssueListItem>>(cancellationToken) ?? [];
+            var issues = await response.Content.ReadFromJsonAsync<List<GitHubIssue>>(cancellationToken) ?? [];
             if (issues.FirstOrDefault(i => i.Body?.Contains(marker, StringComparison.Ordinal) == true) is { } found)
             {
-                return new GitHubIssue(found.Id, found.Number, found.Title, found.HtmlUrl, found.State, found.Assignees);
+                return found;
             }
             url = GetNextLink(response);
         }

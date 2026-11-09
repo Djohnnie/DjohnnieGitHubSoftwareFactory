@@ -65,6 +65,9 @@ public sealed record WorkItem
 
     public bool IsDraft => Status == WorkItemStatus.Draft;
 
+    /// <summary>Whether the item was accepted and has a GitHub issue it can be refreshed from.</summary>
+    public bool HasIssue => IssueNumber is not null;
+
     /// <summary>Whether the assignment settings can still be changed (only for types that are assigned to an agent).</summary>
     public bool CanEditAssignment => Type.CanBeAssigned && Status is WorkItemStatus.Draft or WorkItemStatus.Accepted;
 

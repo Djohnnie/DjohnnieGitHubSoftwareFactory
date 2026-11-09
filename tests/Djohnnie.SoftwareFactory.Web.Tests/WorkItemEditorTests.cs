@@ -33,6 +33,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     private const string Repo = "owner/repo";
     private readonly CancellationToken _cancellationToken = Xunit.TestContext.Current.CancellationToken;
     private ScriptedChatClient? _chatClient;
+    private readonly NoAgents _gitHub = new();
 
     ValueTask IAsyncLifetime.InitializeAsync()
     {
@@ -54,7 +55,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Services.AddApplication();
         Services.AddSingleton(_ => new AssistantAgentFactory(_chatClient, NullLoggerFactory.Instance));
         Services.AddScoped(sp => new GitHubApiClient(
-            new HttpClient(new NoAgents()) { BaseAddress = new Uri("https://api.github.com/") },
+            new HttpClient(_gitHub) { BaseAddress = new Uri("https://api.github.com/") },
             new GitHubTokenProvider(sp.GetRequiredService<AuthenticationStateProvider>())));
     }
 
@@ -297,6 +298,74 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
         cut.WaitForAssertion(() => Assert.Contains("https://github.com/owner/repo/issues/7", cut.Markup));
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Accept") || b.TextContent.Contains("Save"));
+    }
+
+    [Fact]
+    public async Task Draft_HasNoRefreshButtons()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAsync(WorkItemType.Task, "Draft");
+        Render<MudPopoverProvider>();
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        var editor = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+        editor.WaitForAssertion(() => Assert.Contains(editor.FindAll("button"), b => b.TextContent.Contains("Save draft")));
+        Navigation.NavigateTo("/tasks");
+        var list = Render<WorkItems>();
+        list.WaitForAssertion(() => Assert.Contains("Draft", list.Markup));
+
+        Assert.DoesNotContain(editor.FindAll("button"), b => b.TextContent.Contains("Refresh from GitHub"));
+        Assert.Empty(list.FindAll("button[aria-label='Refresh from GitHub']"));
+    }
+
+    [Fact]
+    public async Task Refresh_OnTheEditor_ShowsTheIssueAndKeepsUnsavedAssignmentSettings()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        _gitHub.IssueJson = """{"id":1007,"number":7,"title":"Renamed on GitHub","html_url":"https://github.com/owner/repo/issues/7","state":"open","body":"Edited","assignees":[]}""";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Refresh from GitHub")));
+        await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Base branch").Find("input").Change("release"));
+
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Refresh from GitHub")).Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("Renamed on GitHub", cut.Find("h4").TextContent));
+        Assert.Equal("release", cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Base branch").Find("input").GetAttribute("value"));
+        var stored = await Items.GetAsync(Repo, task.Id, _cancellationToken);
+        Assert.Equal("Renamed on GitHub", stored!.Title);
+        Assert.Equal("Edited", stored.Description);
+        Assert.Null(stored.BaseBranch);
+    }
+
+    [Fact]
+    public async Task Refresh_OnTheList_ReloadsTheStoredItem()
+    {
+        await SelectRepositoryAsync();
+        await SaveAcceptedTaskAsync();
+        _gitHub.IssueJson = """{"id":1007,"number":7,"title":"Renamed on GitHub","html_url":"https://github.com/owner/repo/issues/7","state":"closed","body":"Edited","assignees":[]}""";
+        Navigation.NavigateTo("/tasks");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItems>();
+        cut.WaitForAssertion(() => Assert.Contains("Accepted", cut.Markup));
+
+        await cut.InvokeAsync(() => cut.Find("button[aria-label='Refresh from GitHub']").Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("Renamed on GitHub", cut.Markup));
+        Assert.Contains("Done", cut.Markup);
+    }
+
+    private async Task<WorkItem> SaveAcceptedTaskAsync()
+    {
+        var task = await SaveAsync(WorkItemType.Task, "Accepted task");
+        await using var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken);
+        var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+        entity.Status = WorkItemStatus.Accepted;
+        entity.IssueNumber = 7;
+        entity.IssueUrl = "https://github.com/owner/repo/issues/7";
+        await db.SaveChangesAsync(_cancellationToken);
+        return task;
     }
 
     [Fact]
@@ -800,8 +869,18 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
     private sealed class NoAgents : HttpMessageHandler
     {
+        /// <summary>What GitHub returns for an issue; without it, like everything else, it isn't found.</summary>
+        public string? IssueJson { get; set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (IssueJson is not null && request.RequestUri!.AbsolutePath.Contains("/issues/", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(IssueJson, System.Text.Encoding.UTF8, "application/json")
+                });
+            }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
     }

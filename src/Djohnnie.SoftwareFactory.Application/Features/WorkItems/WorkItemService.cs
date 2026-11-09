@@ -59,4 +59,10 @@ public sealed class WorkItemService(ISender mediator)
     {
         return (await mediator.Send(new AssignWorkItemAgentCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
+
+    /// <summary>Stores the current title, description and state of an accepted item's GitHub issue.</summary>
+    public async Task<WorkItemRefreshResult> RefreshAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new RefreshWorkItemCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
 }

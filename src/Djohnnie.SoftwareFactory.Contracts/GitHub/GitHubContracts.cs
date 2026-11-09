@@ -37,7 +37,11 @@ public sealed record GitHubIssue(
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("html_url")] string HtmlUrl,
     [property: JsonPropertyName("state")] string State,
-    [property: JsonPropertyName("assignees")] IReadOnlyList<GitHubOwner>? Assignees);
+    [property: JsonPropertyName("assignees")] IReadOnlyList<GitHubOwner>? Assignees,
+    [property: JsonPropertyName("body")] string? Body = null)
+{
+    public bool IsClosed => string.Equals(State, "closed", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>Options for a Copilot cloud agent assignment (the <c>agent_assignment</c> object of the issues API).</summary>
 public sealed record CopilotAssignment(

@@ -48,6 +48,11 @@
             <MudButton Variant="Variant.Text" Color="Color.Warning" OnClick="AssignAsync" Disabled="_busy"
                        StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
         }
+        @if (_item.HasIssue)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RefreshAsync" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.Sync">@WorkItemActions.RefreshText</MudButton>
+        }
         @if (!IsNew && (_item.IsDraft || _item.CanEditAssignment))
         {
             <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_busy"
@@ -885,6 +890,35 @@ else if (_item is not null)
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not assign: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Stores the issue's current state. Unsaved assignment settings stay in the form while they can still be edited.</summary>
+    private async Task RefreshAsync()
+    {
+        _busy = true;
+        try
+        {
+            var form = _item!;
+            var result = await WorkItemService.RefreshAsync(RepositoryName, form.Id);
+            _item = result.WorkItem;
+            if (_item.CanEditAssignment)
+            {
+                _item.CustomAgent = form.CustomAgent;
+                _item.Model = form.Model;
+                _item.BaseBranch = form.BaseBranch;
+                _item.CustomInstructions = form.CustomInstructions;
+            }
+            WorkItemActions.Report(Snackbar, result);
+            ScheduleModelSuggestion();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not refresh: {ex.Message}", Severity.Error);
         }
         finally
         {
