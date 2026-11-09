@@ -289,8 +289,8 @@ public class InternalAgentTests : BunitContext
         var background = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.ModelSelector));
         background.WaitForAssertion(() => Assert.False(Button(background, "Save").HasAttribute("disabled")));
         Assert.DoesNotContain(background.FindAll("button"), b => b.TextContent.Trim() == "Test");
-        Assert.Empty(background.FindComponents<MarkdownEditor>());
-        Assert.Single(background.FindAll("textarea"));
+        Assert.True(background.FindComponent<MarkdownEditor>().Instance.RawMarkdown);
+        Assert.Empty(background.FindAll("textarea"));
     }
 
     [Fact]

@@ -49,17 +49,8 @@ else if (_agent is not null)
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                 <MudText Typo="Typo.h6">System prompt</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@PromptHelp</MudText>
-                @if (_agent.Kind == InternalAgentKind.Copilot)
-                {
-                    @* Raw Markdown: the WYSIWYG round trip would reformat the prompt and make it differ from the default. *@
-                    <MarkdownEditor @bind-Value="_agent.Instructions" RawMarkdown="true" Height="640px" MaxLength="InternalAgent.MaxInstructionsLength" />
-                }
-                else
-                {
-                    <MudTextField T="string" @bind-Value="_agent.Instructions" Variant="Variant.Outlined" Label="System prompt" Lines="26"
-                                  MaxLength="InternalAgent.MaxInstructionsLength" Counter="InternalAgent.MaxInstructionsLength" Immediate="true"
-                                  Class="mono" Disabled="_saving" />
-                }
+                @* Raw Markdown: the WYSIWYG round trip would reformat the prompt and make it differ from the default. *@
+                <MarkdownEditor @bind-Value="_agent.Instructions" RawMarkdown="true" Height="640px" MaxLength="InternalAgent.MaxInstructionsLength" />
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
