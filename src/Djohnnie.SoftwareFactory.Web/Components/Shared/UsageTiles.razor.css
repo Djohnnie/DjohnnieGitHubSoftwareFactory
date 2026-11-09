@@ -21,27 +21,27 @@
 
 /* One color per kind of figure: cost and tokens of the same side share it. */
 .usage-total {
-    --usage-color: #24292f;
+    --usage-color: #2a2136;
 }
 
 .usage-requests {
-    --usage-color: #8250df;
+    --usage-color: #6e40c9;
 }
 
 .usage-input {
-    --usage-color: #0969da;
+    --usage-color: #4c5fd5;
 }
 
 .usage-output {
-    --usage-color: #bc4c00;
+    --usage-color: #b85f0b;
 }
 
 .usage-cached {
-    --usage-color: #0a7b83;
+    --usage-color: #1a7f85;
 }
 
 .usage-reasoning {
-    --usage-color: #bf3989;
+    --usage-color: #c92f67;
 }
 
 .usage-stat {

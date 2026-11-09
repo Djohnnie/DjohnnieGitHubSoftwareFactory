@@ -8,13 +8,17 @@ public static class AppTheme
     {
         PaletteLight = new PaletteLight
         {
-            Primary = "#2da44e",
-            Secondary = "#57606a",
-            Tertiary = "#0969da",
-            AppbarBackground = "#24292f",
+            Primary = "#af43a0",
+            Secondary = "#6b6078",
+            Tertiary = "#4c5fd5",
+            Info = "#2f78c4",
+            Success = "#1c8257",
+            Warning = "#b85f0b",
+            Error = "#d1344b",
+            AppbarBackground = "#2a2136",
             AppbarText = "#ffffff",
-            Background = "#f6f8fa",
-            TableStriped = "#f8fafb"
+            Background = "#faf7fb",
+            TableStriped = "#fbf9fc"
         },
         LayoutProperties = new LayoutProperties
         {
