@@ -40,6 +40,7 @@ public static class DependencyInjection
             services.AddMemoryCache();
             services.AddSqlStores();
             services.AddScoped<WorkItemWorkflow>();
+            services.AddScoped<WorkItemPullRequests>();
             services.AddScoped<AgentTemplateWorkflow>();
             services.AddScoped<AiModelService>();
             services.AddScoped<WorkItemService>();

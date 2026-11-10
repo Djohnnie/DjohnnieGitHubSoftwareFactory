@@ -98,3 +98,86 @@ public sealed record CopilotCodeReviewSettingsUpdate(
     [property: JsonPropertyName("custom_instructions_enabled"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CustomInstructionsEnabled = null,
     [property: JsonPropertyName("mcp_enabled"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? McpEnabled = null);
 
+
+/// <summary>A pull request linked to an issue (one that closes it when merged), as GraphQL's <c>closedByPullRequestsReferences</c> returns it.</summary>
+/// <param name="State">GraphQL's <c>OPEN</c>, <c>CLOSED</c> or <c>MERGED</c>.</param>
+/// <param name="ReviewDecision">GraphQL's <c>APPROVED</c>, <c>CHANGES_REQUESTED</c> or <c>REVIEW_REQUIRED</c>; <c>null</c> when no review is required.</param>
+/// <param name="LatestReviewStates">The latest review state of each reviewer, e.g. <c>APPROVED</c> or <c>CHANGES_REQUESTED</c>.</param>
+/// <param name="ChecksState">The status check rollup of the last commit (<c>SUCCESS</c>, <c>FAILURE</c>, <c>ERROR</c>, <c>PENDING</c> or <c>EXPECTED</c>), or <c>null</c> without checks.</param>
+public sealed record GitHubLinkedPullRequest(
+    int Number,
+    string Url,
+    string Title,
+    string State,
+    bool IsDraft,
+    string HeadRefName,
+    DateTimeOffset UpdatedAt,
+    string? ReviewDecision,
+    IReadOnlyList<string> LatestReviewStates,
+    string? ChecksState)
+{
+    public bool IsOpen => State == "OPEN";
+    public bool IsMerged => State == "MERGED";
+}
+
+/// <summary>A GitHub Actions workflow run.</summary>
+/// <param name="Event">What triggered it; Copilot's agent sessions are <c>dynamic</c>.</param>
+/// <param name="Status"><c>queued</c>, <c>in_progress</c>, <c>completed</c>, …</param>
+/// <param name="Conclusion">For a completed run: <c>success</c>, <c>failure</c>, <c>cancelled</c>, <c>timed_out</c>, …</param>
+public sealed record GitHubWorkflowRun(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("event")] string? Event,
+    [property: JsonPropertyName("path")] string? Path,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("conclusion")] string? Conclusion,
+    [property: JsonPropertyName("html_url")] string HtmlUrl,
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt);
+
+/// <summary>One pull request as <c>GET /repos/{owner}/{repo}/pulls/{number}</c> returns it.</summary>
+/// <param name="State"><c>open</c> or <c>closed</c>; a merged pull request is closed with <see cref="MergedAt"/> set.</param>
+public sealed record GitHubPullRequestDetails(
+    [property: JsonPropertyName("number")] int Number,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("html_url")] string HtmlUrl,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("draft")] bool Draft,
+    [property: JsonPropertyName("user")] GitHubOwner? User,
+    [property: JsonPropertyName("merged_at")] DateTimeOffset? MergedAt,
+    [property: JsonPropertyName("additions")] int Additions,
+    [property: JsonPropertyName("deletions")] int Deletions,
+    [property: JsonPropertyName("changed_files")] int ChangedFiles)
+{
+    public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>A file of a pull request's diff.</summary>
+/// <param name="Patch">Missing for binary files and diffs that are too large.</param>
+public sealed record GitHubPullRequestFile(
+    [property: JsonPropertyName("filename")] string FileName,
+    [property: JsonPropertyName("previous_filename")] string? PreviousFileName,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("additions")] int Additions,
+    [property: JsonPropertyName("deletions")] int Deletions,
+    [property: JsonPropertyName("patch")] string? Patch,
+    [property: JsonPropertyName("blob_url")] string? BlobUrl);
+
+/// <summary>An issue (conversation) comment, or a review comment on a line when <see cref="Path"/> is set.</summary>
+/// <param name="Line">For a review comment: the line in the file it is on; <c>null</c> when that line is no longer in the diff.</param>
+public sealed record GitHubComment(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("user")] GitHubOwner? User,
+    [property: JsonPropertyName("body")] string? Body,
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("html_url")] string HtmlUrl,
+    [property: JsonPropertyName("path")] string? Path = null,
+    [property: JsonPropertyName("line")] int? Line = null,
+    [property: JsonPropertyName("original_line")] int? OriginalLine = null);
+
+/// <summary>A line comment of a review that is being submitted.</summary>
+/// <param name="Side"><c>RIGHT</c> (new file) or <c>LEFT</c> (old file).</param>
+public sealed record GitHubReviewLineComment(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("line")] int Line,
+    [property: JsonPropertyName("side")] string Side,
+    [property: JsonPropertyName("body")] string Body);

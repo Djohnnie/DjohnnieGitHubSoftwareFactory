@@ -369,6 +369,55 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task PullRequest_ShowsTheDiff_AndSendsLineCommentsToCopilotAsOneReview()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.ReadyForReview;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = """
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":true,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":1,"deletions":1,"changed_files":1}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = """
+            [{"filename":"src/App.cs","status":"modified","additions":1,"deletions":1,"patch":"@@ -1,2 +1,2 @@\n-var old = 1;\n+var renamed = 1;\n return;"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["POST /repos/owner/repo/pulls/12/reviews"] = """{"id":3,"html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}""";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Show changes")));
+
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Show changes")).Click());
+        cut.WaitForAssertion(() => Assert.Contains("var renamed = 1;", cut.Markup));
+        Assert.Contains("Ready for review", cut.Markup);
+
+        await cut.InvokeAsync(() => cut.Find("button[aria-label='Comment on line 1'].pr-add").Click());
+        await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Comment on line 1").Find("textarea").Input("Use a clearer name"));
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add comment").Click());
+        cut.WaitForAssertion(() => Assert.Contains("1 pending", cut.Markup));
+        await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "What should Copilot change?").Find("textarea").Input("Almost done."));
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Send to Copilot")).Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("View it on GitHub", cut.Markup));
+        using var review = System.Text.Json.JsonDocument.Parse(_gitHub.Bodies["POST /repos/owner/repo/pulls/12/reviews"]!);
+        Assert.StartsWith("@copilot Almost done.", review.RootElement.GetProperty("body").GetString());
+        var comment = Assert.Single(review.RootElement.GetProperty("comments").EnumerateArray());
+        Assert.Equal(("src/App.cs", 1, "LEFT", "Use a clearer name"),
+            (comment.GetProperty("path").GetString(), comment.GetProperty("line").GetInt32(), comment.GetProperty("side").GetString(), comment.GetProperty("body").GetString()));
+        Assert.DoesNotContain("1 pending", cut.Markup);
+    }
+
+    [Fact]
     public async Task List_OnlyShowsItemsOfTheRouteType_WithTheirParent()
     {
         await SelectRepositoryAsync();
@@ -384,7 +433,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal(["Passkeys", "Not part of another work item"], cut.FindAll("tbody th").Select(th => th.TextContent.Trim()));
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == $"/epics/{epic.Id}");
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == "/bugs/new");
-        Assert.Equal(["Bug", "Status", "Issue", "Agent", "Model", "Updated", "Actions"], cut.FindAll("thead th").Select(th => th.TextContent.Trim()));
+        Assert.Equal(["Bug", "Status", "Issue", "Copilot", "Agent", "Model", "Updated", "Actions"], cut.FindAll("thead th").Select(th => th.TextContent.Trim()));
 
         Navigation.NavigateTo("/epics");
         var epics = Render<WorkItems>();
@@ -872,7 +921,27 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         /// <summary>What GitHub returns for an issue; without it, like everything else, it isn't found.</summary>
         public string? IssueJson { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        /// <summary>Canned answers by "METHOD /path"; they win over <see cref="IssueJson"/>.</summary>
+        public Dictionary<string, string> Responses { get; } = [];
+
+        /// <summary>The bodies of the requests answered from <see cref="Responses"/>, by "METHOD /path".</summary>
+        public Dictionary<string, string?> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var key = $"{request.Method.Method} {request.RequestUri!.AbsolutePath}";
+            if (Responses.TryGetValue(key, out var json))
+            {
+                Bodies[key] = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+                return new HttpResponseMessage(request.Method == HttpMethod.Post ? HttpStatusCode.Created : HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+                };
+            }
+            return await AnswerAsync(request);
+        }
+
+        private Task<HttpResponseMessage> AnswerAsync(HttpRequestMessage request)
         {
             if (IssueJson is not null && request.RequestUri!.AbsolutePath.Contains("/issues/", StringComparison.Ordinal))
             {

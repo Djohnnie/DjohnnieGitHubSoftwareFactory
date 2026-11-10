@@ -260,6 +260,168 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return pullRequests;
     }
 
+    private const string LinkedPullRequestsQuery = """
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            issue(number: $number) {
+              closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {
+                nodes {
+                  number url title state isDraft headRefName updatedAt reviewDecision
+                  latestReviews(first: 20) { nodes { state } }
+                  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+                }
+              }
+            }
+          }
+        }
+        """;
+
+    /// <summary>
+    /// The pull requests (open, merged and closed) that close the issue when merged, e.g. because their body says
+    /// <c>Fixes #n</c> like Copilot's do. One GraphQL request.
+    /// </summary>
+    public async Task<IReadOnlyList<GitHubLinkedPullRequest>> GetLinkedPullRequestsAsync(string repositoryFullName, int issueNumber, CancellationToken cancellationToken = default)
+    {
+        var (owner, name) = SplitFullName(repositoryFullName);
+        using var response = await SendAsync(HttpMethod.Post, "graphql",
+            JsonContent.Create(new Api.GraphQlRequest(LinkedPullRequestsQuery, new { owner, name, number = issueNumber })), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<Api.GraphQlResponse<Api.LinkedPullRequestsData>>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+
+        // GraphQL answers 200 with errors instead of an error status.
+        var issue = result.Data?.Repository?.Issue;
+        if (issue is null || result.Errors is { Count: > 0 })
+        {
+            var error = result.Errors?.FirstOrDefault();
+            var status = error?.Type switch
+            {
+                "NOT_FOUND" => HttpStatusCode.NotFound,
+                "FORBIDDEN" => HttpStatusCode.Forbidden,
+                "RATE_LIMITED" => HttpStatusCode.TooManyRequests,
+                _ => HttpStatusCode.BadGateway
+            };
+            throw new GitHubApiException(status, $"GitHub couldn't list the pull requests of issue #{issueNumber}: {error?.Message ?? "no data returned"}");
+        }
+
+        return (issue.PullRequests?.Nodes ?? []).OfType<Api.LinkedPullRequestNode>().Select(pr => new GitHubLinkedPullRequest(
+            pr.Number, pr.Url, pr.Title, pr.State, pr.IsDraft, pr.HeadRefName, pr.UpdatedAt, pr.ReviewDecision,
+            (pr.LatestReviews?.Nodes ?? []).Select(r => r?.State).OfType<string>().ToList(),
+            pr.Commits?.Nodes?.LastOrDefault()?.Commit?.StatusCheckRollup?.State)).ToList();
+    }
+
+    /// <summary>
+    /// Copilot's latest agent session on <paramref name="branch"/>: the newest Actions run that GitHub started for the
+    /// Copilot cloud agent (a <c>dynamic</c> run) rather than for a workflow file of the repository.
+    /// </summary>
+    /// <returns><c>null</c> when there is none or the token may not read Actions (that only hides the run, nothing else).</returns>
+    public async Task<GitHubWorkflowRun?> GetLatestCopilotRunAsync(string repositoryFullName, string branch, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get,
+            $"repos/{repositoryFullName}/actions/runs?branch={Uri.EscapeDataString(branch)}&per_page=30", null, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden && !await IsRateLimitedAsync(response, cancellationToken))
+        {
+            return null;
+        }
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var runs = (await response.Content.ReadFromJsonAsync<Api.WorkflowRunsResponse>(cancellationToken))?.WorkflowRuns ?? [];
+        return runs.Where(IsCopilotRun).MaxBy(r => r.CreatedAt);
+    }
+
+    public static bool IsCopilotRun(GitHubWorkflowRun run)
+    {
+        return string.Equals(run.Event, "dynamic", StringComparison.OrdinalIgnoreCase)
+            && (run.Path?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true || run.Name?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static async Task<bool> IsRateLimitedAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.Headers.TryGetValues("x-ratelimit-remaining", out var remaining) && remaining.FirstOrDefault() == "0")
+        {
+            return true;
+        }
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return body.Contains("rate limit", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (string Owner, string Name) SplitFullName(string repositoryFullName)
+    {
+        var parts = repositoryFullName.Split('/');
+        if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException($"'{repositoryFullName}' is not an owner/name repository name.", nameof(repositoryFullName));
+        }
+        return (parts[0], parts[1]);
+    }
+
+    public async Task<GitHubPullRequestDetails> GetPullRequestAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/pulls/{number}", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<GitHubPullRequestDetails>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    /// <summary>GitHub lists at most this many files of a pull request.</summary>
+    public const int MaxPullRequestFiles = 3000;
+
+    /// <summary>The files of a pull request's diff with their patches, in GitHub's order (at most <see cref="MaxPullRequestFiles"/>).</summary>
+    public async Task<IReadOnlyList<GitHubPullRequestFile>> GetPullRequestFilesAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        return await GetAllPagesAsync<GitHubPullRequestFile>($"repos/{repositoryFullName}/pulls/{number}/files?per_page={PageSize}", cancellationToken);
+    }
+
+    /// <summary>The comments of the pull request's (or issue's) conversation, oldest first.</summary>
+    public async Task<IReadOnlyList<GitHubComment>> GetIssueCommentsAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        return await GetAllPagesAsync<GitHubComment>($"repos/{repositoryFullName}/issues/{number}/comments?per_page={PageSize}", cancellationToken);
+    }
+
+    /// <summary>The comments on lines of the pull request's diff, oldest first.</summary>
+    public async Task<IReadOnlyList<GitHubComment>> GetPullRequestReviewCommentsAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        return await GetAllPagesAsync<GitHubComment>($"repos/{repositoryFullName}/pulls/{number}/comments?per_page={PageSize}", cancellationToken);
+    }
+
+    /// <summary>Adds a comment to the conversation of a pull request (or issue).</summary>
+    /// <returns>The comment's URL.</returns>
+    public async Task<string> CreateIssueCommentAsync(string repositoryFullName, int number, string body, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/issues/{number}/comments",
+            JsonContent.Create(new Api.CreateCommentRequest(body)), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<Api.HtmlUrlResponse>(cancellationToken))?.HtmlUrl
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    /// <summary>Submits a review with comments on lines of the diff.</summary>
+    /// <param name="requestChanges">Request changes instead of only commenting.</param>
+    /// <returns>The review's URL.</returns>
+    public async Task<string> CreatePullRequestReviewAsync(string repositoryFullName, int number, string body, IReadOnlyList<GitHubReviewLineComment> comments,
+        bool requestChanges, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/reviews",
+            JsonContent.Create(new Api.CreateReviewRequest(body, requestChanges ? "REQUEST_CHANGES" : "COMMENT", comments)), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<Api.HtmlUrlResponse>(cancellationToken))?.HtmlUrl
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
+    private async Task<List<T>> GetAllPagesAsync<T>(string firstUrl, CancellationToken cancellationToken)
+    {
+        var items = new List<T>();
+        string? url = firstUrl;
+        while (url is not null)
+        {
+            using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+            items.AddRange(await response.Content.ReadFromJsonAsync<List<T>>(cancellationToken) ?? []);
+            url = GetNextLink(response);
+        }
+        return items;
+    }
+
     public async Task<IReadOnlyList<GitHubPullRequestReview>> GetPullRequestReviewsAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
     {
         var reviews = new List<GitHubPullRequestReview>();

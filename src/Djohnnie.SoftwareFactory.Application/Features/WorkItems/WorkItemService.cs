@@ -66,6 +66,18 @@ public sealed class WorkItemService(ISender mediator)
         return (await mediator.Send(new AssignWorkItemAgentCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
 
+    /// <summary>The diff and discussion of the item's pull request, read from GitHub.</summary>
+    public async Task<PullRequestChanges> GetPullRequestChangesAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetPullRequestChangesQuery(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Posts feedback that mentions <c>@copilot</c> on the item's pull request.</summary>
+    public async Task<PullRequestFeedbackResult> SendPullRequestFeedbackAsync(PullRequestFeedback feedback, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new SendPullRequestFeedbackCommand(feedback), cancellationToken)).Dto;
+    }
+
     /// <summary>Stores the current title, description and state of an accepted item's GitHub issue.</summary>
     public async Task<WorkItemRefreshResult> RefreshAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {

@@ -1,0 +1,112 @@
+@if (Item.Progress != CopilotProgress.None)
+{
+    <span style="white-space:nowrap">
+        <MudTooltip Text="@DescriptionOf(Item.Progress)">
+            <MudChip T="string" Size="Size.Small" Color="@ColorOf(Item.Progress)" Variant="Variant.Outlined" Icon="@IconOf(Item.Progress)"
+                     Href="@(Item.AgentRunUrl ?? Item.PullRequestUrl)" Target="_blank">@LabelOf(Item.Progress)</MudChip>
+        </MudTooltip>
+        @if (Item.PullRequestNumber is { } number)
+        {
+            <MudLink Href="@Item.PullRequestUrl" Target="_blank" title="Pull request">PR #@number</MudLink>
+        }
+        @if (Item.PullRequestChecks != PullRequestChecks.None)
+        {
+            <MudIcon Icon="@ChecksIconOf(Item.PullRequestChecks)" Color="@ChecksColorOf(Item.PullRequestChecks)" Size="Size.Small"
+                     Style="vertical-align:text-bottom" title="@ChecksLabelOf(Item.PullRequestChecks)" />
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
+
+    public static string LabelOf(CopilotProgress progress)
+    {
+        return progress switch
+        {
+            CopilotProgress.Queued => "Queued",
+            CopilotProgress.Working => "Copilot working",
+            CopilotProgress.Stopped => "Copilot stopped",
+            CopilotProgress.ReadyForReview => "Ready for review",
+            CopilotProgress.ChangesRequested => "Changes requested",
+            CopilotProgress.Approved => "Approved",
+            CopilotProgress.Merged => "Merged",
+            CopilotProgress.Closed => "PR closed",
+            _ => string.Empty
+        };
+    }
+
+    public static string DescriptionOf(CopilotProgress progress)
+    {
+        return progress switch
+        {
+            CopilotProgress.Queued => "Copilot is assigned but hasn't opened a pull request yet.",
+            CopilotProgress.Working => "Copilot's agent session is running; click to follow its log.",
+            CopilotProgress.Stopped => "Copilot's last session failed, was cancelled or timed out; click to see why.",
+            CopilotProgress.ReadyForReview => "Copilot finished; the pull request waits for your review.",
+            CopilotProgress.ChangesRequested => "A reviewer asked for changes. Mention @copilot in a comment to have it pick them up.",
+            CopilotProgress.Approved => "The pull request was approved and can be merged.",
+            CopilotProgress.Merged => "The pull request was merged.",
+            CopilotProgress.Closed => "The pull request was closed without merging.",
+            _ => string.Empty
+        };
+    }
+
+    private static Color ColorOf(CopilotProgress progress)
+    {
+        return progress switch
+        {
+            CopilotProgress.Working => Color.Warning,
+            CopilotProgress.Stopped or CopilotProgress.ChangesRequested => Color.Error,
+            CopilotProgress.ReadyForReview => Color.Info,
+            CopilotProgress.Approved or CopilotProgress.Merged => Color.Success,
+            _ => Color.Default
+        };
+    }
+
+    private static string IconOf(CopilotProgress progress)
+    {
+        return progress switch
+        {
+            CopilotProgress.Queued => Icons.Material.Filled.HourglassEmpty,
+            CopilotProgress.Working => Icons.Material.Filled.SmartToy,
+            CopilotProgress.Stopped => Icons.Material.Filled.ErrorOutline,
+            CopilotProgress.ReadyForReview => Icons.Material.Filled.RateReview,
+            CopilotProgress.ChangesRequested => Icons.Material.Filled.Edit,
+            CopilotProgress.Approved => Icons.Material.Filled.ThumbUp,
+            CopilotProgress.Merged => Icons.Material.Filled.MergeType,
+            _ => Icons.Material.Filled.Close
+        };
+    }
+
+    public static string ChecksLabelOf(PullRequestChecks checks)
+    {
+        return checks switch
+        {
+            PullRequestChecks.Pending => "Checks running",
+            PullRequestChecks.Passing => "Checks passing",
+            PullRequestChecks.Failing => "Checks failing",
+            _ => string.Empty
+        };
+    }
+
+    private static string ChecksIconOf(PullRequestChecks checks)
+    {
+        return checks switch
+        {
+            PullRequestChecks.Pending => Icons.Material.Filled.Pending,
+            PullRequestChecks.Passing => Icons.Material.Filled.CheckCircle,
+            _ => Icons.Material.Filled.Cancel
+        };
+    }
+
+    private static Color ChecksColorOf(PullRequestChecks checks)
+    {
+        return checks switch
+        {
+            PullRequestChecks.Pending => Color.Warning,
+            PullRequestChecks.Passing => Color.Success,
+            _ => Color.Error
+        };
+    }
+}

@@ -120,10 +120,46 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
             throw new DomainRuleException($"The description of GitHub issue #{number} is longer than the {WorkItem.MaxDescriptionLength:N0} characters DGHSF can store, so nothing was refreshed.");
         }
 
+        var assignedToCopilot = GitHubApiClient.IsAssignedToCopilot(issue);
+        var progress = item.Type.CanBeAssigned
+            ? await GetProgressAsync(repositoryFullName, number, issue.IsClosed, assignedToCopilot, cancellationToken)
+            : WorkItemProgressSnapshot.None;
+
         var refreshed = await store.ApplyIssueAsync(repositoryFullName, id,
-            new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, GitHubApiClient.IsAssignedToCopilot(issue)),
+            new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, assignedToCopilot, progress),
             cancellationToken);
         return new(refreshed, refreshed != item);
+    }
+
+    /// <summary>
+    /// One GraphQL request for the linked pull requests and, while the chosen one is open, one request for Copilot's
+    /// Actions run on its branch.
+    /// </summary>
+    /// <returns>
+    /// <c>null</c> (keep the stored progress) when GitHub refuses to show the pull requests, e.g. to a token without
+    /// access to them; that shouldn't stop the issue itself from being refreshed.
+    /// </returns>
+    private async Task<WorkItemProgressSnapshot?> GetProgressAsync(string repositoryFullName, int issueNumber, bool issueClosed, bool assignedToCopilot, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pullRequest = CopilotProgressEvaluator.SelectPullRequest(await gitHub.GetLinkedPullRequestsAsync(repositoryFullName, issueNumber, cancellationToken));
+            var run = pullRequest is { IsOpen: true }
+                ? await gitHub.GetLatestCopilotRunAsync(repositoryFullName, pullRequest.HeadRefName, cancellationToken)
+                : null;
+            return CopilotProgressEvaluator.Evaluate(issueClosed, assignedToCopilot, pullRequest, run);
+        }
+        catch (GitHubApiException ex) when (!StopsEveryRequest(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>An expired token or the rate limit: the next requests would fail too, so it isn't hidden.</summary>
+    private static bool StopsEveryRequest(GitHubApiException ex)
+    {
+        return ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests
+            || (ex.StatusCode == HttpStatusCode.Forbidden && ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

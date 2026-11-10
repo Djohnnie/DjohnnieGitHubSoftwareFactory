@@ -391,8 +391,20 @@ public partial class WorkItemServiceTests : IDisposable
 
     private sealed record IssueOnGitHub(string Title, string? Body, string State, params string[] Assignees);
 
+    /// <param name="State">GraphQL's OPEN, CLOSED or MERGED.</param>
+    private sealed record PullRequestOnGitHub(int Number, string Title, string State, string Branch, string? ReviewDecision = null,
+        string[]? LatestReviews = null, string? Checks = null);
+
+    private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot");
+
     [GeneratedRegex(@"^/repos/owner/repo/issues/(\d+)(/\w+)?$")]
     private static partial Regex IssuePath();
+
+    [GeneratedRegex(@"^/repos/owner/repo/pulls/(?<number>\d+)(?<rest>/\w+)?$")]
+    private static partial Regex PullRequestPath();
+
+    [GeneratedRegex(@"^/repos/owner/repo/issues/(?<number>\d+)/comments$")]
+    private static partial Regex IssueCommentsPath();
 
     /// <summary>A GitHub fake: issues are numbered from 42 and get id 1000 + number; labels never exist yet.</summary>
     private sealed class FakeGitHub : HttpMessageHandler
@@ -408,6 +420,31 @@ public partial class WorkItemServiceTests : IDisposable
 
         /// <summary>The issues as they were changed on GitHub, by number; a <c>null</c> value is an issue that was deleted.</summary>
         public Dictionary<int, IssueOnGitHub?> IssuesOnGitHub { get; } = [];
+
+        /// <summary>The pull requests linked to an issue, by issue number; none when missing.</summary>
+        public Dictionary<int, List<PullRequestOnGitHub>> LinkedPullRequests { get; } = [];
+
+        /// <summary>The Actions runs of a branch, newest first; none when missing.</summary>
+        public Dictionary<string, List<RunOnGitHub>> RunsByBranch { get; } = [];
+
+        /// <summary>The state of each pull request by number: open, closed or merged; a missing one is open.</summary>
+        public Dictionary<int, string> PullRequestStates { get; } = [];
+
+        /// <summary>The files of every pull request.</summary>
+        public List<(string FileName, string? Patch)> PullRequestFiles { get; } = [];
+
+        /// <summary>The existing comments of every pull request's conversation, and on its lines.</summary>
+        public List<string> ConversationComments { get; } = [];
+        public List<(string Path, int Line, string Body)> LineComments { get; } = [];
+
+        /// <summary>When set, submitting a review is refused with this status (e.g. 422 for a line no longer in the diff).</summary>
+        public HttpStatusCode? ReviewFailure { get; set; }
+
+        /// <summary>When set, GraphQL requests are refused with this status and message.</summary>
+        public (HttpStatusCode Status, string Message)? GraphQlFailure { get; set; }
+
+        /// <summary>When set, listing Actions runs is refused with this status (e.g. a token without Actions access).</summary>
+        public HttpStatusCode? RunsFailure { get; set; }
 
         /// <summary>When set, every request that reads an issue is refused like this.</summary>
         public (HttpStatusCode Status, string Message)? IssueReadFailure { get; set; }
@@ -457,6 +494,31 @@ public partial class WorkItemServiceTests : IDisposable
             {
                 return CreateIssue(body!);
             }
+            if (method == "POST" && path == "/graphql")
+            {
+                return GraphQlFailure is { } refused
+                    ? Json(refused.Status, JsonSerializer.Serialize(new { message = refused.Message }))
+                    : LinkedPullRequestsResponse(body!);
+            }
+            if (method == "GET" && path == "/repos/owner/repo/actions/runs")
+            {
+                return RunsResponse(request.RequestUri!);
+            }
+            if (PullRequestPath().Match(path) is { Success: true } pull)
+            {
+                return PullRequestResponse(method, int.Parse(pull.Groups["number"].Value), pull.Groups["rest"].Value);
+            }
+            if (IssueCommentsPath().Match(path) is { Success: true } comments)
+            {
+                var commented = int.Parse(comments.Groups["number"].Value);
+                return method == "POST"
+                    ? Json(HttpStatusCode.Created, $$"""{"html_url":"https://github.com/owner/repo/pull/{{commented}}#issuecomment-1"}""")
+                    : Json(HttpStatusCode.OK, JsonSerializer.Serialize(ConversationComments.Select((text, index) => new
+                    {
+                        id = index + 1, user = new { login = "reviewer" }, body = text,
+                        created_at = DateTimeOffset.UnixEpoch.AddHours(index), html_url = $"https://github.com/owner/repo/pull/{commented}#issuecomment-{index + 1}"
+                    })));
+            }
             if (method == "GET" && path == "/repos/owner/repo/issues")
             {
                 var issues = CreatedIssues.AsEnumerable().Reverse().Select(i => IssueWithBody(i.Number, i.Body));
@@ -490,6 +552,78 @@ public partial class WorkItemServiceTests : IDisposable
                 ("POST", "/sub_issues") => AddSubIssue(number, body!),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
+        }
+
+        private HttpResponseMessage PullRequestResponse(string method, int number, string rest)
+        {
+            var state = PullRequestStates.GetValueOrDefault(number, "open");
+            return (method, rest) switch
+            {
+                ("GET", "") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    number, title = "Fix the task", html_url = $"https://github.com/owner/repo/pull/{number}",
+                    state = state == "merged" ? "closed" : state, draft = false, user = new { login = "Copilot" },
+                    merged_at = state == "merged" ? DateTimeOffset.UnixEpoch : (DateTimeOffset?)null,
+                    additions = 3, deletions = 1, changed_files = PullRequestFiles.Count
+                })),
+                ("GET", "/files") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(PullRequestFiles.Select(f => new
+                {
+                    filename = f.FileName, status = "modified", additions = 1, deletions = 1, patch = f.Patch,
+                    blob_url = $"https://github.com/owner/repo/blob/main/{f.FileName}"
+                }))),
+                ("GET", "/comments") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(LineComments.Select((c, index) => new
+                {
+                    id = 100 + index, user = new { login = "reviewer" }, body = c.Body, path = c.Path, line = c.Line,
+                    created_at = DateTimeOffset.UnixEpoch.AddMinutes(30 + index), html_url = $"https://github.com/owner/repo/pull/{number}#discussion_r{100 + index}"
+                }))),
+                ("POST", "/reviews") when ReviewFailure is { } failure => Json(failure, """{"message":"Unprocessable Entity","errors":["Line could not be resolved"]}"""),
+                ("POST", "/reviews") => Json(HttpStatusCode.OK, $$"""{"id":9,"html_url":"https://github.com/owner/repo/pull/{{number}}#pullrequestreview-9"}"""),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            };
+        }
+
+        private HttpResponseMessage LinkedPullRequestsResponse(string body)
+        {
+            var number = JsonDocument.Parse(body).RootElement.GetProperty("variables").GetProperty("number").GetInt32();
+            var nodes = LinkedPullRequests.GetValueOrDefault(number, []).Select((pr, index) => new
+            {
+                number = pr.Number,
+                url = $"https://github.com/owner/repo/pull/{pr.Number}",
+                title = pr.Title,
+                state = pr.State,
+                isDraft = pr.State == "OPEN",
+                headRefName = pr.Branch,
+                updatedAt = DateTimeOffset.UnixEpoch.AddDays(index),
+                reviewDecision = pr.ReviewDecision,
+                latestReviews = new { nodes = (pr.LatestReviews ?? []).Select(state => new { state }) },
+                commits = new { nodes = new[] { new { commit = new { statusCheckRollup = pr.Checks is null ? null : new { state = pr.Checks } } } } }
+            });
+            return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+            {
+                data = new { repository = new { issue = new { closedByPullRequestsReferences = new { nodes } } } }
+            }));
+        }
+
+        private HttpResponseMessage RunsResponse(Uri uri)
+        {
+            if (RunsFailure is { } failure)
+            {
+                return Json(failure, """{"message":"Resource not accessible by integration"}""");
+            }
+
+            var branch = System.Web.HttpUtility.ParseQueryString(uri.Query)["branch"] ?? string.Empty;
+            var runs = RunsByBranch.GetValueOrDefault(branch, []).Select((run, index) => new
+            {
+                id = 500 + index,
+                name = "Copilot",
+                @event = run.Event,
+                path = run.Path,
+                status = run.Status,
+                conclusion = run.Conclusion,
+                html_url = $"https://github.com/owner/repo/actions/runs/{500 + index}",
+                created_at = DateTimeOffset.UnixEpoch.AddDays(-index)
+            });
+            return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { workflow_runs = runs }));
         }
 
         private HttpResponseMessage AddSubIssue(int parent, string body)

@@ -65,4 +65,17 @@ public class WorkItem : Entity
     /// </summary>
     public DateTimeOffset? AcceptIssueSince { get; set; }
     public DateTimeOffset? AssignedAt { get; set; }
+
+    /// <summary>How far Copilot got, as of the last refresh from GitHub.</summary>
+    public CopilotProgress Progress { get; set; }
+
+    public int? PullRequestNumber { get; set; }
+
+    [MaxLength(500)]
+    public string? PullRequestUrl { get; set; }
+
+    public PullRequestChecks PullRequestChecks { get; set; }
+
+    [MaxLength(500)]
+    public string? AgentRunUrl { get; set; }
 }

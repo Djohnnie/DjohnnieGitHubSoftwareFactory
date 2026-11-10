@@ -1,0 +1,145 @@
+.pr-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pr-file {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.pr-file-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    cursor: pointer;
+    background-color: var(--mud-palette-background-gray);
+    user-select: none;
+}
+
+.pr-file-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.pr-file-status {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-additions {
+    color: var(--mud-palette-success);
+    font-weight: 600;
+}
+
+.pr-deletions {
+    color: var(--mud-palette-error);
+    font-weight: 600;
+}
+
+.pr-note {
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The diff scrolls sideways inside its file instead of widening the page. */
+.pr-file:has(.pr-diff) {
+    overflow-x: auto;
+}
+
+.pr-diff {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.pr-diff td {
+    padding: 0 8px;
+    vertical-align: top;
+}
+
+.pr-num {
+    width: 1%;
+    min-width: 3em;
+    text-align: right;
+    color: var(--mud-palette-text-secondary);
+    user-select: none;
+    white-space: nowrap;
+}
+
+.pr-gutter {
+    width: 1%;
+    padding: 0 2px !important;
+}
+
+.pr-code {
+    white-space: pre;
+}
+
+.pr-sign {
+    display: inline-block;
+    width: 1.2em;
+    user-select: none;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-added {
+    background-color: rgba(46, 160, 67, 0.15);
+}
+
+.pr-removed {
+    background-color: rgba(248, 81, 73, 0.15);
+}
+
+.pr-hunk {
+    background-color: rgba(56, 139, 253, 0.1);
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-add {
+    width: 1.4em;
+    height: 1.4em;
+    line-height: 1;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--mud-palette-primary-text);
+    background-color: var(--mud-palette-primary);
+    opacity: 0;
+}
+
+.pr-diff tr:hover .pr-add,
+.pr-add:focus-visible {
+    opacity: 1;
+}
+
+.pr-thread td {
+    padding: 4px 8px 6px 8px;
+    white-space: normal;
+}
+
+.pr-comment {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background-color: var(--mud-palette-surface);
+    font-family: var(--mud-typography-default-family);
+    font-size: 0.875rem;
+}
+
+.pr-comment-pending {
+    border-color: var(--mud-palette-primary);
+}
+
+.pr-comment-body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-top: 2px;
+}

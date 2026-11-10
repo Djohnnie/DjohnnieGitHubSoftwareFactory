@@ -213,6 +213,15 @@ else if (_item is not null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Assigned to Copilot @assigned.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
                         }
+                        @if (_item.Progress != CopilotProgress.None)
+                        {
+                            <div class="mt-2"><CopilotProgressChip Item="_item" /></div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@CopilotProgressChip.DescriptionOf(_item.Progress)</MudText>
+                            @if (_item.AgentRunUrl is not null)
+                            {
+                                <MudLink Href="@_item.AgentRunUrl" Target="_blank" Typo="Typo.caption">Copilot session log</MudLink>
+                            }
+                        }
                         @if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
                         {
                             <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
@@ -334,6 +343,13 @@ else if (_item is not null)
             </MudItem>
         </MudGrid>
     </MudForm>
+
+    @if (_item.PullRequestNumber is not null)
+    {
+        <div class="mt-4">
+            <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" />
+        </div>
+    }
 }
 
 @code {

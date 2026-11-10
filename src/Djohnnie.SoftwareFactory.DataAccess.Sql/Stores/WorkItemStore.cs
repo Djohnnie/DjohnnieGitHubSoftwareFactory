@@ -237,6 +237,17 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             _ => entity.AssignedAt
         };
 
+        // Without a progress snapshot (GitHub didn't show the pull requests), the stored progress stays.
+        if (!entity.Type.CanBeAssigned || issue.Progress is not null)
+        {
+            var progress = entity.Type.CanBeAssigned ? issue.Progress! : WorkItemProgressSnapshot.None;
+            entity.Progress = progress.Progress;
+            entity.PullRequestNumber = progress.PullRequestNumber;
+            entity.PullRequestUrl = progress.PullRequestUrl;
+            entity.PullRequestChecks = progress.Checks;
+            entity.AgentRunUrl = progress.AgentRunUrl;
+        }
+
         if (db.ChangeTracker.HasChanges())
         {
             entity.UpdatedAt = now;

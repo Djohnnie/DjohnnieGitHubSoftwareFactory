@@ -65,6 +65,7 @@
         <MudTh>Issue</MudTh>
         @if (_type.CanBeAssigned)
         {
+            <MudTh>Copilot</MudTh>
             <MudTh>Agent</MudTh>
             <MudTh>Model</MudTh>
         }
@@ -84,6 +85,7 @@
         </MudTd>
         @if (_type.CanBeAssigned)
         {
+            <MudTd DataLabel="Copilot"><CopilotProgressChip Item="context" /></MudTd>
             <MudTd DataLabel="Agent"><span class="mono">@(context.CustomAgent ?? "Copilot")</span></MudTd>
             <MudTd DataLabel="Model"><span class="mono">@(context.Model ?? "auto")</span></MudTd>
         }
@@ -147,7 +149,7 @@
     {
         get
         {
-            return _type.CanBeAssigned ? 7 : 5;
+            return _type.CanBeAssigned ? 8 : 5;
         }
     }
 

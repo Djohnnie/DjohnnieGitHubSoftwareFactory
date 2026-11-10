@@ -63,6 +63,21 @@ public sealed record WorkItem
     public DateTimeOffset? AcceptedAt { get; set; }
     public DateTimeOffset? AssignedAt { get; set; }
 
+    /// <summary>How far Copilot got, as of the last refresh from GitHub.</summary>
+    public CopilotProgress Progress { get; set; }
+
+    /// <summary>The pull request linked to the issue that the progress is about.</summary>
+    public int? PullRequestNumber { get; set; }
+
+    [MaxLength(500)]
+    public string? PullRequestUrl { get; set; }
+
+    public PullRequestChecks PullRequestChecks { get; set; }
+
+    /// <summary>The Actions run of Copilot's latest agent session (its logs).</summary>
+    [MaxLength(500)]
+    public string? AgentRunUrl { get; set; }
+
     public bool IsDraft => Status == WorkItemStatus.Draft;
 
     /// <summary>Whether the item was accepted and has a GitHub issue it can be refreshed from.</summary>

@@ -80,3 +80,58 @@ public sealed record SeverityMetrics(
 /// <summary>A premium request or AI credit usage report of the billing API.</summary>
 public sealed record BillingUsageResponse(
     [property: JsonPropertyName("usageItems")] IReadOnlyList<CopilotBillingUsageItem>? UsageItems);
+
+public sealed record WorkflowRunsResponse(
+    [property: JsonPropertyName("workflow_runs")] IReadOnlyList<GitHubWorkflowRun>? WorkflowRuns);
+
+public sealed record GraphQlRequest(
+    [property: JsonPropertyName("query")] string Query,
+    [property: JsonPropertyName("variables")] object Variables);
+
+public sealed record GraphQlResponse<T>(
+    [property: JsonPropertyName("data")] T? Data,
+    [property: JsonPropertyName("errors")] IReadOnlyList<GraphQlError>? Errors);
+
+/// <param name="Type">E.g. <c>NOT_FOUND</c>, <c>FORBIDDEN</c> or <c>RATE_LIMITED</c>.</param>
+public sealed record GraphQlError(
+    [property: JsonPropertyName("message")] string? Message,
+    [property: JsonPropertyName("type")] string? Type);
+
+public sealed record GraphQlNodes<T>([property: JsonPropertyName("nodes")] IReadOnlyList<T?>? Nodes);
+
+public sealed record LinkedPullRequestsData([property: JsonPropertyName("repository")] LinkedPullRequestsRepository? Repository);
+
+public sealed record LinkedPullRequestsRepository([property: JsonPropertyName("issue")] LinkedPullRequestsIssue? Issue);
+
+public sealed record LinkedPullRequestsIssue(
+    [property: JsonPropertyName("closedByPullRequestsReferences")] GraphQlNodes<LinkedPullRequestNode>? PullRequests);
+
+public sealed record LinkedPullRequestNode(
+    [property: JsonPropertyName("number")] int Number,
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("isDraft")] bool IsDraft,
+    [property: JsonPropertyName("headRefName")] string HeadRefName,
+    [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt,
+    [property: JsonPropertyName("reviewDecision")] string? ReviewDecision,
+    [property: JsonPropertyName("latestReviews")] GraphQlNodes<ReviewStateNode>? LatestReviews,
+    [property: JsonPropertyName("commits")] GraphQlNodes<PullRequestCommitNode>? Commits);
+
+public sealed record ReviewStateNode([property: JsonPropertyName("state")] string? State);
+
+public sealed record PullRequestCommitNode([property: JsonPropertyName("commit")] CommitStatusNode? Commit);
+
+public sealed record CommitStatusNode([property: JsonPropertyName("statusCheckRollup")] StatusCheckRollupNode? StatusCheckRollup);
+
+public sealed record StatusCheckRollupNode([property: JsonPropertyName("state")] string? State);
+
+public sealed record CreateCommentRequest([property: JsonPropertyName("body")] string Body);
+
+/// <param name="Event"><c>COMMENT</c>, <c>REQUEST_CHANGES</c> or <c>APPROVE</c>.</param>
+public sealed record CreateReviewRequest(
+    [property: JsonPropertyName("body")] string Body,
+    [property: JsonPropertyName("event")] string Event,
+    [property: JsonPropertyName("comments")] IReadOnlyList<GitHubReviewLineComment> Comments);
+
+public sealed record HtmlUrlResponse([property: JsonPropertyName("html_url")] string HtmlUrl);

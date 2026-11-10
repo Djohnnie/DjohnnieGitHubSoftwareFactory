@@ -106,7 +106,12 @@ internal static class ContractMapping
                 CreatedAt = value.CreatedAt,
                 UpdatedAt = value.UpdatedAt,
                 AcceptedAt = value.AcceptedAt,
-                AssignedAt = value.AssignedAt
+                AssignedAt = value.AssignedAt,
+                Progress = value.Progress,
+                PullRequestNumber = value.PullRequestNumber,
+                PullRequestUrl = value.PullRequestUrl,
+                PullRequestChecks = value.PullRequestChecks,
+                AgentRunUrl = value.AgentRunUrl
             };
         }
 
