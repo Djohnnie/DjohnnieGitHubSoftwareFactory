@@ -381,10 +381,10 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
         cut.WaitForAssertion(() => Assert.Contains("Child bug", cut.Markup));
         Assert.Contains("Free bug", cut.Markup);
-        Assert.Contains("Standalone", cut.Markup);
+        Assert.Equal(["Passkeys", "Not part of another work item"], cut.FindAll("tbody th").Select(th => th.TextContent.Trim()));
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == $"/epics/{epic.Id}");
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == "/bugs/new");
-        Assert.Equal(["Bug", "Part of", "Status", "Issue", "Agent", "Model", "Updated", "Actions"], cut.FindAll("th").Select(th => th.TextContent.Trim()));
+        Assert.Equal(["Bug", "Status", "Issue", "Agent", "Model", "Updated", "Actions"], cut.FindAll("thead th").Select(th => th.TextContent.Trim()));
 
         Navigation.NavigateTo("/epics");
         var epics = Render<WorkItems>();

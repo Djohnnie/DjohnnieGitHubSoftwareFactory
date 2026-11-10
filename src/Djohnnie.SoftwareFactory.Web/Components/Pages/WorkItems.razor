@@ -32,7 +32,8 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" Striped="true" T="WorkItem" Items="_items" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+<MudTable Outlined="true" Striped="true" T="WorkItem" Items="_items" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0"
+          GroupBy="@(_type.ParentTypes.Count > 0 ? _groupByParent : null)" GroupHeaderStyle="background-color: var(--mud-palette-background-gray)">
     <ToolBarContent>
         <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="@($"Search {_type.PluralName.ToLowerInvariant()}")" Adornment="Adornment.Start" Immediate="true"
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
@@ -44,12 +45,22 @@
             }
         </MudSelect>
     </ToolBarContent>
+    <GroupHeaderTemplate>
+        <MudTh colspan="@ColumnCount">
+            @if (context.Key is WorkItemReference parent)
+            {
+                <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)" title="@parent.Type.DisplayName">
+                    <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" /> <b>@parent.Title</b>
+                </MudLink>
+            }
+            else
+            {
+                <b>Not part of another work item</b>
+            }
+        </MudTh>
+    </GroupHeaderTemplate>
     <HeaderContent>
         <MudTh>@_type.DisplayName</MudTh>
-        @if (_type.ParentTypes.Count > 0)
-        {
-            <MudTh>Part of</MudTh>
-        }
         <MudTh>Status</MudTh>
         <MudTh>Issue</MudTh>
         @if (_type.CanBeAssigned)
@@ -64,21 +75,6 @@
         <MudTd DataLabel="@_type.DisplayName">
             <MudLink Href="@WorkItemRoutes.ItemPath(context.Type, context.Id)" Typo="Typo.body1"><b>@context.Title</b></MudLink>
         </MudTd>
-        @if (_type.ParentTypes.Count > 0)
-        {
-            <MudTd DataLabel="Part of">
-                @if (context.Parent is { } parent)
-                {
-                    <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)" Typo="Typo.body2" title="@parent.Type.DisplayName">
-                        <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" /> @parent.Title
-                    </MudLink>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Standalone</MudText>
-                }
-            </MudTd>
-        }
         <MudTd DataLabel="Status"><WorkItemStatusChip Status="context.Status" /></MudTd>
         <MudTd DataLabel="Issue">
             @if (context.IssueNumber is { } number)
@@ -141,7 +137,18 @@
     private string? _search;
     private WorkItemStatus? _status;
 
+    /// <summary>Groups the rows by their parent; items without one share the <c>null</c> group.</summary>
+    private readonly TableGroupDefinition<WorkItem> _groupByParent = new() { Selector = i => i.Parent };
+
     private string Name => WorkItemActions.Name(_type);
+
+    private int ColumnCount
+    {
+        get
+        {
+            return _type.CanBeAssigned ? 7 : 5;
+        }
+    }
 
     private string Explanation => _type switch
     {
@@ -171,7 +178,9 @@
         _error = null;
         try
         {
-            _items = await WorkItemService.GetAllAsync(Repository.Current!.FullName, [_type]);
+            var items = await WorkItemService.GetAllAsync(Repository.Current!.FullName, [_type]);
+            // Groups appear in the order of their first row: parents alphabetically, items without a parent last.
+            _items = [.. items.OrderBy(i => i.Parent is null).ThenBy(i => i.Parent?.Title, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Parent?.Id)];
         }
         catch (Exception ex)
         {
