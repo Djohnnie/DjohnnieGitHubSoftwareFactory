@@ -1,0 +1,212 @@
+@using System.Globalization
+@using System.Net
+@inject GitHubService GitHub
+
+<section class="usage-infographic mb-6" aria-labelledby="copilot-activity-title">
+    <div class="usage-infographic-header">
+        <MudText Typo="Typo.h6" id="copilot-activity-title">Copilot activity</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            @(_metrics is { } period ? $"Pull requests, {Day(period.From)} – {Day(period.To)}" : $"Pull requests, last {GetCopilotRepositoryMetricsQueryHandler.Days} days")
+        </MudText>
+    </div>
+
+    @if (_loading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="14rem" />
+    }
+    else if (_metrics is not { } metrics)
+    {
+        <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-message">
+            <MudText Typo="Typo.body1">Could not load the Copilot @(Repository.Owner.IsOrganization ? "usage metrics" : "pull request activity"): @_error</MudText>
+            @if (_accessProblem)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    They need an organization owner (or the View Organization Copilot Metrics permission), the Copilot usage metrics
+                    policy enabled for the organization, and the <code>read:org</code> scope: sign out and sign in again to grant it.
+                </MudText>
+            }
+        </MudPaper>
+    }
+    else
+    {
+        <div class="usage-infographic-stats">
+            @Stat(Icons.Material.Filled.SmartToy, "PRs created by Copilot", metrics.CreatedByCopilot, $"of {metrics.PullRequestsCreated} created")
+            @Stat(Icons.Material.Filled.CallMerge, "Copilot PRs merged", metrics.MergedCreatedByCopilot, $"of {metrics.PullRequestsMerged} merged")
+            @Stat(Icons.Material.Filled.RateReview, "PRs reviewed by Copilot", metrics.ReviewedByCopilot, null)
+            @if (!metrics.FromPullRequests)
+            {
+                @Stat(Icons.Material.Filled.TaskAlt, "Review comments addressed", metrics.ReviewCommentsAddressed, $"of {metrics.ReviewCommentsEvaluated} evaluated")
+            }
+        </div>
+
+        @if (metrics.FromPullRequests)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="usage-infographic-note">
+                GitHub has no Copilot usage metrics for personal accounts, so these numbers come from the repository's pull requests
+                and their reviews, without review comment counts.
+            </MudText>
+        }
+
+        <div class="@(metrics.FromPullRequests ? "usage-infographic-panels usage-infographic-panels-single" : "usage-infographic-panels")">
+            <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-panel">
+                <div class="usage-infographic-panel-header">
+                    <MudText Typo="Typo.subtitle2">Pull requests created per day</MudText>
+                    <span class="usage-infographic-legend">
+                        <span><span class="infographic-swatch infographic-finished"></span>By Copilot</span>
+                        <span><span class="infographic-swatch infographic-existing"></span>Others</span>
+                    </span>
+                </div>
+                @if (metrics.PullRequestsCreated == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No pull requests were created in this period.</MudText>
+                }
+                else
+                {
+                    var max = metrics.Days.Max(d => d.PullRequestsCreated);
+                    <div class="usage-days" role="img"
+                         aria-label="@($"{metrics.PullRequestsCreated} pull requests created, {metrics.CreatedByCopilot} of them by Copilot")">
+                        @foreach (var day in AllDays(metrics))
+                        {
+                            <div class="usage-day" title="@($"{Day(day.Day)}: {day.PullRequestsCreated} created, {day.CreatedByCopilot} by Copilot")">
+                                @if (day.PullRequestsCreated > 0)
+                                {
+                                    @* The Copilot part sits on the baseline; the rest of the column is the other pull requests. *@
+                                    <div class="usage-day-column infographic-existing" style="height: @Percentage(day.PullRequestsCreated, max)">
+                                        @if (day.CreatedByCopilot > 0)
+                                        {
+                                            <div class="usage-day-fill infographic-finished" style="height: @Percentage(day.CreatedByCopilot, day.PullRequestsCreated)"></div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="usage-days-axis">
+                        <span>@Day(metrics.From)</span>
+                        <span>max @max per day</span>
+                        <span>@Day(metrics.To)</span>
+                    </div>
+                }
+            </MudPaper>
+
+            @if (!metrics.FromPullRequests)
+            {
+                <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-panel">
+                    <div class="usage-infographic-panel-header">
+                        <MudText Typo="Typo.subtitle2">Copilot code review comments</MudText>
+                    </div>
+                    @if (metrics.ReviewCommentsBySeverity is not { Count: > 0 } severities)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Copilot code review left no comments in this period.</MudText>
+                    }
+                    else
+                    {
+                        <table class="infographic-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Severity</th>
+                                    <th scope="col" class="infographic-bar-column" aria-label="Chart"></th>
+                                    <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-existing"></span>Evaluated</th>
+                                    <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Addressed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var severity in severities)
+                                {
+                                    <tr>
+                                        <th scope="row">@Capitalize(severity.Name)</th>
+                                        <td class="infographic-bar-column">
+                                            @if (severity.Evaluated > 0)
+                                            {
+                                                <div class="infographic-track infographic-existing"
+                                                     title="@($"{severity.Addressed} of {severity.Evaluated} addressed")" aria-hidden="true">
+                                                    @if (severity.Addressed > 0)
+                                                    {
+                                                        <div class="infographic-fill infographic-finished" style="width: @Percentage(Math.Min(severity.Addressed, severity.Evaluated), severity.Evaluated)"></div>
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                        <td class="infographic-number">@severity.Evaluated</td>
+                                        <td class="infographic-number">@severity.Addressed</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </MudPaper>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public GitHubRepository Repository { get; set; } = null!;
+
+    private bool _loading = true;
+    private CopilotRepositoryMetrics? _metrics;
+    private string? _error;
+    private bool _accessProblem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // GitHub only has Copilot usage metrics for organizations; a personal repository's activity comes from its pull requests.
+            _metrics = Repository.Owner.IsOrganization
+                ? await GitHub.GetCopilotRepositoryMetricsAsync(Repository.FullName)
+                : await GitHub.GetCopilotPullRequestActivityAsync(Repository.FullName);
+        }
+        catch (GitHubApiException ex)
+        {
+            _error = ex.Message;
+            _accessProblem = Repository.Owner.IsOrganization && ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            _error = ex.Message;
+        }
+        _loading = false;
+    }
+
+    /// <summary>Every day of the period, with the days without activity as empty days.</summary>
+    private static IEnumerable<CopilotRepositoryDay> AllDays(CopilotRepositoryMetrics metrics)
+    {
+        var active = metrics.Days.ToDictionary(d => d.Day);
+        for (var day = metrics.From; day <= metrics.To; day = day.AddDays(1))
+        {
+            yield return active.GetValueOrDefault(day) ?? new CopilotRepositoryDay(day, 0, 0, 0, 0, 0, 0, 0, []);
+        }
+    }
+
+    private static RenderFragment Stat(string icon, string label, int value, string? detail)
+    {
+        return @<MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
+            <MudIcon Icon="@icon" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@label</MudText>
+                <MudText Typo="Typo.h6">@value.ToString("#,0", CultureInfo.InvariantCulture)</MudText>
+                @if (detail is not null)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@detail</MudText>
+                }
+            </div>
+        </MudPaper>;
+    }
+
+    private static string Day(DateOnly day)
+    {
+        return day.ToString("MMM d", CultureInfo.InvariantCulture);
+    }
+
+    private static string Capitalize(string value)
+    {
+        return value.Length == 0 ? value : char.ToUpperInvariant(value[0]) + value[1..];
+    }
+
+    private static string Percentage(int part, int whole)
+    {
+        return (100d * part / whole).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+    }
+}

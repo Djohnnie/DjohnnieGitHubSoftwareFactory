@@ -37,6 +37,7 @@ public static class DependencyInjection
             });
             services.AddValidatorsFromAssemblyContaining<WorkItemService>();
             services.TryAddSingleton(TimeProvider.System);
+            services.AddMemoryCache();
             services.AddSqlStores();
             services.AddScoped<WorkItemWorkflow>();
             services.AddScoped<AgentTemplateWorkflow>();
@@ -91,7 +92,11 @@ public static class DependencyInjection
                 client.BaseAddress = new Uri("https://api.github.com/");
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-                client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+                client.DefaultRequestHeaders.Add(GitHubApiClient.ApiVersionHeader, "2022-11-28");
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // Copilot metrics report files may be served compressed.
+                AutomaticDecompression = System.Net.DecompressionMethods.All
             });
             return services;
         }

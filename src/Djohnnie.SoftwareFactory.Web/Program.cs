@@ -53,8 +53,11 @@ builder.Services
         options.ClientSecret = gitHub.ClientSecret;
         options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.CallbackPath = "/signin-github";
-        options.Scope.Add("read:user");
+        // "user" (which includes read:user): GitHub's personal billing usage endpoints accept no narrower scope and answer 404 without it.
+        options.Scope.Add("user");
         options.Scope.Add("repo");
+        // Copilot usage metrics of the organizations the user owns (overview page).
+        options.Scope.Add("read:org");
         options.SaveTokens = true;
         options.Events = new OAuthEvents
         {

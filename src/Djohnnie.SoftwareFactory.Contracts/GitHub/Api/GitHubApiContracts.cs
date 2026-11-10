@@ -47,3 +47,36 @@ public sealed record AssignRequest(
     [property: JsonPropertyName("agent_assignment")] CopilotAssignment AgentAssignment);
 
 public sealed record AddSubIssueRequest([property: JsonPropertyName("sub_issue_id")] long SubIssueId);
+
+/// <summary>A Copilot usage metrics report: signed links to its NDJSON files.</summary>
+public sealed record MetricsReportResponse(
+    [property: JsonPropertyName("download_links")] IReadOnlyList<string>? DownloadLinks);
+
+/// <summary>One line of a <c>repos-1-day</c> report: one repository with pull request activity that day.</summary>
+public sealed record RepositoryMetricsRow(
+    [property: JsonPropertyName("day")] DateOnly Day,
+    [property: JsonPropertyName("repo_owner_name")] string? OwnerName,
+    [property: JsonPropertyName("repo_name")] string? Name,
+    [property: JsonPropertyName("pull_requests")] PullRequestMetrics? PullRequests,
+    [property: JsonPropertyName("copilot_code_review")] CodeReviewMetrics? CodeReview);
+
+public sealed record PullRequestMetrics(
+    [property: JsonPropertyName("total_created")] int TotalCreated,
+    [property: JsonPropertyName("total_created_by_copilot")] int TotalCreatedByCopilot,
+    [property: JsonPropertyName("total_merged")] int TotalMerged,
+    [property: JsonPropertyName("total_merged_created_by_copilot")] int TotalMergedCreatedByCopilot,
+    [property: JsonPropertyName("total_reviewed_by_copilot")] int TotalReviewedByCopilot);
+
+public sealed record CodeReviewMetrics(
+    [property: JsonPropertyName("total_comments_evaluated")] int TotalCommentsEvaluated,
+    [property: JsonPropertyName("total_comments_addressed")] int TotalCommentsAddressed,
+    [property: JsonPropertyName("review_comments_by_severity")] IReadOnlyList<SeverityMetrics>? BySeverity);
+
+public sealed record SeverityMetrics(
+    [property: JsonPropertyName("severity")] string? Severity,
+    [property: JsonPropertyName("total_comments_evaluated")] int TotalCommentsEvaluated,
+    [property: JsonPropertyName("total_comments_addressed")] int TotalCommentsAddressed);
+
+/// <summary>A premium request or AI credit usage report of the billing API.</summary>
+public sealed record BillingUsageResponse(
+    [property: JsonPropertyName("usageItems")] IReadOnlyList<CopilotBillingUsageItem>? UsageItems);

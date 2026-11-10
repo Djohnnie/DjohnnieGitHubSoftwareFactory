@@ -47,6 +47,24 @@ public sealed class GitHubService(ISender mediator)
         return (await mediator.Send(new UpdateCopilotCodeReviewSettingsCommand(new(repositoryFullName, changes)), cancellationToken)).Dto;
     }
 
+    /// <summary>The Copilot pull request activity of a repository owned by an organization, over the last 28 days.</summary>
+    public async Task<CopilotRepositoryMetrics> GetCopilotRepositoryMetricsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetCopilotRepositoryMetricsQuery(new(repositoryFullName)), cancellationToken)).Dto;
+    }
+
+    /// <summary>The Copilot pull request activity of a personal repository over the last 28 days, worked out from its pull requests.</summary>
+    public async Task<CopilotRepositoryMetrics> GetCopilotPullRequestActivityAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetCopilotPullRequestActivityQuery(new(repositoryFullName)), cancellationToken)).Dto;
+    }
+
+    /// <summary>This month's premium request or AI credit usage of the account that owns the repository.</summary>
+    public async Task<CopilotBillingUsage> GetCopilotBillingUsageAsync(string repositoryFullName, bool ownedByOrganization, CopilotBillingReport report, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetCopilotBillingUsageQuery(new(repositoryFullName, ownedByOrganization, report)), cancellationToken)).Dto;
+    }
+
     public async Task<List<AgentSummary>> GetCustomAgentsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetCustomAgentsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items.ToList();

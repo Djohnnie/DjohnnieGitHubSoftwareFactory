@@ -1,0 +1,202 @@
+@using System.Globalization
+@inject GitHubService GitHub
+
+<section class="usage-infographic mb-6" aria-labelledby="copilot-billing-title">
+    <div class="usage-infographic-header">
+        <MudText Typo="Typo.h6" id="copilot-billing-title">Copilot billing</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@Period · @Account · amounts in US dollars, as GitHub bills them</MudText>
+    </div>
+
+    @if (_loading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="12rem" />
+    }
+    else
+    {
+        <div class="usage-infographic-stats">
+            @Stat(Icons.Material.Filled.Bolt, "Premium requests", _premiumRequests is null ? null : Quantity(_premiumRequests.Items.Sum(i => i.GrossQuantity)))
+            @Stat(Icons.Material.Filled.Toll, "AI credits", _aiCredits is null ? null : Quantity(_aiCredits.Items.Sum(i => i.GrossQuantity)))
+            @Stat(Icons.Material.Filled.CardGiftcard, "Included in the plan", Loaded.Any() ? Amount(Items.Sum(i => i.DiscountAmount)) : null)
+            @Stat(Icons.Material.Filled.ReceiptLong, "Billed", Loaded.Any() ? Amount(Items.Sum(i => i.NetAmount)) : null)
+        </div>
+
+        <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-panel">
+            @if (Loaded.Any())
+            {
+                var rows = ModelRows();
+                if (rows.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No metered Copilot usage for @Account this month.</MudText>
+                }
+                else
+                {
+                    var maxGross = rows.Max(r => r.Gross);
+                    <table class="infographic-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Model</th>
+                                <th scope="col" class="infographic-bar-column" aria-label="Chart"></th>
+                                <th scope="col" class="infographic-number">Premium requests</th>
+                                <th scope="col" class="infographic-number">AI credits</th>
+                                <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-accepted"></span>Included</th>
+                                <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Billed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in rows)
+                            {
+                                <tr>
+                                    <th scope="row">@row.Model</th>
+                                    <td class="infographic-bar-column">
+                                        @if (row.Gross > 0)
+                                        {
+                                            @* The bar is the model's gross amount compared to the largest; the billed part is on the left. *@
+                                            <div class="usage-track" aria-hidden="true" title="@($"{Amount(row.Net)} billed, {Amount(row.Included)} included")">
+                                                <div class="infographic-track infographic-accepted" style="width: @Percentage(row.Gross, maxGross)">
+                                                    @if (row.Net > 0)
+                                                    {
+                                                        <div class="infographic-fill infographic-finished" style="width: @Percentage(Math.Min(row.Net, row.Gross), row.Gross)"></div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td class="infographic-number">@(row.PremiumRequests is { } requests ? Quantity(requests) : "–")</td>
+                                    <td class="infographic-number">@(row.AiCredits is { } credits ? Quantity(credits) : "–")</td>
+                                    <td class="infographic-number">@Amount(row.Included)</td>
+                                    <td class="infographic-number">@Amount(row.Net)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            }
+            @foreach (var (report, error) in _errors)
+            {
+                <MudText Typo="Typo.body2">Could not load the @ReportName(report): @error</MudText>
+            }
+            @if (_errors.Count > 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @(Repository.Owner.IsOrganization
+                        ? "Organization usage needs an organization owner or billing manager."
+                        : "Personal usage needs the user scope (sign out and sign in again after it was added) and only covers the Copilot plan of the signed-in user, so it's only available for your own repositories.")
+                </MudText>
+            }
+        </MudPaper>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public GitHubRepository Repository { get; set; } = null!;
+
+    private bool _loading = true;
+    private CopilotBillingUsage? _premiumRequests;
+    private CopilotBillingUsage? _aiCredits;
+    private readonly List<(CopilotBillingReport Report, string Error)> _errors = [];
+
+    private string Account => Repository.Owner.Login;
+
+    private string Period => (_premiumRequests ?? _aiCredits) is { } usage
+        ? new DateTime(usage.Year, usage.Month, 1).ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+        : "This month";
+
+    private IEnumerable<CopilotBillingUsage> Loaded => new[] { _premiumRequests, _aiCredits }.OfType<CopilotBillingUsage>();
+
+    private IEnumerable<CopilotBillingUsageItem> Items => Loaded.SelectMany(u => u.Items);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Each report fails on its own: an account on one billing model may not have the other report.
+        var premiumRequests = LoadAsync(CopilotBillingReport.PremiumRequests);
+        var aiCredits = LoadAsync(CopilotBillingReport.AiCredits);
+        _premiumRequests = await premiumRequests;
+        _aiCredits = await aiCredits;
+        _loading = false;
+    }
+
+    private async Task<CopilotBillingUsage?> LoadAsync(CopilotBillingReport report)
+    {
+        try
+        {
+            return await GitHub.GetCopilotBillingUsageAsync(Repository.FullName, Repository.Owner.IsOrganization, report);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException or System.Text.Json.JsonException)
+        {
+            _errors.Add((report, ex.Message));
+            return null;
+        }
+    }
+
+    private sealed record ModelRow(string Model, decimal? PremiumRequests, decimal? AiCredits, decimal Gross, decimal Included, decimal Net);
+
+    /// <summary>The usage of both reports per model, most expensive first.</summary>
+    private List<ModelRow> ModelRows()
+    {
+        var premium = (_premiumRequests?.Items ?? []).Select(i => (Report: CopilotBillingReport.PremiumRequests, Item: i));
+        var credits = (_aiCredits?.Items ?? []).Select(i => (Report: CopilotBillingReport.AiCredits, Item: i));
+        return premium.Concat(credits)
+            .GroupBy(x => ModelName(x.Item), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ModelRow(
+                g.Key,
+                Sum(g.Where(x => x.Report == CopilotBillingReport.PremiumRequests).Select(x => x.Item.GrossQuantity)),
+                Sum(g.Where(x => x.Report == CopilotBillingReport.AiCredits).Select(x => x.Item.GrossQuantity)),
+                g.Sum(x => x.Item.GrossAmount),
+                g.Sum(x => x.Item.DiscountAmount),
+                g.Sum(x => x.Item.NetAmount)))
+            .OrderByDescending(r => r.Gross)
+            .ThenByDescending(r => (r.PremiumRequests ?? 0) + (r.AiCredits ?? 0))
+            .ThenBy(r => r.Model, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static decimal? Sum(IEnumerable<decimal> values)
+    {
+        var list = values.ToList();
+        return list.Count == 0 ? null : list.Sum();
+    }
+
+    private static string ModelName(CopilotBillingUsageItem item)
+    {
+        return new[] { item.Model, item.Sku, item.Product }.FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "Other";
+    }
+
+    private static string ReportName(CopilotBillingReport report)
+    {
+        return report == CopilotBillingReport.PremiumRequests ? "premium request usage" : "AI credit usage";
+    }
+
+    private static RenderFragment Stat(string icon, string label, string? value)
+    {
+        return @<MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
+            <MudIcon Icon="@icon" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@label</MudText>
+                @if (value is not null)
+                {
+                    <MudText Typo="Typo.h6">@value</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">Could not load</MudText>
+                }
+            </div>
+        </MudPaper>;
+    }
+
+    private static string Quantity(decimal value)
+    {
+        return value.ToString("#,0.##", CultureInfo.InvariantCulture);
+    }
+
+    private static string Amount(decimal value)
+    {
+        return value.ToString("$#,0.00", CultureInfo.InvariantCulture);
+    }
+
+    private static string Percentage(decimal part, decimal whole)
+    {
+        return (100m * part / whole).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+    }
+}

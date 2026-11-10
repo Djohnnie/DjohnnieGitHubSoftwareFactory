@@ -242,18 +242,128 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return $"repos/{repositoryFullName}/copilot/code-review/settings";
     }
 
+    /// <summary>The pull requests (open and closed) updated at or after <paramref name="since"/>, most recently updated first.</summary>
+    public async Task<IReadOnlyList<GitHubPullRequest>> GetPullRequestsUpdatedSinceAsync(string repositoryFullName, DateTimeOffset since, CancellationToken cancellationToken = default)
+    {
+        var pullRequests = new List<GitHubPullRequest>();
+        string? url = $"repos/{repositoryFullName}/pulls?state=all&sort=updated&direction=desc&per_page={PageSize}";
+        while (url is not null)
+        {
+            using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+
+            var page = await response.Content.ReadFromJsonAsync<List<GitHubPullRequest>>(cancellationToken) ?? [];
+            pullRequests.AddRange(page.Where(p => p.UpdatedAt >= since));
+            // Sorted by update time, so the first older one means every next page is older too.
+            url = page.Any(p => p.UpdatedAt < since) ? null : GetNextLink(response);
+        }
+        return pullRequests;
+    }
+
+    public async Task<IReadOnlyList<GitHubPullRequestReview>> GetPullRequestReviewsAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        var reviews = new List<GitHubPullRequestReview>();
+        string? url = $"repos/{repositoryFullName}/pulls/{number}/reviews?per_page={PageSize}";
+        while (url is not null)
+        {
+            using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+            reviews.AddRange(await response.Content.ReadFromJsonAsync<List<GitHubPullRequestReview>>(cancellationToken) ?? []);
+            url = GetNextLink(response);
+        }
+        return reviews;
+    }
+
+    /// <summary>The REST API version the Copilot usage metrics and billing usage endpoints are documented for.</summary>
+    public const string UsageApiVersion = "2026-03-10";
+
+    /// <summary>
+    /// Gets the organization's <c>repos-1-day</c> Copilot usage metrics report: one row per repository with pull request
+    /// activity that day. <c>null</c> when GitHub has no report for the day (204).
+    /// </summary>
+    public async Task<IReadOnlyList<Api.RepositoryMetricsRow>?> GetCopilotRepositoryMetricsReportAsync(string organization, DateOnly day, CancellationToken cancellationToken = default)
+    {
+        var url = $"orgs/{Uri.EscapeDataString(organization)}/copilot/metrics/reports/repos-1-day?day={day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken, apiVersion: UsageApiVersion);
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+
+        await EnsureSuccessAsync(response, cancellationToken);
+        var report = await response.Content.ReadFromJsonAsync<Api.MetricsReportResponse>(cancellationToken);
+        var rows = new List<Api.RepositoryMetricsRow>();
+        foreach (var link in report?.DownloadLinks ?? [])
+        {
+            rows.AddRange(await DownloadNdjsonAsync<Api.RepositoryMetricsRow>(link, cancellationToken));
+        }
+        return rows;
+    }
+
+    /// <summary>Downloads a report file from a signed link, without the GitHub token: the link points outside GitHub's API.</summary>
+    private async Task<List<T>> DownloadNdjsonAsync<T>(string link, CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new GitHubApiException(HttpStatusCode.BadGateway, "GitHub returned an invalid report download link.");
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GitHubApiException(response.StatusCode, $"Downloading the Copilot metrics report failed: {(int)response.StatusCode} {response.ReasonPhrase}");
+        }
+
+        var rows = new List<T>();
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cancellationToken));
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (!string.IsNullOrWhiteSpace(line) && JsonSerializer.Deserialize<T>(line) is { } row)
+            {
+                rows.Add(row);
+            }
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// Gets the premium request or AI credit usage of an organization or user for one month. For a user, it only covers the
+    /// Copilot plans the user bought personally.
+    /// </summary>
+    public async Task<IReadOnlyList<CopilotBillingUsageItem>> GetCopilotBillingUsageAsync(string account, bool organization, CopilotBillingReport report, int year, int month, CancellationToken cancellationToken = default)
+    {
+        var owner = organization ? $"organizations/{Uri.EscapeDataString(account)}" : $"users/{Uri.EscapeDataString(account)}";
+        var path = report switch
+        {
+            CopilotBillingReport.PremiumRequests => "premium_request",
+            CopilotBillingReport.AiCredits => "ai_credit",
+            _ => throw new ArgumentOutOfRangeException(nameof(report), report, null)
+        };
+        using var response = await SendAsync(HttpMethod.Get, $"{owner}/settings/billing/{path}/usage?year={year}&month={month}", null, cancellationToken, apiVersion: UsageApiVersion);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<Api.BillingUsageResponse>(cancellationToken))?.UsageItems ?? [];
+    }
+
     /// <param name="accept">A media type instead of the client's default <c>application/vnd.github+json</c>.</param>
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken, string? accept = null)
+    /// <param name="apiVersion">A REST API version instead of the client's default one.</param>
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken, string? accept = null, string? apiVersion = null)
     {
         using var request = new HttpRequestMessage(method, url) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
+        // A header on the request replaces the client's default header of the same name.
         if (accept is not null)
         {
-            // A header on the request replaces the client's default header of the same name.
             request.Headers.Accept.ParseAdd(accept);
+        }
+        if (apiVersion is not null)
+        {
+            request.Headers.Add(ApiVersionHeader, apiVersion);
         }
         return await httpClient.SendAsync(request, cancellationToken);
     }
+
+    public const string ApiVersionHeader = "X-GitHub-Api-Version";
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {

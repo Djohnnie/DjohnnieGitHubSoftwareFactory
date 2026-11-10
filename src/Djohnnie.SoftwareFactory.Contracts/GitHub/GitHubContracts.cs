@@ -2,9 +2,31 @@ using System.Text.Json.Serialization;
 
 namespace Djohnnie.SoftwareFactory.Contracts.GitHub;
 
+/// <param name="Type">"User" or "Organization"; <c>null</c> in copies stored before it was read.</param>
 public sealed record GitHubOwner(
     [property: JsonPropertyName("login")] string Login,
-    [property: JsonPropertyName("avatar_url")] string? AvatarUrl);
+    [property: JsonPropertyName("avatar_url")] string? AvatarUrl,
+    [property: JsonPropertyName("type")] string? Type = null)
+{
+    [JsonIgnore]
+    public bool IsOrganization => string.Equals(Type, "Organization", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The Copilot cloud agent (author "Copilot") or Copilot code review (reviewer "copilot-pull-request-reviewer[bot]").</summary>
+    [JsonIgnore]
+    public bool IsCopilot => string.Equals(Type, "Bot", StringComparison.OrdinalIgnoreCase)
+        && Login.Contains("copilot", StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed record GitHubPullRequest(
+    [property: JsonPropertyName("number")] int Number,
+    [property: JsonPropertyName("user")] GitHubOwner? User,
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("updated_at")] DateTimeOffset UpdatedAt,
+    [property: JsonPropertyName("merged_at")] DateTimeOffset? MergedAt);
+
+public sealed record GitHubPullRequestReview(
+    [property: JsonPropertyName("user")] GitHubOwner? User,
+    [property: JsonPropertyName("submitted_at")] DateTimeOffset? SubmittedAt);
 
 public sealed record GitHubRepository(
     [property: JsonPropertyName("id")] long Id,
