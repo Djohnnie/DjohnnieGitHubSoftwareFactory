@@ -139,7 +139,7 @@
     private WorkItemStatus? _status;
 
     /// <summary>Groups the rows by their parent; items without one share the <c>null</c> group.</summary>
-    private readonly TableGroupDefinition<WorkItem> _groupByParent = new() { Selector = i => i.Parent };
+    private readonly TableGroupDefinition<WorkItem> _groupByParent = new() { Selector = i => i.Parent! };
 
     private string Name => WorkItemActions.Name(_type);
 

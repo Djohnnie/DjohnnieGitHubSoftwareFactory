@@ -563,7 +563,6 @@ else if (_item is not null)
         var previousDescription = SelectedTemplate?.Description ?? string.Empty;
         if (_item!.Description != previousDescription)
         {
-            StateHasChanged();
             if (await Dialogs.ShowMessageBoxAsync("Replace description?",
                 $"Changing the template replaces your current description. The {Name} title and other settings stay unchanged.",
                 yesText: "Replace", cancelText: "Cancel") != true)

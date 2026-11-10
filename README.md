@@ -17,7 +17,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 
 ## Tech stack
 
-.NET 10 Blazor (Interactive Server) with MudBlazor, EF Core on SQL Server, MediatR with FluentValidation, Microsoft Agent Framework on an OpenAI-compatible endpoint, GitHub OAuth, and Azure App Service with Azure SQL and Blob Storage.
+.NET 11 Blazor (Interactive Server) with MudBlazor, EF Core on SQL Server, MediatR with FluentValidation, Microsoft Agent Framework on an OpenAI-compatible endpoint, GitHub OAuth, and Azure App Service with Azure SQL and Blob Storage.
 
 | Project | Responsibility |
 | --- | --- |
@@ -34,7 +34,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 
 Prerequisites:
 
-- The .NET 10 SDK (version pinned in `global.json`).
+- The .NET 11 SDK (version pinned in `global.json`).
 - SQL Server. LocalDB works.
 - A GitHub OAuth app with the callback URL `https://localhost:7254/signin-github`.
 
