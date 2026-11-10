@@ -15,11 +15,13 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// <param name="loggerFactory">Creates the loggers of the agents.</param>
 /// <param name="modelClientFactory">Creates a client for another model on the same endpoint.</param>
 /// <param name="defaultModel">The name of the configured model.</param>
+/// <param name="webPageFetcher">Gives every Copilot conversation the <c>fetch_url</c> tool; <c>null</c> leaves it out.</param>
 public sealed class AssistantAgentFactory(
     IChatClient? chatClient,
     ILoggerFactory loggerFactory,
     Func<string, IChatClient>? modelClientFactory = null,
-    string? defaultModel = null)
+    string? defaultModel = null,
+    WebPageFetcher? webPageFetcher = null)
 {
     public const string AgentName = "DGHSF Copilot";
 
@@ -29,9 +31,10 @@ public sealed class AssistantAgentFactory(
     /// <summary>The configured model, used by agents without a model of their own.</summary>
     public string? DefaultModel => defaultModel?.Trim();
 
-    public static AssistantAgentFactory Create(OpenAIOptions options, ILoggerFactory loggerFactory)
+    public static AssistantAgentFactory Create(OpenAIOptions options, ILoggerFactory loggerFactory, WebFetchOptions? webFetchOptions = null)
     {
-        return new(CreateChatClient(options), loggerFactory, model => CreateChatClient(options.ForModel(model))!, options.Model);
+        var fetcher = webFetchOptions is { Enabled: true } ? new WebPageFetcher(webFetchOptions) : null;
+        return new(CreateChatClient(options), loggerFactory, model => CreateChatClient(options.ForModel(model))!, options.Model, fetcher);
     }
 
     /// <param name="name">The name of the agent.</param>
@@ -41,8 +44,10 @@ public sealed class AssistantAgentFactory(
     /// <param name="onUsage">Called with the tokens of every model request.</param>
     public AssistantConversation CreateConversation(string name, string instructions, AssistantTools? tools = null, string? model = null, Func<ModelUsage, Task>? onUsage = null)
     {
-        var agent = new ChatClientAgent(new LocalHistoryChatClient(TrackedClientFor(model, onUsage)), instructions, name, tools: tools?.Tools, loggerFactory: loggerFactory);
-        return new(agent, tools?.RequestContext, tools?.Snapshot);
+        var webFetch = webPageFetcher is null ? null : new WebFetchTool(webPageFetcher);
+        IList<AITool>? allTools = webFetch is null ? tools?.Tools : [.. tools?.Tools ?? [], webFetch.AsFunction()];
+        var agent = new ChatClientAgent(new LocalHistoryChatClient(TrackedClientFor(model, onUsage)), instructions, name, tools: allTools, loggerFactory: loggerFactory);
+        return new(agent, tools?.RequestContext, tools?.Snapshot, webFetch);
     }
 
     /// <param name="name">The name of the agent.</param>

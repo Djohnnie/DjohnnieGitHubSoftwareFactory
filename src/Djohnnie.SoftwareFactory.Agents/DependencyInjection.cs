@@ -13,9 +13,11 @@ public static class DependencyInjection
         {
             services.Configure<OpenAIOptions>(configuration.GetSection(OpenAIOptions.SectionName));
             services.Configure<GitHubMcpOptions>(configuration.GetSection(GitHubMcpOptions.SectionName));
+            services.Configure<WebFetchOptions>(configuration.GetSection(WebFetchOptions.SectionName));
             services.AddSingleton(sp => AssistantAgentFactory.Create(
                 sp.GetRequiredService<IOptions<OpenAIOptions>>().Value,
-                sp.GetRequiredService<ILoggerFactory>()));
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<IOptions<WebFetchOptions>>().Value));
             return services;
         }
     }

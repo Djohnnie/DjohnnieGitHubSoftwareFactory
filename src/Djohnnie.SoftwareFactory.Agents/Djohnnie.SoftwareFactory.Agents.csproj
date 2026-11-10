@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.10.1" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.28.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0" />
     <PackageReference Include="ModelContextProtocol.Core" Version="2.4.0" />

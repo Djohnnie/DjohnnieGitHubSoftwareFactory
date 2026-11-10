@@ -12,16 +12,20 @@ public sealed class AssistantConversation
 
     private readonly AIAgent _agent;
     private readonly Func<Task<string?>>? _requestContext;
+    private const string UserMessageMarker = "\n\nThe user's message:\n";
+
     private readonly Func<Task<object?>>? _snapshot;
+    private readonly WebFetchTool? _webFetch;
     private AgentSession? _session;
     private int _storedMessages;
     private bool _resumed;
 
-    internal AssistantConversation(AIAgent agent, Func<Task<string?>>? requestContext = null, Func<Task<object?>>? snapshot = null)
+    internal AssistantConversation(AIAgent agent, Func<Task<string?>>? requestContext = null, Func<Task<object?>>? snapshot = null, WebFetchTool? webFetch = null)
     {
         _agent = agent;
         _requestContext = requestContext;
         _snapshot = snapshot;
+        _webFetch = webFetch;
     }
 
     /// <summary>Continues a stored conversation.</summary>
@@ -35,7 +39,12 @@ public sealed class AssistantConversation
         }
 
         _session = await _agent.CreateSessionAsync(cancellationToken);
-        _session.SetInMemoryChatHistory(payloads.Select(payload => JsonSerializer.Deserialize<ChatMessage>(payload, AIJsonUtilities.DefaultOptions)!).ToList());
+        var history = payloads.Select(payload => JsonSerializer.Deserialize<ChatMessage>(payload, AIJsonUtilities.DefaultOptions)!).ToList();
+        _session.SetInMemoryChatHistory(history);
+        foreach (var message in history.Where(m => m.Role == ChatRole.User))
+        {
+            _webFetch?.AllowUrlsIn(WithoutRequestContext(message.Text));
+        }
         _storedMessages = payloads.Count;
         _resumed = true;
     }
@@ -43,8 +52,10 @@ public sealed class AssistantConversation
     public async IAsyncEnumerable<string> RunStreamingAsync(string text, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         _session ??= await _agent.CreateSessionAsync(cancellationToken);
+        // Only what the user typed, not the form in the request context, which can hold text that came from elsewhere.
+        _webFetch?.AllowUrlsIn(text);
         var context = await BuildContextAsync();
-        var message = string.IsNullOrEmpty(context) ? text : $"{context}\n\nThe user's message:\n{text}";
+        var message = string.IsNullOrEmpty(context) ? text : $"{context}{UserMessageMarker}{text}";
         await foreach (var update in _agent.RunStreamingAsync(message, _session, cancellationToken: cancellationToken))
         {
             if (!string.IsNullOrEmpty(update.Text))
@@ -103,6 +114,13 @@ public sealed class AssistantConversation
             This conversation was reopened. The form may have changed since the messages above; it is now:
             {JsonSerializer.Serialize(form, form.GetType(), FormJsonOptions)}
             """;
+    }
+
+    /// <summary>What the user typed in a stored message, without the request context that was sent along.</summary>
+    private static string WithoutRequestContext(string text)
+    {
+        var index = text.LastIndexOf(UserMessageMarker, StringComparison.Ordinal);
+        return index < 0 ? text : text[(index + UserMessageMarker.Length)..];
     }
 
     /// <summary>Reasoning only means something to the service that produced it, which can't be relied on later.</summary>
