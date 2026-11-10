@@ -12,6 +12,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHub)
 {
     /// <summary>
+    /// Only accepts an item whose parent (if any) is accepted, so its issue can always be linked to the parent's.
     /// Creates the issue with the label of the item's type (the label is created when missing), makes it a sub-issue
     /// of the parent's issue and makes the issues of already accepted children its sub-issues. Stories, bugs and tasks
     /// are then assigned to Copilot. Linking or assignment problems are reported in the result; the issue stays.
@@ -31,6 +32,12 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         if (item.Type.RequiresParent && item.ParentId is null)
         {
             throw new DomainRuleException($"Choose the parent of this {name} before accepting it.");
+        }
+        if (item.ParentId is { } parentId
+            && await store.GetAsync(repositoryFullName, parentId, cancellationToken) is { IssueNumber: null } parent)
+        {
+            throw new DomainRuleException(
+                $"Accept the {parent.Type.DisplayName.ToLowerInvariant()} '{parent.Title}' before accepting this {name}.");
         }
 
         // Claim the draft first, so concurrent accepts can't both create an issue.
@@ -199,7 +206,8 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         {
             await TryLinkAsync(parentNumber, issue.Number, issue.Id);
         }
-        // A parent that isn't accepted yet links this issue when it is accepted (below, from the parent's side).
+        // A child is only accepted after its parent, but children accepted before that rule existed may still be
+        // waiting for their parent: link those from the parent's side (below).
 
         var children = await store.GetAllAsync(item.RepositoryFullName, parentId: item.Id, cancellationToken: cancellationToken);
         foreach (var child in children.Where(c => c.IssueNumber is not null))

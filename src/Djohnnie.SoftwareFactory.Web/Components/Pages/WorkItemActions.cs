@@ -23,16 +23,19 @@ internal static class WorkItemActions
         return type.CanBeAssigned ? "Accept & assign" : "Accept & create issue";
     }
 
-    /// <param name="parent">The current parent, to explain whether the issue becomes a sub-issue.</param>
+    /// <summary>Why the item can't be accepted yet because of its parent, or <c>null</c> when the parent doesn't stand in the way.</summary>
+    public static string? AcceptBlockedByParent(WorkItemType type, WorkItemReference? parent)
+    {
+        return parent is { IssueNumber: null }
+            ? $"Accept the {Name(parent.Type)} '{parent.Title}' before accepting this {Name(type)}."
+            : null;
+    }
+
+    /// <param name="parent">The current parent, to explain that the issue becomes a sub-issue.</param>
     public static Task<bool?> ConfirmAcceptAsync(IDialogService dialogs, WorkItem item, WorkItemReference? parent, string repositoryFullName)
     {
         var name = Name(item.Type);
-        var subIssue = parent switch
-        {
-            { IssueNumber: { } number } => $" as a sub-issue of #{number} ({parent.Title})",
-            not null => $". It becomes a sub-issue of '{parent.Title}' once that {Name(parent.Type)} is accepted",
-            _ => string.Empty
-        };
+        var subIssue = parent is { IssueNumber: { } number } ? $" as a sub-issue of #{number} ({parent.Title})" : string.Empty;
         var assignment = string.Empty;
         if (item.Type.CanBeAssigned)
         {

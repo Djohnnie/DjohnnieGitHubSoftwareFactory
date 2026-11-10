@@ -178,19 +178,37 @@ public partial class WorkItemServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Accept_ParentAfterItsChildren_MakesTheAcceptedChildrenSubIssues()
+    public async Task Accept_BeforeTheParentIsAccepted_IsRefusedWithoutCallingGitHub()
+    {
+        var epic = await SaveAsync(WorkItemType.Epic, "Epic");
+        var bug = await SaveAsync(WorkItemType.Bug, "Bug", epic.Id);
+
+        var error = await Assert.ThrowsAsync<DomainRuleException>(() => _service.AcceptAsync(Repo, bug.Id, _cancellationToken));
+
+        Assert.Equal("Accept the epic 'Epic' before accepting this bug.", error.Message);
+        Assert.Empty(_gitHub.Requests);
+        Assert.True((await _service.GetAsync(Repo, bug.Id, _cancellationToken))!.IsDraft);
+
+        await _service.AcceptAsync(Repo, epic.Id, _cancellationToken);
+        var bugResult = await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
+
+        Assert.Null(bugResult.HierarchyError);
+        Assert.Equal([(42, 1043L)], _gitHub.SubIssues);
+    }
+
+    [Fact]
+    public async Task Accept_ParentAfterChildrenAcceptedBeforeTheRule_MakesThemSubIssues()
     {
         var epic = await SaveAsync(WorkItemType.Epic, "Epic");
         var bug = await SaveAsync(WorkItemType.Bug, "Bug", epic.Id);
         var draftTask = await SaveAsync(WorkItemType.Task, "Task", epic.Id);
-
-        var bugResult = await _service.AcceptAsync(Repo, bug.Id, _cancellationToken);
-        Assert.Empty(_gitHub.SubIssues);
-        Assert.Null(bugResult.HierarchyError);
+        var store = _services.GetRequiredService<IWorkItemStore>();
+        await store.BeginAcceptAsync(Repo, bug.Id, WorkItemWorkflow.AcceptClaimTimeout, _cancellationToken);
+        await store.MarkAcceptedAsync(Repo, bug.Id, 1007, 7,"https://github.com/owner/repo/issues/7", _cancellationToken);
 
         await _service.AcceptAsync(Repo, epic.Id, _cancellationToken);
 
-        Assert.Equal([(43, 1042L)], _gitHub.SubIssues);
+        Assert.Equal([(42, 1007L)], _gitHub.SubIssues);
         Assert.True((await _service.GetAsync(Repo, draftTask.Id, _cancellationToken))!.IsDraft);
     }
 

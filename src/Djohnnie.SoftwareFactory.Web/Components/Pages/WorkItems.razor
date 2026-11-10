@@ -91,9 +91,10 @@
         <MudTd Style="text-align:right; white-space:nowrap">
             @if (context.IsDraft)
             {
-                <MudTooltip Text="@WorkItemActions.AcceptText(_type)">
+                var blocked = WorkItemActions.AcceptBlockedByParent(_type, context.Parent);
+                <MudTooltip Text="@(blocked ?? WorkItemActions.AcceptText(_type))">
                     <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.RocketLaunch"
-                                   Disabled="_busy" OnClick="() => AcceptAsync(context)" aria-label="@WorkItemActions.AcceptText(_type)" />
+                                   Disabled="@(_busy || blocked is not null)" OnClick="() => AcceptAsync(context)" aria-label="@WorkItemActions.AcceptText(_type)" />
                 </MudTooltip>
             }
             else if (context.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)

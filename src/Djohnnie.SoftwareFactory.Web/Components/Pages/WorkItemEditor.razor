@@ -40,8 +40,10 @@
         }
         @if (_item.IsDraft)
         {
-            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="_busy"
-                       StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
+            <MudTooltip Text="@(AcceptBlockedByParent ?? string.Empty)" Disabled="AcceptBlockedByParent is null">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="@(_busy || AcceptBlockedByParent is not null)"
+                           StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
+            </MudTooltip>
         }
         else if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
         {
@@ -264,7 +266,7 @@ else if (_item is not null)
                                 @if (SelectedParent is { IssueNumber: null } waiting)
                                 {
                                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
-                                        '@waiting.Title' isn't accepted yet: this issue becomes its sub-issue once it is.
+                                        '@waiting.Title' isn't accepted yet: accept it before accepting this @Name.
                                     </MudText>
                                 }
                             }
@@ -391,6 +393,14 @@ else if (_item is not null)
             return _parents.FirstOrDefault(p => p.Id == parentId) is { } candidate
                 ? new WorkItemReference(candidate.Id, candidate.Type, candidate.Title, candidate.Status, candidate.IssueNumber, candidate.IssueUrl)
                 : _item.Parent is { } stored && stored.Id == parentId ? stored : null;
+        }
+    }
+
+    private string? AcceptBlockedByParent
+    {
+        get
+        {
+            return WorkItemActions.AcceptBlockedByParent(_type, SelectedParent);
         }
     }
 
