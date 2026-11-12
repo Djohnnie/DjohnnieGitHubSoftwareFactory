@@ -227,13 +227,11 @@
             }
             <DictationTextField Value="@State.Body" ValueChanged="ChangeBody" Label="What should Copilot change?" Lines="4"
                           Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="State.Sending" />
-            <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Request changes (submit as a review that requests changes)"
+            <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Mark the pull request as &quot;Changes requested&quot; (can block merging until you approve)"
                          Disabled="State.Sending" Dense="true" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
                 Posted as you on pull request #@Changes.Number, starting with @WorkItemPullRequests.CopilotMention.
-                @(State.Pending.Count == 0 && !State.RequestChanges
-                    ? "It becomes a comment in the conversation."
-                    : $"It becomes one review with {State.Pending.Count} line {(State.Pending.Count == 1 ? "comment" : "comments")}.")
+                @FeedbackKind()
                 Copilot uses the model that created the pull request.
             </MudText>
             @if (State.Pending.Count > 0)
@@ -392,6 +390,23 @@
     private void ChangeRequestChanges(bool requestChanges)
     {
         State.RequestChanges = requestChanges;
+    }
+
+    /// <summary>What the feedback becomes on GitHub, as the caption under the feedback box says it.</summary>
+    private string FeedbackKind()
+    {
+        var count = State.Pending.Count;
+        var lineComments = $"{count} line {(count == 1 ? "comment" : "comments")}";
+        if (State.RequestChanges)
+        {
+            return $"It becomes a \"Request changes\" review with {lineComments}. GitHub shows the pull request as \"Changes requested\" "
+                + "and, if the repository requires approving reviews, blocks merging until you approve it or dismiss the review. "
+                + "Copilot acts on the feedback either way.";
+        }
+
+        return count == 0
+            ? "It becomes a comment in the conversation."
+            : $"It becomes one review with {lineComments}.";
     }
 
     private void CloseSent()
