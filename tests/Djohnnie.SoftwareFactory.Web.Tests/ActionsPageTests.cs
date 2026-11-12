@@ -178,13 +178,13 @@ public class ActionsPageTests : BunitContext
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Navigation_LinksTheActionsPageRightAfterTheOverview(bool vertical)
+    public void Navigation_LinksTheActionsPageRightAfterTheOverviewAndTheWorkItemMap(bool vertical)
     {
         var cut = Render<AppNavigation>(p => p.Add(n => n.HasRepository, true).Add(n => n.Vertical, vertical));
 
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
 
-        Assert.Equal(["/", "/actions"], links.Take(2));
+        Assert.Equal(["/", "/work-item-map", "/actions"], links.Take(3));
     }
 
     [Fact]

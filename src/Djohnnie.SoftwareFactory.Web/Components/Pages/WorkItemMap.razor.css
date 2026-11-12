@@ -1,0 +1,715 @@
+/* The map fills what is left of the window below the title, so it fits on one page without scrolling. */
+.map-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 290px);
+    min-height: 540px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--mud-palette-primary) 9%, transparent) 0, transparent 55%),
+        radial-gradient(circle, color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent) 1px, transparent 1.5px) 0 0 / 22px 22px,
+        var(--mud-palette-surface);
+}
+
+.map-stage ::deep .map-progress {
+    position: absolute;
+    inset: 0 0 auto 0;
+}
+
+.map-stage ::deep .map-empty {
+    flex: 1;
+}
+
+.map-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Lines */
+
+.map-edges {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.map-edge {
+    fill: none;
+    stroke: color-mix(in srgb, var(--c) 55%, transparent);
+    stroke-width: 1.6px;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    animation: map-edge-in 700ms ease-out var(--delay) backwards;
+}
+
+.map-edge-hub {
+    stroke: color-mix(in srgb, var(--mud-palette-text-secondary) 35%, transparent);
+    stroke-dasharray: 4 5;
+}
+
+@keyframes map-edge-in {
+    from {
+        opacity: 0;
+    }
+}
+
+/* Repository hub */
+
+.map-hub {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 12px;
+    text-align: center;
+    color: #fff;
+    background: radial-gradient(circle at 35% 30%, #4a3a5e, var(--mud-palette-appbar-background));
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--mud-palette-primary) 14%, transparent), 0 10px 30px rgba(42, 33, 54, .25);
+    animation: map-pop 550ms cubic-bezier(.2, .9, .3, 1.3) backwards;
+    z-index: 2;
+}
+
+.map-hub-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    margin-bottom: 2px;
+}
+
+.map-hub-name {
+    font-weight: 700;
+    font-size: .9rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.map-hub-caption {
+    font-size: .68rem;
+    opacity: .75;
+    line-height: 1.2;
+}
+
+@keyframes map-pop {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(.4);
+    }
+}
+
+/* Nodes: a zero-size anchor at the node's point; the badge is centred on it and the label hangs below. */
+
+.map-node {
+    --size: 40px;
+    --label: 120px;
+    --font: .74rem;
+    --scale: 1;
+    /* The sizes the layout fitted the ring to: smaller when the ring is full. */
+    --s: calc(var(--size) * var(--scale));
+    --l: calc(var(--label) * var(--scale));
+    position: absolute;
+    width: 0;
+    height: 0;
+    z-index: 3;
+    transition: left 650ms cubic-bezier(.22, .8, .25, 1), top 650ms cubic-bezier(.22, .8, .25, 1);
+    animation: map-node-in 650ms cubic-bezier(.22, .8, .25, 1) var(--delay) backwards;
+}
+
+.map-node:hover,
+.map-node:focus-within {
+    z-index: 10;
+}
+
+@keyframes map-node-in {
+    from {
+        left: var(--fx);
+        top: var(--fy);
+        opacity: 0;
+    }
+}
+
+.map-node-center {
+    --size: 92px;
+    --label: 200px;
+    --font: .95rem;
+    z-index: 5;
+}
+
+.map-node-epic {
+    --size: 60px;
+    --label: 150px;
+    --font: .86rem;
+}
+
+.map-node-depth1 {
+    --size: 50px;
+    --label: 140px;
+    --font: .8rem;
+}
+
+.map-node-depth2 {
+    --size: 38px;
+    --label: 116px;
+    --font: .72rem;
+}
+
+.map-node-depth3,
+.map-node-loose {
+    --size: 30px;
+    --label: 100px;
+    --font: .68rem;
+}
+
+.map-node-body {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, calc(var(--s) / -2));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: var(--l);
+    animation: map-body-in 650ms cubic-bezier(.2, .9, .3, 1.25) var(--delay) backwards;
+}
+
+@keyframes map-body-in {
+    from {
+        transform: translate(-50%, calc(var(--s) / -2)) scale(.3);
+    }
+}
+
+.map-node-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    color: var(--mud-palette-text-primary);
+    text-decoration: none;
+    outline: none;
+}
+
+.map-badge {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--s);
+    height: var(--s);
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid var(--c);
+    background: color-mix(in srgb, var(--c) 13%, var(--mud-palette-surface));
+    color: color-mix(in srgb, var(--c) 78%, #000);
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--c) 22%, transparent);
+    transition: width 650ms cubic-bezier(.22, .8, .25, 1), height 650ms cubic-bezier(.22, .8, .25, 1),
+        transform 180ms ease, box-shadow 180ms ease;
+}
+
+.map-icon {
+    width: 52%;
+    height: 52%;
+    fill: currentColor;
+}
+
+.map-node-link:hover .map-badge,
+.map-node-link:focus-visible .map-badge {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 20%, transparent), 0 6px 16px color-mix(in srgb, var(--c) 30%, transparent);
+}
+
+.map-node-center .map-badge {
+    border-width: 3px;
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--c) 12%, transparent), 0 0 0 22px color-mix(in srgb, var(--c) 6%, transparent),
+        0 10px 28px color-mix(in srgb, var(--c) 30%, transparent);
+}
+
+.map-label {
+    max-width: 100%;
+    padding: 1px 7px;
+    border-radius: 8px;
+    font-size: calc(var(--font) * max(var(--scale), .85));
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--mud-palette-surface) 82%, transparent);
+    backdrop-filter: blur(2px);
+    transition: opacity 180ms ease;
+}
+
+/* Deeper rings keep their labels to one line (the layout reserves room for that); hover or focus shows the rest. */
+.map-node-depth2 .map-label,
+.map-node-depth3 .map-label,
+.map-node-loose .map-label {
+    -webkit-line-clamp: 1;
+}
+
+.map-node-center .map-label {
+    font-weight: 700;
+    -webkit-line-clamp: 2;
+}
+
+.map-node-link:hover .map-label,
+.map-node-link:focus-visible .map-label {
+    color: var(--mud-palette-primary);
+    -webkit-line-clamp: 5;
+}
+
+/* Crowded rings show their labels on hover or focus only. */
+.crowded .map-label {
+    opacity: 0;
+}
+
+.crowded .map-node-link:hover .map-label,
+.crowded .map-node-link:focus-visible .map-label {
+    opacity: 1;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+}
+
+/* Status: drafts are dashed, Copilot's work pulses, closed items are filled in. */
+
+.status-draft .map-badge {
+    border-style: dashed;
+    background: var(--mud-palette-surface);
+}
+
+.status-inprogress .map-badge::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 2px solid var(--c);
+    animation: map-pulse 1.8s ease-out infinite;
+}
+
+@keyframes map-pulse {
+    to {
+        transform: scale(1.55);
+        opacity: 0;
+    }
+}
+
+.status-done .map-badge {
+    background: var(--c);
+    color: #fff;
+}
+
+.status-done .map-label {
+    color: var(--mud-palette-text-secondary);
+}
+
+.map-done {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: max(14px, calc(var(--s) * .3));
+    height: max(14px, calc(var(--s) * .3));
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--mud-palette-success);
+    border: 2px solid var(--mud-palette-surface);
+}
+
+.map-done svg {
+    width: 80%;
+    height: 80%;
+    fill: #fff;
+}
+
+/* The centre epic's breakdown and the expand / collapse buttons. */
+
+/* Above the badge, which balances the room the centre takes above and below (the layout counts on one line of chips there). */
+.map-summary {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 4px;
+    width: max-content;
+    max-width: 320px;
+    white-space: nowrap;
+}
+
+.map-summary span {
+    display: inline-block;
+    height: 18px;
+    padding: 0 8px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    border-radius: 10px;
+    font-size: .68rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--c, var(--mud-palette-text-secondary)) 80%, #000);
+    background: color-mix(in srgb, var(--c, var(--mud-palette-text-secondary)) 12%, var(--mud-palette-surface));
+}
+
+.map-toggle {
+    position: absolute;
+    top: calc(var(--s) * .5 - var(--s) * .36 - 11px);
+    left: calc(50% + var(--s) * .36 - 11px);
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    border: 2px solid var(--mud-palette-surface);
+    background: var(--c);
+    color: #fff;
+    font-family: inherit;
+    font-size: .66rem;
+    font-weight: 700;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+    transition: transform 160ms ease;
+}
+
+.map-toggle:hover,
+.map-toggle:focus-visible {
+    transform: scale(1.18);
+    outline: none;
+}
+
+.map-toggle svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+/* Legend */
+
+.map-legend {
+    position: absolute;
+    left: 12px;
+    top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    max-width: calc(100% - 24px);
+    font-size: .7rem;
+    color: var(--mud-palette-text-secondary);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.map-legend-type,
+.map-legend-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.map-legend-type svg {
+    width: 14px;
+    height: 14px;
+    fill: color-mix(in srgb, var(--c) 78%, #000);
+}
+
+.map-legend-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid var(--mud-palette-text-secondary);
+}
+
+.map-legend-dot.status-draft {
+    border-style: dashed;
+}
+
+.map-legend-dot.status-inprogress {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mud-palette-text-secondary) 25%, transparent);
+}
+
+.map-legend-dot.status-done {
+    background: var(--mud-palette-text-secondary);
+}
+
+
+/* Progress of the expanded epic: a strip above the map (the layout leaves its height out of the map's room). */
+
+.map-progress-strip {
+    --done: var(--mud-palette-success);
+    --accepted: var(--mud-palette-info);
+    --draft: color-mix(in srgb, var(--mud-palette-text-secondary) 45%, transparent);
+    flex: none;
+    box-sizing: border-box;
+    height: 41px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    background: color-mix(in srgb, var(--mud-palette-surface) 88%, transparent);
+    backdrop-filter: blur(4px);
+    font-size: .78rem;
+    color: var(--mud-palette-text-secondary);
+    z-index: 6;
+    animation: map-strip-in 400ms ease-out backwards;
+}
+
+@keyframes map-strip-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+}
+
+.map-progress-title {
+    flex: none;
+    white-space: nowrap;
+}
+
+.map-progress-title b {
+    font-size: .95rem;
+    color: var(--mud-palette-text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.map-progress-bar {
+    position: relative;
+    flex: 1;
+    min-width: 80px;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--mud-palette-text-secondary) 10%, transparent);
+}
+
+/* Grows from the left every time an epic is expanded. */
+.map-progress-fill {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    animation: map-fill-in 900ms cubic-bezier(.22, .8, .25, 1) 150ms backwards;
+}
+
+@keyframes map-fill-in {
+    from {
+        clip-path: inset(0 100% 0 0);
+    }
+    to {
+        clip-path: inset(0 0 0 0);
+    }
+}
+
+.map-progress-part {
+    height: 100%;
+    transition: width 500ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.map-progress-part + .map-progress-part {
+    box-shadow: inset 2px 0 0 var(--mud-palette-surface);
+}
+
+.map-progress-part.status-done {
+    background: var(--done);
+}
+
+.map-progress-part.status-accepted {
+    background: var(--accepted);
+}
+
+/* Drafts are striped, like their dashed outline on the map. */
+.map-progress-part.status-draft {
+    background: repeating-linear-gradient(-45deg, var(--draft) 0 4px, transparent 4px 7px);
+}
+
+.map-progress-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: .62rem;
+    line-height: 1;
+}
+
+.map-progress-counts {
+    flex: none;
+    display: inline-flex;
+    gap: 12px;
+    white-space: nowrap;
+}
+
+.map-progress-counts > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.map-progress-counts i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+}
+
+.map-progress-counts .status-done i {
+    background: var(--done);
+}
+
+.map-progress-counts .status-accepted i {
+    background: var(--accepted);
+}
+
+.map-progress-counts .status-draft i {
+    background: repeating-linear-gradient(-45deg, var(--draft) 0 3px, transparent 3px 5px);
+    box-shadow: inset 0 0 0 1px var(--draft);
+}
+/* Dock: every epic, one click to put it in the middle. */
+
+.map-dock {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    background: color-mix(in srgb, var(--mud-palette-surface) 88%, transparent);
+    backdrop-filter: blur(4px);
+    scrollbar-width: thin;
+    z-index: 6;
+}
+
+.map-dock-item {
+    --c: #6F42C1;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 240px;
+    height: 32px;
+    padding: 0 6px 0 12px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--c) 35%, var(--mud-palette-lines-default));
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    font-family: inherit;
+    font-size: .8rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 200ms ease, color 200ms ease, border-color 200ms ease, transform 160ms ease;
+}
+
+.map-dock-item:hover,
+.map-dock-item:focus-visible {
+    border-color: var(--c);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.map-dock-item svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    fill: var(--c);
+}
+
+.map-dock-hub {
+    --c: var(--mud-palette-appbar-background);
+    padding-right: 12px;
+}
+
+.map-dock-item.done .map-dock-title {
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.map-dock-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 20px;
+}
+
+.map-dock-count {
+    flex: none;
+    box-sizing: border-box;
+    display: inline-block;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 10px;
+    font-size: .7rem;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+    color: color-mix(in srgb, var(--c) 80%, #000);
+}
+
+.map-dock-item.active {
+    background: var(--c);
+    border-color: var(--c);
+    color: #fff;
+}
+
+.map-dock-item.active svg {
+    fill: #fff;
+}
+
+.map-dock-item.active .map-dock-count {
+    background: rgba(255, 255, 255, .25);
+    color: #fff;
+}
+
+@media (max-width: 700px) {
+    .map-stage {
+        height: calc(100dvh - 240px);
+        min-height: 480px;
+    }
+
+    .map-node {
+        --label: 84px;
+        --font: .64rem;
+    }
+
+    .map-node-center {
+        --size: 70px;
+        --label: 150px;
+        --font: .86rem;
+    }
+
+    .map-legend,
+    .map-progress-counts {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .map-node,
+    .map-node-body,
+    .map-edge,
+    .map-hub,
+    .map-badge,
+    .status-inprogress .map-badge::after,
+    .map-progress-strip,
+    .map-progress-fill,
+    .map-progress-part {
+        animation: none;
+        transition: none;
+    }
+}
