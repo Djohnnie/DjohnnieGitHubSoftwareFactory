@@ -9,7 +9,7 @@
 
 <PageTitle>@(IsNew ? "New agent template" : $"Edit template {_fileName}")</PageTitle>
 
-<PageBreadcrumbs Parents="@([new("Agent templates", "/agent-templates")])" Current="@(IsNew ? "New" : _fileName ?? "…")" BackDisabled="_saving" />
+<PageBreadcrumbs Parents="@([new("Custom agents", "/agents"), new("Agent templates", "/agent-templates")])" Current="@(IsNew ? "New" : _fileName ?? "…")" BackDisabled="_saving" />
 
 <MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New agent template" : $"Edit template {_title}")</MudText>
 

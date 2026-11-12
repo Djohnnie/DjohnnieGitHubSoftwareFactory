@@ -16,7 +16,7 @@
 
 <PageTitle>@Heading</PageTitle>
 
-<PageBreadcrumbs Parents="@([new($"{_type.DisplayName} templates", WorkItemRoutes.TemplatesPath(_type))])"
+<PageBreadcrumbs Parents="@([new(_type.PluralName, WorkItemRoutes.ListPath(_type)), new($"{_type.DisplayName} templates", WorkItemRoutes.TemplatesPath(_type))])"
                  Current="@(Id is null ? "New" : _template?.Name ?? "…")" BackDisabled="_saving" />
 <MudText Typo="Typo.h4" GutterBottom="true">@Heading</MudText>
 

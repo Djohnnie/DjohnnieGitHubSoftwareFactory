@@ -537,6 +537,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal(["Passkeys", "Not part of another work item"], cut.FindAll("tbody th").Select(th => th.TextContent.Trim()));
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == $"/epics/{epic.Id}");
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == "/bugs/new");
+        AssertTemplatesLinkFollowsNew(cut, "/bugs/new", "/bug-templates");
         Assert.Equal(["Bug", "Status", "Issue", "Copilot", "Agent", "Model", "Updated", "Actions"], cut.FindAll("thead th").Select(th => th.TextContent.Trim()));
 
         Navigation.NavigateTo("/epics");
@@ -544,6 +545,15 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         epics.WaitForAssertion(() => Assert.Contains("Passkeys", epics.Markup));
         Assert.DoesNotContain("Child bug", epics.Markup);
         Assert.Equal(["Epic", "Status", "Issue", "Updated", "Actions"], epics.FindAll("th").Select(th => th.TextContent.Trim()));
+        AssertTemplatesLinkFollowsNew(epics, "/epics/new", "/epic-templates");
+    }
+
+    // The template pages aren't in the navigation: each list page links its templates right after its New button.
+    private static void AssertTemplatesLinkFollowsNew(IRenderedComponent<WorkItems> list, string newHref, string templatesHref)
+    {
+        var hrefs = list.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
+        Assert.Equal(hrefs.IndexOf(newHref) + 1, hrefs.IndexOf(templatesHref));
+        Assert.Equal("Templates", list.FindAll("a").Single(a => a.GetAttribute("href") == templatesHref).TextContent.Trim());
     }
 
     [Fact]

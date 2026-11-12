@@ -90,16 +90,9 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Empty(cut.FindAll(".mud-appbar nav"));
         if (rendersPage)
         {
-            var links = cut.FindAll(".app-header > .mud-appbar + .desktop-only > nav [role='group'] a");
-            Assert.Equal(new[] { "/agent-templates", "/epic-templates", "/feature-templates", "/story-templates", "/bug-templates", "/task-templates" },
-                links.Select(link => link.GetAttribute("href")));
-            Assert.Equal(new[]
-                {
-                    "Manage agent templates", "Manage epic templates", "Manage feature templates", "Manage user story templates",
-                    "Manage bug templates", "Manage task templates"
-                },
-                links.Select(link => link.GetAttribute("aria-label")));
-            Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
+            // Without a repository only the repository-independent pages are linked; the template pages are linked from their list pages.
+            var links = cut.FindAll(".app-header > .mud-appbar + .desktop-only > nav a");
+            Assert.Equal(new[] { "/internal-agents", "/internal-models", "/sync-log" }, links.Select(link => link.GetAttribute("href")));
             // Like every link in the bar, it's an icon with a tooltip: the label is for screen readers, not a caption.
             var internalAgents = cut.Find(".app-header > .mud-appbar + .desktop-only > nav a[href='/internal-agents']");
             Assert.Equal("Internal agents", internalAgents.GetAttribute("aria-label"));
@@ -110,6 +103,18 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         {
             Assert.Empty(cut.FindAll("nav"));
         }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Navigation_HasNoTemplateLinks(bool hasRepository, bool vertical)
+    {
+        var cut = Render<AppNavigation>(p => p.Add(n => n.HasRepository, hasRepository).Add(n => n.Vertical, vertical));
+
+        Assert.DoesNotContain(cut.FindAll("a"), a => a.GetAttribute("href")!.Contains("templates", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -144,25 +149,11 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         var navigation = cut.Find(".app-header > .mud-appbar + .desktop-only > nav[aria-label='Main navigation']");
         Assert.Equal(new[]
             {
-                "/", "/actions", "/copilot-instructions", "/agents", "/agent-templates", "/epics", "/epic-templates", "/features", "/feature-templates",
-                "/stories", "/story-templates", "/bugs", "/bug-templates", "/tasks", "/task-templates", "/copilot-code-review", "/models", "/internal-agents", "/internal-models", "/sync-log"
+                "/", "/actions", "/copilot-instructions", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
+                "/copilot-code-review", "/models", "/internal-agents", "/internal-models", "/sync-log"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Equal(new[] { "/agents", "/agent-templates" },
-            navigation.QuerySelector("[aria-label='Agents and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Equal(new[] { "/epics", "/epic-templates" },
-            navigation.QuerySelector("[aria-label='Epics and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Equal(new[] { "/stories", "/story-templates" },
-            navigation.QuerySelector("[aria-label='User stories and templates']")!.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        foreach (var group in navigation.QuerySelectorAll("[role='group']"))
-        {
-            var templatesLink = group.QuerySelectorAll("a").Last();
-            Assert.Empty(templatesLink.TextContent.Trim());
-            Assert.StartsWith("Manage ", templatesLink.GetAttribute("aria-label"));
-            var separator = group.QuerySelector(".navigation-separator")!;
-            Assert.Equal("/", separator.TextContent);
-            Assert.Equal("true", separator.GetAttribute("aria-hidden"));
-        }
+        Assert.Empty(navigation.QuerySelectorAll("[role='group']"));
         Assert.All(cut.FindComponents<MudButton>(), button =>
         {
             Assert.Equal(Variant.Text, button.Instance.Variant);

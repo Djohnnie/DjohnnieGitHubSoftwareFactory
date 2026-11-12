@@ -186,6 +186,9 @@ public class WorkItemTemplateTests : BunitContext
         var dialogs = Render<MudDialogProvider>();
         var cut = Render<WorkItemTemplates>();
         Assert.Contains("User story templates", cut.Markup);
+        // Reached from the stories list (not the navigation), so the trail and the back arrow lead there.
+        Assert.Equal("/stories", cut.Find("a[aria-label='Back']").GetAttribute("href"));
+        Assert.Contains(cut.FindAll(".mud-breadcrumbs a"), a => a.GetAttribute("href") == "/stories");
         Assert.Equal($"/stories/new?template={template.Id}", cut.Find("a[aria-label='Create user story']").GetAttribute("href"));
         Assert.Contains("As a [user] I want [goal]", cut.Markup);
         Assert.DoesNotContain("Epic example", cut.Markup);

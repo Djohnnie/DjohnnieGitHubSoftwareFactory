@@ -1,4 +1,5 @@
-@* The main navigation links: a horizontal bar of icons with tooltips below the app bar on desktop, a vertical list in the navigation panel on mobile. *@
+@* The main navigation links: a horizontal bar of icons with tooltips below the app bar on desktop, a vertical list in the navigation panel on mobile.
+   Template pages aren't linked here: each list page links its own templates. *@
 
 @if (Vertical)
 {
@@ -20,20 +21,9 @@
             }
 
             <MudDivider Class="my-1" />
-        }
 
-        @foreach (var type in WorkItemTypeRules.All)
-        {
-            <MudButton Href="@WorkItemRoutes.TemplatesPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                       StartIcon="@Icons.Material.Filled.LibraryBooks">@($"{TemplatesName(type)} templates")</MudButton>
-        }
-
-        <MudDivider Class="my-1" />
-
-        @if (HasRepository)
-        {
             <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
-            <MudButton Href="/models"Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
         }
         <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
@@ -51,30 +41,11 @@ else
             @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
             @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
             @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
-        }
-        <div class="navigation-group" role="group" aria-label="Agents and templates">
-            @if (HasRepository)
+            @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
+            @foreach (var type in WorkItemTypeRules.All)
             {
-                @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
-                <span class="navigation-separator" aria-hidden="true">/</span>
+                @IconLink(WorkItemRoutes.ListPath(type), WorkItemRoutes.Icon(type), type.PluralName)
             }
-            @IconLink("/agent-templates", Icons.Material.Filled.LibraryBooks, "Manage agent templates")
-        </div>
-        @foreach (var type in WorkItemTypeRules.All)
-        {
-            var plural = type.PluralName;
-            var templatesLabel = $"Manage {type.DisplayName.ToLowerInvariant()} templates";
-            <div class="navigation-group" role="group" aria-label="@($"{plural} and templates")">
-                @if (HasRepository)
-                {
-                    @IconLink(WorkItemRoutes.ListPath(type), WorkItemRoutes.Icon(type), plural)
-                    <span class="navigation-separator" aria-hidden="true">/</span>
-                }
-                @IconLink(WorkItemRoutes.TemplatesPath(type), Icons.Material.Filled.LibraryBooks, templatesLabel)
-            </div>
-        }
-        @if (HasRepository)
-        {
             @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
             @IconLink("/models", Icons.Material.Filled.Memory, "Models")
         }
@@ -90,17 +61,6 @@ else
 
     /// <summary>Renders the links as a vertical list (navigation panel) instead of a horizontal bar.</summary>
     [Parameter] public bool Vertical { get; set; }
-
-    // Short names keep the panel labels compact ("Story templates" rather than "User story templates").
-    private static string TemplatesName(WorkItemType type)
-    {
-        if (type == WorkItemType.Story)
-        {
-            return "Story";
-        }
-
-        return type.DisplayName;
-    }
 
     private RenderFragment IconLink(string href, string icon, string label)
     {

@@ -11,7 +11,7 @@
 
 <PageTitle>@Title</PageTitle>
 
-<PageBreadcrumbs Current="@Title" />
+<PageBreadcrumbs Parents="@([new(_type.PluralName, WorkItemRoutes.ListPath(_type))])" Current="@Title" />
 
 <MudStack Class="mb-4">
     <div>

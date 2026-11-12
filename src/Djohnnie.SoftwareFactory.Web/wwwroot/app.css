@@ -29,16 +29,6 @@ h1:focus {
     cursor: pointer;
 }
 
-.navigation-group {
-    display: inline-flex;
-    align-items: center;
-}
-
-.navigation-separator {
-    color: var(--mud-palette-text-secondary);
-    padding: 0 0.25rem;
-}
-
 .app-header .header-link:hover,
 .app-header .header-link:focus-visible,
 .app-drawer .header-link:hover,

@@ -22,6 +22,7 @@
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
         <MudButton Href="@WorkItemRoutes.NewPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New @Name</MudButton>
+        <MudButton Href="@WorkItemRoutes.TemplatesPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.LibraryBooks">Templates</MudButton>
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
