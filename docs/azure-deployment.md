@@ -63,7 +63,7 @@ Also turn on **Web sockets** (needed for Blazor Interactive Server) and **Sessio
 
 ## Sync function app
 
-`Djohnnie.SoftwareFactory.Sync` is a timer-triggered Azure Function that refreshes every accepted work item of every repository in the database from its GitHub issue. The workflow deploys it to `softwarefactory-sync` after the web app. Its database must accept connections from Azure services.
+`Djohnnie.SoftwareFactory.Sync` is a timer-triggered Azure Function that refreshes every accepted work item of every repository in the database from its GitHub issue: its title, description and status and, for user stories, bugs and tasks, Copilot's progress from the linked pull request (its review state and checks) and Copilot's agent run. The workflow deploys it to `softwarefactory-sync` after the web app. Its database must accept connections from Azure services.
 
 Configure these app settings on the Function App (`FUNCTIONS_WORKER_RUNTIME` is only for `local.settings.json`; a Flex Consumption app doesn't accept it):
 
@@ -71,10 +71,15 @@ Configure these app settings on the Function App (`FUNCTIONS_WORKER_RUNTIME` is 
 | --- | --- |
 | `WorkItemSyncSchedule` | CRON expression with six fields (seconds first), in UTC, e.g. `0 */15 * * * *` for every 15 minutes. The function fails to start without it |
 | `ConnectionStrings__Database` | The same database as the Web App. The function reads and updates work items but doesn't migrate |
-| `GitHub__SyncToken` | GitHub token that can read the issues of every repository in the database: a classic token with `repo`, or a fine-grained token with read access to issues. The function fails to start without it |
+| `GitHub__SyncToken` | GitHub token that can read every repository in the database: a classic token with `repo`, or a fine-grained token with read access to issues, pull requests, commit statuses, checks and Actions. The function fails to start without it |
 | `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
 
-Each run makes one GitHub request per accepted work item, so a token's limit of 5,000 requests per hour allows about 1,250 items at 15-minute intervals. A deleted issue or a repository the token can't read is logged as a warning and the run continues. An invalid token or a reached rate limit stops the run, which then shows as failed.
+The token's permissions aren't checked when the function starts, and missing ones don't fail the run:
+
+- Without access to pull requests, commit statuses or checks, Copilot's progress is never updated: work items keep the progress they had, while their title, description and status are still synced.
+- Without access to Actions, the agent run is unknown and its link isn't shown; whether Copilot is still working then follows from the `[WIP]` prefix in the pull request's title, so a failed or cancelled run isn't recognized.
+
+Each run makes, per accepted work item, one REST request for the issue and, for user stories, bugs and tasks, one GraphQL request for the linked pull requests plus one REST request for Copilot's agent run while that pull request is open. REST and GraphQL each have their own limit of 5,000 per hour, so at 15-minute intervals a token handles about 625 items that all have an open pull request, and up to about 1,250 without. A deleted issue or a repository the token can't read is logged as a warning and the run continues. An invalid token or a reached rate limit stops the run, which then shows as failed.
 
 ## Image uploads
 

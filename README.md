@@ -86,7 +86,7 @@ In Development, the app applies the EF Core migrations at startup to the databas
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "WorkItemSyncSchedule": "0 */15 * * * *",
     "ConnectionStrings__Database": "Server=(localdb)\\MSSQLLocalDB;Database=DGHSF;Trusted_Connection=True;TrustServerCertificate=True",
-    "GitHub__SyncToken": "<GitHub token that can read the issues of your repositories>"
+    "GitHub__SyncToken": "<GitHub token that can read the issues, pull requests, checks and Actions runs of your repositories>"
   }
 }
 ```
