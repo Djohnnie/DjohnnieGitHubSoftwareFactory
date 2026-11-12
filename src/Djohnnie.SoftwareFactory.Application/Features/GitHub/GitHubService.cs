@@ -53,6 +53,12 @@ public sealed class GitHubService(ISender mediator)
         return (await mediator.Send(new GetCopilotRepositoryMetricsQuery(new(repositoryFullName)), cancellationToken)).Dto;
     }
 
+    /// <summary>The repository's open pull requests and the Copilot cloud agent sessions running in it right now.</summary>
+    public async Task<CopilotPullRequestOverview> GetCopilotPullRequestOverviewAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetCopilotPullRequestOverviewQuery(new(repositoryFullName)), cancellationToken)).Dto;
+    }
+
     /// <summary>The Copilot pull request activity of a personal repository over the last 28 days, worked out from its pull requests.</summary>
     public async Task<CopilotRepositoryMetrics> GetCopilotPullRequestActivityAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {

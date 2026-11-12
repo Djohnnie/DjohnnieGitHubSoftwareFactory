@@ -329,6 +329,34 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return runs.Where(IsCopilotRun).MaxBy(r => r.CreatedAt);
     }
 
+    /// <summary>The open pull requests of a repository, most recently updated first.</summary>
+    public async Task<IReadOnlyList<GitHubPullRequest>> GetOpenPullRequestsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return await GetAllPagesAsync<GitHubPullRequest>($"repos/{repositoryFullName}/pulls?state=open&sort=updated&direction=desc&per_page={PageSize}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Copilot's agent sessions that are running or waiting to run in the repository: its in-progress and queued
+    /// Actions runs (one request each).
+    /// </summary>
+    /// <returns><c>null</c> when the token may not read Actions.</returns>
+    public async Task<IReadOnlyList<GitHubWorkflowRun>?> GetActiveCopilotRunsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        var runs = new List<GitHubWorkflowRun>();
+        foreach (var status in new[] { "in_progress", "queued" })
+        {
+            using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/actions/runs?status={status}&per_page={PageSize}", null, cancellationToken);
+            if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden && !await IsRateLimitedAsync(response, cancellationToken))
+            {
+                return null;
+            }
+            await EnsureSuccessAsync(response, cancellationToken);
+            runs.AddRange((await response.Content.ReadFromJsonAsync<Api.WorkflowRunsResponse>(cancellationToken))?.WorkflowRuns ?? []);
+        }
+        // A run can move from queued to in progress between the two requests.
+        return runs.Where(IsCopilotRun).DistinctBy(r => r.Id).ToList();
+    }
+
     public static bool IsCopilotRun(GitHubWorkflowRun run)
     {
         return string.Equals(run.Event, "dynamic", StringComparison.OrdinalIgnoreCase)

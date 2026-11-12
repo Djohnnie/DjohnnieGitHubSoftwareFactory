@@ -22,7 +22,14 @@ public sealed record GitHubPullRequest(
     [property: JsonPropertyName("user")] GitHubOwner? User,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("updated_at")] DateTimeOffset UpdatedAt,
-    [property: JsonPropertyName("merged_at")] DateTimeOffset? MergedAt);
+    [property: JsonPropertyName("merged_at")] DateTimeOffset? MergedAt,
+    [property: JsonPropertyName("title")] string? Title = null,
+    [property: JsonPropertyName("html_url")] string? HtmlUrl = null,
+    [property: JsonPropertyName("draft")] bool Draft = false,
+    [property: JsonPropertyName("head")] GitHubBranchRef? Head = null);
+
+/// <summary>A pull request's head or base: the branch it comes from or goes into.</summary>
+public sealed record GitHubBranchRef([property: JsonPropertyName("ref")] string Ref);
 
 public sealed record GitHubPullRequestReview(
     [property: JsonPropertyName("user")] GitHubOwner? User,
@@ -132,7 +139,9 @@ public sealed record GitHubWorkflowRun(
     [property: JsonPropertyName("status")] string? Status,
     [property: JsonPropertyName("conclusion")] string? Conclusion,
     [property: JsonPropertyName("html_url")] string HtmlUrl,
-    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt);
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("head_branch")] string? HeadBranch = null,
+    [property: JsonPropertyName("run_started_at")] DateTimeOffset? RunStartedAt = null);
 
 /// <summary>One pull request as <c>GET /repos/{owner}/{repo}/pulls/{number}</c> returns it.</summary>
 /// <param name="State"><c>open</c> or <c>closed</c>; a merged pull request is closed with <see cref="MergedAt"/> set.</param>
@@ -181,3 +190,40 @@ public sealed record GitHubReviewLineComment(
     [property: JsonPropertyName("line")] int Line,
     [property: JsonPropertyName("side")] string Side,
     [property: JsonPropertyName("body")] string Body);
+
+/// <summary>The open pull requests of a repository and the Copilot cloud agent sessions running in it right now.</summary>
+/// <param name="SessionsUnavailable">The token may not read Actions, so the running sessions are unknown (not zero).</param>
+/// <param name="OtherSessions">Running sessions whose branch has no open pull request (yet).</param>
+public sealed record CopilotPullRequestOverview(
+    IReadOnlyList<OpenPullRequest> OpenPullRequests,
+    IReadOnlyList<CopilotSession> OtherSessions,
+    bool SessionsUnavailable,
+    DateTimeOffset CheckedAt)
+{
+    public int ByCopilot => OpenPullRequests.Count(p => p.ByCopilot);
+    public int Drafts => OpenPullRequests.Count(p => p.IsDraft);
+    public int RunningSessions => OpenPullRequests.Count(p => p.Session is { IsQueued: false }) + OtherSessions.Count(s => !s.IsQueued);
+    public int QueuedSessions => OpenPullRequests.Count(p => p.Session is { IsQueued: true }) + OtherSessions.Count(s => s.IsQueued);
+}
+
+/// <param name="Session">Copilot's session on the pull request's branch, when one is running or queued.</param>
+/// <param name="WorkItem">The DGHSF work item whose progress is about this pull request, if any.</param>
+public sealed record OpenPullRequest(
+    int Number,
+    string Title,
+    string Url,
+    string? AuthorLogin,
+    bool ByCopilot,
+    bool IsDraft,
+    string? Branch,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    CopilotSession? Session,
+    OpenPullRequestWorkItem? WorkItem);
+
+/// <summary>A work item linked to an open pull request (a short reference, to link to it).</summary>
+public sealed record OpenPullRequestWorkItem(Guid Id, Djohnnie.SoftwareFactory.Contracts.WorkItems.WorkItemType Type, string Title);
+
+/// <summary>A Copilot cloud agent session: the Actions run it works in.</summary>
+/// <param name="StartedAt">When it started running, or when it was queued.</param>
+public sealed record CopilotSession(long RunId, string Url, bool IsQueued, DateTimeOffset StartedAt, string? Branch);

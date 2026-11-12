@@ -1,0 +1,14 @@
+/* The table scrolls sideways on narrow screens instead of widening the page. */
+.sessions-table-scroll {
+    overflow-x: auto;
+}
+
+/* Titles wrap; the other columns stay on one line (the shared infographic table doesn't wrap). */
+.sessions-title {
+    white-space: normal !important;
+    min-width: 16rem;
+}
+
+.sessions-idle {
+    color: var(--mud-palette-text-secondary);
+}
