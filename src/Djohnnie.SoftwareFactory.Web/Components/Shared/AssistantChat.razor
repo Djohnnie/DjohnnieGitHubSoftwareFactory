@@ -1,6 +1,10 @@
-@implements IDisposable
+@using Djohnnie.SoftwareFactory.Application.Features.Speech
+@implements IAsyncDisposable
 @inject AssistantService Assistant
+@inject SpeechService Speech
+@inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject ILogger<AssistantChat> Logger
 
 @*
     A chat with one of DGHSF's internal Copilots. The Copilot (system prompt, name, enabled state) is managed on the
@@ -84,13 +88,15 @@ else
                 </div>
             }
 
-            @* Read-only rather than disabled while busy, so the Stop adornment stays clickable. *@
-            <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true" Class="mt-2"
+            @* Read-only rather than disabled while busy, so the Stop adornment stays clickable. While the input is empty the
+               adornment is a microphone (with Azure AI Speech): what is said fills the input, to send with Enter. *@
+            <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="@Placeholder" Immediate="true"
+                          Class="@(IsDictating ? "mt-2 dictation-listening" : "mt-2")"
                           ReadOnly="_busy" Disabled="_copilot is null" OnKeyDown="OnKeyDownAsync"
                           Adornment="Adornment.End"
-                          AdornmentIcon="@(_busy ? Icons.Material.Filled.Stop : Icons.Material.Filled.Send)"
-                          AdornmentColor="@(_busy ? Color.Error : string.IsNullOrWhiteSpace(_input) ? Color.Default : Color.Primary)"
-                          AdornmentAriaLabel="@(_busy ? "Stop" : "Send (Enter)")"
+                          AdornmentIcon="@AdornmentIcon"
+                          AdornmentColor="@AdornmentColor"
+                          AdornmentAriaLabel="@AdornmentLabel"
                           OnAdornmentClick="OnAdornmentClickAsync" />
         }
     </MudPaper>
@@ -135,6 +141,7 @@ else
     private bool _suggestionsRequested;
     private bool _suggesting;
     private string? _input;
+    private SpeechDictation? _dictation;
     private bool _busy;
 
     private IReadOnlyList<string> CurrentSuggestions => _generatedSuggestions is { Count: > 0 } generated ? generated : Suggestions;
@@ -313,15 +320,102 @@ else
         }
     }
 
+    private bool IsDictating
+    {
+        get
+        {
+            return _dictation?.IsListening == true;
+        }
+    }
+
+    private bool ShowsMicrophone
+    {
+        get
+        {
+            return !_busy && Speech.IsEnabled && (IsDictating || string.IsNullOrWhiteSpace(_input));
+        }
+    }
+
+    private string AdornmentIcon
+    {
+        get
+        {
+            if (_busy)
+            {
+                return Icons.Material.Filled.Stop;
+            }
+
+            if (ShowsMicrophone)
+            {
+                return IsDictating ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic;
+            }
+
+            return Icons.Material.Filled.Send;
+        }
+    }
+
+    private Color AdornmentColor
+    {
+        get
+        {
+            if (_busy || IsDictating)
+            {
+                return Color.Error;
+            }
+
+            return string.IsNullOrWhiteSpace(_input) ? Color.Default : Color.Primary;
+        }
+    }
+
+    private string AdornmentLabel
+    {
+        get
+        {
+            if (_busy)
+            {
+                return "Stop";
+            }
+
+            if (ShowsMicrophone)
+            {
+                return IsDictating ? "Stop dictating" : "Dictate a message";
+            }
+
+            return "Send (Enter)";
+        }
+    }
+
     private async Task OnAdornmentClickAsync()
     {
         if (_busy)
         {
             Cancel();
         }
+        else if (ShowsMicrophone)
+        {
+            await DictateAsync();
+        }
         else
         {
             await SendAsync(_input);
+        }
+    }
+
+    /// <summary>The microphone: listens until the speaker pauses and puts what was said in the input, to send with Enter.</summary>
+    private async Task DictateAsync()
+    {
+        _dictation ??= new SpeechDictation(Speech, JS, Snackbar, Logger);
+        if (_dictation.IsListening)
+        {
+            await _dictation.CancelAsync();
+            return;
+        }
+
+        var listening = _dictation.ListenOnceAsync();
+        StateHasChanged();
+        if (await listening is { } spoken)
+        {
+            _input = spoken;
         }
     }
 
@@ -374,9 +468,13 @@ else
         StartSuggestions();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _cancellation?.Cancel();
         CancelSuggestions();
+        if (_dictation is not null)
+        {
+            await _dictation.DisposeAsync();
+        }
     }
 }

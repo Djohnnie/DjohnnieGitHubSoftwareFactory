@@ -14,7 +14,7 @@
                                   HelperText="@($"Committed as {AgentDefinition.GetPath(string.IsNullOrEmpty(_fileName) ? "…" : _fileName)} to the default branch.")" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="_commitMessage" Label="Commit message"
+                    <DictationTextField @bind-Value="_commitMessage" Label="Commit message"
                                   Placeholder="@($"Create custom agent {Template.Name} from template")" />
                 </MudItem>
                 <MudItem xs="12">

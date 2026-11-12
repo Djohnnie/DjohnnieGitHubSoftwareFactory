@@ -8,8 +8,8 @@
 
                 <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                     <MudText Typo="Typo.h6" GutterBottom="true">Profile</MudText>
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.Name" Label="Name" Immediate="true" DebounceInterval="200"
-                                  OnDebounceIntervalElapsed="OnNameChangedAsync"
+                    <DictationTextField @bind-Value="Agent.Name" Label="Name" Immediate="true" DebounceInterval="200"
+                                  OnDebounceIntervalElapsed="OnNameChangedAsync" OnDictated="OnNameChangedAsync"
                                   HelperText="Display name. Optional; defaults to the file name." />
                     @if (ReadOnlyFile is null)
                     {
@@ -22,7 +22,7 @@
                     {
                         <MudTextField Value="@ReadOnlyFile" Label="File" ReadOnly="true" Variant="Variant.Outlined" />
                     }
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.Description" Label="Description" Required="true" Lines="2" Sizing="InputSizing.Auto"
+                    <DictationTextField @bind-Value="Agent.Description" Label="Description" Required="true" Lines="2"
                                   RequiredError="A description is required."
                                   HelperText="What the agent is for and what it can do. Copilot uses this to decide when to use it." />
                 </MudPaper>
@@ -87,14 +87,14 @@
                         <MudPaper Outlined="true" Elevation="0" Class="pa-3 mt-3">
                             <MudGrid Spacing="2">
                                 <MudItem xs="12" sm="6">
-                                    <MudTextField Variant="Variant.Outlined" @bind-Value="handoff.Label" Label="Label" Required="true" RequiredError="A label is required." />
+                                    <DictationTextField @bind-Value="handoff.Label" Label="Label" Required="true" RequiredError="A label is required." />
                                 </MudItem>
                                 <MudItem xs="12" sm="6">
                                     <MudAutocomplete Variant="Variant.Outlined" T="string" @bind-Value="handoff.Agent" Label="Agent" Required="true" RequiredError="An agent is required."
                                                      SearchFunc="SearchAgentsAsync" CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" />
                                 </MudItem>
                                 <MudItem xs="12">
-                                    <MudTextField Variant="Variant.Outlined" @bind-Value="handoff.Prompt" Label="Prompt" Lines="2" Sizing="InputSizing.Auto" />
+                                    <DictationTextField @bind-Value="handoff.Prompt" Label="Prompt" Lines="2" />
                                 </MudItem>
                                 <MudItem xs="12">
                                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -147,7 +147,7 @@
                         <MudSelectItem T="string" Value="@("vscode")">VS Code only</MudSelectItem>
                     </MudSelect>
                     <ModelPicker @bind-Value="Agent.Model" HelperText="Leave on default to use the default model." />
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="Agent.ArgumentHint" Label="Argument hint"
+                    <DictationTextField @bind-Value="Agent.ArgumentHint" Label="Argument hint"
                                   HelperText="Hint shown in the chat input (VS Code only)." />
                     <MudSwitch @bind-Value="Agent.UserInvocable" Color="Color.Primary" Class="mt-4"
                                Label="Users can select this agent" />

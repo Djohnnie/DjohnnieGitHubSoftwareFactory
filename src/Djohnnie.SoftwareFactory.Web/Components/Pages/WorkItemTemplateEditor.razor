@@ -52,9 +52,9 @@ else if (_template is not null)
                            Subtitle="@(Id is null ? $"Describe the {_type.PluralName.ToLowerInvariant()} this template is for; I'll ask what I need to know and fill in the form." : "Ask me to improve this template; I'll update the form.")"
                            Suggestions="@(Id is null ? Suggestions : [])" />
             <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                <MudTextField Variant="Variant.Outlined" @bind-Value="_template.Name" Label="Template name" Required="true"
+                <DictationTextField @bind-Value="_template.Name" Label="Template name" Required="true"
                               MaxLength="200" Immediate="true" />
-                <DictationTextField @bind-Value="_template.TitleTemplate" Label="Title example" Required="true"
+                <DictationTextField @bind-Value="_template.TitleTemplate" Label="Title example" Required="true" Immediate="true"
                                     MaxLength="256" HelperText="@($"Shown as a placeholder for the {Name} title, not saved as its actual title.")" />
                 <MudSwitch T="bool" @bind-Value="_template.IsDefault" Color="Color.Primary" Class="mt-4" Label="Default template" />
                 <MudText Typo="Typo.caption" Color="Color.Secondary">

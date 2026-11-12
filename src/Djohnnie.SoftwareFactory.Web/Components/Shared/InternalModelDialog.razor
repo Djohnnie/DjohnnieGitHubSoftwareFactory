@@ -7,11 +7,11 @@
                                   HelperText="The Microsoft Foundry model or deployment name on the configured endpoint." />
                 </MudItem>
                 <MudItem xs="12">
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Label" Label="Label" Required="true" MaxLength="InternalModel.MaxLabelLength"
+                    <DictationTextField @bind-Value="_model.Label" Label="Label" Required="true" MaxLength="InternalModel.MaxLabelLength"
                                   HelperText="The human-readable name shown when choosing a model." />
                 </MudItem>
                 <MudItem xs="12">
-                    <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Description" Label="Description" Lines="3" MaxLength="InternalModel.MaxDescriptionLength" />
+                    <DictationTextField @bind-Value="_model.Description" Label="Description" Lines="3" MaxLength="InternalModel.MaxDescriptionLength" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudSwitch @bind-Value="_model.IsFlagship" Color="Color.Primary" Label="Flagship" />

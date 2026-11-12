@@ -410,6 +410,9 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add comment").Click());
         cut.WaitForAssertion(() => Assert.Contains("1 pending", cut.Markup));
         await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+        // The feedback and approval boxes start empty (bound to the state, not showing its name).
+        Assert.All(cut.FindComponents<MudTextField<string>>().Where(f => f.Instance.Label is "What should Copilot change?" or "Comment (optional)"),
+            f => Assert.True(string.IsNullOrEmpty(f.Instance.Value)));
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "What should Copilot change?").Find("textarea").Input("Almost done."));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Send to Copilot")).Click());
 

@@ -187,6 +187,53 @@ public class DictationTests : BunitContext
             s => s.Message!.Contains("Microphone access denied") && s.Severity == Severity.Error));
     }
 
+    [Fact]
+    public void MultiLineField_ListensUntilTheMicrophoneIsClickedAgainAndAddsWhatWasSaid()
+    {
+        Configure();
+        var module = JSInterop.SetupModule("./js/dictation.js");
+        var recognition = module.Setup<DictationTextField.DictationResult>("recognizeContinuous", _ => true);
+        module.SetupVoid("stop").SetVoidResult();
+        string? value = "Use the existing styles.";
+        var cut = Render<DictationTextField>(p => p
+            .Add(f => f.Label, "Custom instructions")
+            .Add(f => f.Lines, 3)
+            .Add(f => f.Value, value)
+            .Add(f => f.ValueChanged, v => { value = v; }));
+
+        cut.Find("button[aria-label='Dictate the custom instructions']").Click();
+
+        var invocation = Assert.Single(module.Invocations["recognizeContinuous"]);
+        Assert.Equal("token-1", invocation.Arguments[1]);
+        Assert.Equal(SpeechDictation.MaxContinuousSeconds, invocation.Arguments[4]);
+        cut.WaitForAssertion(() => Assert.Contains("Listening", cut.Markup));
+
+        cut.Find("button[aria-label='Stop dictating and add what was said']").Click();
+        Assert.Single(module.Invocations["stop"]);
+        recognition.SetResult(new("recognized", "Add tests for the new page."));
+
+        cut.WaitForAssertion(() => Assert.Equal("Use the existing styles. Add tests for the new page.", value));
+        Assert.Empty(cut.FindAll(".dictation-listening"));
+    }
+
+    [Fact]
+    public void Field_HasNoMicrophoneWhenDisabled()
+    {
+        Configure();
+        var cut = Render<DictationTextField>(p => p.Add(f => f.Label, "Comment").Add(f => f.Disabled, true));
+
+        Assert.Empty(cut.FindAll("button"));
+    }
+
+    [Theory]
+    [InlineData(null, "Add tests.", null, "Add tests.")]
+    [InlineData("Use the styles.  ", " Add tests.", null, "Use the styles. Add tests.")]
+    [InlineData("Use the styles.", "Add tests.", 20, "Use the styles. Add")]
+    public void Append_AddsDictatedTextAsANewSentence(string? text, string dictated, int? maxLength, string expected)
+    {
+        Assert.Equal(expected, SpeechDictation.Append(text, dictated, maxLength));
+    }
+
     [Theory]
     [InlineData("  Fix the login redirect.  ", null, "Fix the login redirect")]
     [InlineData("Why does sync fail?", null, "Why does sync fail?")]

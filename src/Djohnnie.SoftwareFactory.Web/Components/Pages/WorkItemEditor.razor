@@ -131,7 +131,7 @@ else if (_item is not null)
                     }
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                         @* Dictating a title is like typing one and leaving the field: the chat suggestions follow it. *@
-                        <DictationTextField @bind-Value="_item.Title" Label="Title" Required="true" RequiredError="A title is required."
+                        <DictationTextField @bind-Value="_item.Title" Label="Title" Required="true" Immediate="true" RequiredError="A title is required."
                                             MaxLength="256" ReadOnly="!_item.IsDraft" OnBlur="OnFieldBlur" OnDictated="OnFieldBlur"
                                             Placeholder="@SelectedTemplate?.TitleTemplate"
                                             HelperText="Becomes the title of the GitHub issue." />
@@ -347,8 +347,8 @@ else if (_item is not null)
                             <MudTextField Variant="Variant.Outlined" @bind-Value="_item.BaseBranch" Label="Base branch" ReadOnly="!_item.CanEditAssignment"
                                           Placeholder="@Repository.Current?.DefaultBranch" MaxLength="250"
                                           HelperText="The branch Copilot starts from. Empty for the default branch." />
-                            <MudTextField Variant="Variant.Outlined" @bind-Value="_item.CustomInstructions" Label="Custom instructions" ReadOnly="!_item.CanEditAssignment"
-                                          Lines="3" Sizing="InputSizing.Auto" MaxLength="10000"
+                            <DictationTextField @bind-Value="_item.CustomInstructions" Label="Custom instructions" ReadOnly="!_item.CanEditAssignment"
+                                          Lines="3" MaxLength="10000"
                                           HelperText="Extra guidance for Copilot on top of the issue." />
                         </MudPaper>
                     }

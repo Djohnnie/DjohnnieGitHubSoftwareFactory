@@ -147,8 +147,8 @@
                                             <tr class="pr-thread">
                                                 <td colspan="4">
                                                     <div class="pr-comment">
-                                                        <MudTextField T="string" @bind-Value="_draftText" Label="@($"Comment on line {line.CommentLine}")" Variant="Variant.Outlined"
-                                                                      Lines="3" Sizing="InputSizing.Auto" Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" />
+                                                        <DictationTextField @bind-Value="_draftText" Label="@($"Comment on line {line.CommentLine}")"
+                                                                      Lines="3" Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" />
                                                         <MudStack Row="true" Class="mt-1">
                                                             <MudButton Variant="Variant.Text" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_draftText)"
                                                                        OnClick="AddComment">Add comment</MudButton>
@@ -225,7 +225,7 @@
                     Feedback sent. <MudLink Href="@State.SentUrl" Target="_blank">View it on GitHub</MudLink>; refresh the work item to follow Copilot's progress.
                 </MudAlert>
             }
-            <MudTextField T="string" Value="State.Body" ValueChanged="ChangeBody" Label="What should Copilot change?" Variant="Variant.Outlined" Lines="4" Sizing="InputSizing.Auto"
+            <DictationTextField Value="@State.Body" ValueChanged="ChangeBody" Label="What should Copilot change?" Lines="4"
                           Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="State.Sending" />
             <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Request changes (submit as a review that requests changes)"
                          Disabled="State.Sending" Dense="true" />
@@ -262,8 +262,8 @@
                     Approved. <MudLink Href="@State.ApprovedUrl" Target="_blank">View the review on GitHub</MudLink>.
                 </MudAlert>
             }
-            <MudTextField T="string" Value="State.ApprovalBody" ValueChanged="ChangeApprovalBody" Label="Comment (optional)" Variant="Variant.Outlined" Lines="2"
-                          Sizing="InputSizing.Auto" Immediate="true" MaxLength="PullRequestApproval.MaxBodyLength" Disabled="State.Sending" />
+            <DictationTextField Value="@State.ApprovalBody" ValueChanged="ChangeApprovalBody" Label="Comment (optional)" Lines="2"
+                          Immediate="true" MaxLength="PullRequestApproval.MaxBodyLength" Disabled="State.Sending" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
                 Submitted as you as a review that approves pull request #@Changes.Number. It doesn't mention @WorkItemPullRequests.CopilotMention, so Copilot doesn't start working on it.
                 Merging stays on GitHub.

@@ -1,5 +1,4 @@
 @using Djohnnie.SoftwareFactory.Application.Features.Speech
-@using Djohnnie.SoftwareFactory.Contracts
 @implements IAsyncDisposable
 @inject SpeechService Speech
 @inject IJSRuntime JS
@@ -7,25 +6,24 @@
 @inject ILogger<DictationTextField> Logger
 
 @*
-    A text field with a microphone adornment: listens until the speaker pauses and replaces the value with what was said.
-    wwwroot/js/dictation.js recognizes the speech in the browser, directly with Azure AI Speech, using a short-lived
-    token from SpeechService (the Speech key stays on the server). Without Azure AI Speech, or read-only, it is a plain
-    text field.
+    A text field with a microphone adornment (SpeechDictation.cs, with Azure AI Speech in the browser).
+    A single-line field listens until the speaker pauses and replaces the value with what was said (as a title).
+    A multi-line field (Lines > 1) listens until the microphone is clicked again and adds what was said at the end.
+    Without Azure AI Speech, read-only or disabled, it is a plain text field.
 *@
 <MudTextField T="string" Variant="Variant.Outlined" Value="Value" ValueChanged="ValueChanged" Label="@Label" Placeholder="@Placeholder"
-              HelperText="@HelperText" Required="Required" RequiredError="@RequiredError" MaxLength="MaxLength" ReadOnly="ReadOnly"
-              Immediate="true" OnBlur="OnBlur" Class="@(_listening ? "dictation-listening" : null)"
+              HelperText="@CurrentHelperText" Required="Required" RequiredError="@RequiredError" MaxLength="MaxLength" ReadOnly="ReadOnly"
+              Disabled="Disabled" Lines="Lines" MaxLines="MaxLines" Sizing="@(Lines > 1 ? InputSizing.Auto : InputSizing.Fixed)"
+              Immediate="Immediate" DebounceInterval="DebounceInterval" OnDebounceIntervalElapsed="OnDebounceIntervalElapsed"
+              OnBlur="OnBlur" Class="@CssClass"
               Adornment="@(CanDictate ? Adornment.End : Adornment.None)"
-              AdornmentIcon="@(_listening ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic)"
-              AdornmentColor="@(_listening ? Color.Error : Color.Default)"
-              AdornmentAriaLabel="@(_listening ? "Stop dictating" : $"Dictate the {SpokenLabel}")"
+              AdornmentIcon="@(Listening ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic)"
+              AdornmentColor="@(Listening ? Color.Error : Color.Default)"
+              AdornmentAriaLabel="@(Listening ? StopLabel : $"Dictate the {SpokenLabel}")"
               OnAdornmentClick="ToggleAsync" />
 
 @code {
-    private const string ModulePath = "./js/dictation.js";
-
-    private IJSObjectReference? _module;
-    private bool _listening;
+    private SpeechDictation? _dictation;
 
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
@@ -37,19 +35,44 @@
     [Parameter] public string RequiredError { get; set; } = "Required";
     [Parameter] public int MaxLength { get; set; } = 524288;
     [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool Immediate { get; set; }
+    [Parameter] public int DebounceInterval { get; set; }
+    [Parameter] public EventCallback<string> OnDebounceIntervalElapsed { get; set; }
     [Parameter] public EventCallback<FocusEventArgs> OnBlur { get; set; }
+
+    /// <summary>More than one line: dictation listens until the microphone is clicked again and adds to the text.</summary>
+    [Parameter] public int Lines { get; set; } = 1;
+    [Parameter] public int MaxLines { get; set; }
 
     /// <summary>What is dictated, for the adornment's accessible name, e.g. "title". Defaults to the label in lowercase.</summary>
     [Parameter] public string? DictationLabel { get; set; }
 
-    /// <summary>Raised with the dictated text after it replaced the value.</summary>
+    /// <summary>Raised with the new value after dictation changed it.</summary>
     [Parameter] public EventCallback<string> OnDictated { get; set; }
+
+    private bool Continuous
+    {
+        get
+        {
+            return Lines > 1;
+        }
+    }
+
+    private bool Listening
+    {
+        get
+        {
+            return _dictation?.IsListening == true;
+        }
+    }
 
     private bool CanDictate
     {
         get
         {
-            return Speech.IsEnabled && !ReadOnly;
+            return Speech.IsEnabled && !ReadOnly && !Disabled;
         }
     }
 
@@ -58,6 +81,38 @@
         get
         {
             return DictationLabel ?? Label?.ToLowerInvariant() ?? "text";
+        }
+    }
+
+    private string StopLabel
+    {
+        get
+        {
+            return Continuous ? "Stop dictating and add what was said" : "Stop dictating";
+        }
+    }
+
+    private string? CssClass
+    {
+        get
+        {
+            return Listening ? $"{Class} dictation-listening".Trim() : Class;
+        }
+    }
+
+    private string? CurrentHelperText
+    {
+        get
+        {
+            if (!Listening || !Continuous)
+            {
+                return HelperText;
+            }
+
+            var transcript = _dictation!.Transcript;
+            return transcript.Length == 0
+                ? "Listening... click the microphone when you are done."
+                : $"Listening: \"{transcript}\"";
         }
     }
 
@@ -75,85 +130,59 @@
 
     private async Task ToggleAsync()
     {
-        if (_listening)
+        if (_dictation is { IsListening: true })
         {
-            await CancelAsync();
+            if (Continuous)
+            {
+                await _dictation.StopAsync();
+            }
+            else
+            {
+                await _dictation.CancelAsync();
+            }
+
             return;
         }
 
-        _listening = true;
-        try
+        if (_dictation is null)
         {
-            var token = await Speech.GetTokenAsync();
-            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
-            var result = await _module.InvokeAsync<DictationResult>("recognizeOnce", TimeSpan.FromMinutes(1), token.Token, token.Region, token.Languages);
-            switch (result.Status)
+            _dictation = new SpeechDictation(Speech, JS, Snackbar, Logger);
+            _dictation.TranscriptChanged += OnTranscriptChanged;
+        }
+
+        var listening = Continuous ? _dictation.ListenContinuouslyAsync() : _dictation.ListenOnceAsync();
+        StateHasChanged();
+        var spoken = await listening;
+        var value = spoken is null ? null : Continuous ? SpeechDictation.Append(Value, spoken, MaxLength) : ToTitle(spoken, MaxLength);
+        if (string.IsNullOrEmpty(value))
+        {
+            if (spoken is not null)
             {
-                case "recognized" when ToTitle(result.Text, MaxLength) is { Length: > 0 } title:
-                    Value = title;
-                    await ValueChanged.InvokeAsync(title);
-                    await OnDictated.InvokeAsync(title);
-                    break;
-                case "recognized":
-                case "nomatch":
-                    Snackbar.Add("No speech was recognized. Check your microphone and try again.", Severity.Warning);
-                    break;
-                case "error":
-                    Logger.LogWarning("Dictation failed: {Error}", result.Error);
-                    Snackbar.Add($"Dictation failed: {result.Error}", Severity.Error);
-                    break;
+                Snackbar.Add("No speech was recognized. Check your microphone and try again.", Severity.Warning);
             }
+
+            return;
         }
-        catch (Exception ex) when (ex is DomainRuleException or HttpRequestException)
-        {
-            Logger.LogWarning(ex, "Could not get an Azure AI Speech token.");
-            Snackbar.Add($"Dictation is unavailable: {ex.Message}", Severity.Error);
-        }
-        catch (JSDisconnectedException)
-        {
-        }
-        catch (Exception ex) when (ex is JSException or TaskCanceledException)
-        {
-            Logger.LogWarning(ex, "Dictation failed.");
-            Snackbar.Add("Dictation failed. Allow microphone access for this site and try again.", Severity.Error);
-        }
-        finally
-        {
-            _listening = false;
-        }
+
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+        await OnDictated.InvokeAsync(value);
     }
 
-    private async Task CancelAsync()
+    private void OnTranscriptChanged()
     {
-        try
-        {
-            if (_module is not null)
-            {
-                await _module.InvokeVoidAsync("cancel");
-            }
-        }
-        catch (JSDisconnectedException)
-        {
-        }
+        _ = InvokeAsync(StateHasChanged);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_module is null)
+        if (_dictation is not null)
         {
-            return;
-        }
-
-        try
-        {
-            await _module.InvokeVoidAsync("cancel");
-            await _module.DisposeAsync();
-        }
-        catch (JSDisconnectedException)
-        {
+            _dictation.TranscriptChanged -= OnTranscriptChanged;
+            await _dictation.DisposeAsync();
         }
     }
 
-    /// <summary>What <c>recognizeOnce</c> in wwwroot/js/dictation.js resolves with.</summary>
+    /// <summary>What <c>recognizeOnce</c> and <c>recognizeContinuous</c> in wwwroot/js/dictation.js resolve with.</summary>
     public sealed record DictationResult(string Status, string? Text = null, string? Error = null);
 }
