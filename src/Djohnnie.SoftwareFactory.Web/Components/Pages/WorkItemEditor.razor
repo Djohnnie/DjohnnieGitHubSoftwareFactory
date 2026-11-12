@@ -84,7 +84,7 @@
 }
 else if (_item is not null)
 {
-    <MudForm @ref="_form" Model="_item">
+    RenderFragment workItemContent = @<MudForm @ref="_form" Model="_item">
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudStack Spacing="4">
@@ -207,11 +207,11 @@ else if (_item is not null)
                         }
                         @if (_item.AcceptedAt is { } accepted)
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Accepted @accepted.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Accepted <TimeAgo At="accepted" /></MudText>
                         }
                         @if (_item.AssignedAt is { } assigned)
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Assigned to Copilot @assigned.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Assigned to Copilot <TimeAgo At="assigned" /></MudText>
                         }
                         @if (_item.Progress != CopilotProgress.None)
                         {
@@ -342,13 +342,48 @@ else if (_item is not null)
                 </MudStack>
             </MudItem>
         </MudGrid>
-    </MudForm>
+    </MudForm>;
 
-    @if (_item.PullRequestNumber is not null)
+    @* With a pull request the page gets tabs; the pull request is only loaded from GitHub when one of its tabs is opened.
+       The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
+    @if (_item.PullRequestNumber is { } pullRequestNumber)
     {
-        <div class="mt-4">
-            <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" />
-        </div>
+        @* Only the tab bar is outlined (no ApplyEffectsToContainer): the cards in the panels are outlined already. *@
+        <MudTabs ActivePanelIndex="_tab" ActivePanelIndexChanged="ChangeTab" KeepPanelsAlive="true" Elevation="0" Outlined="true" Rounded="true">
+            <MudTabPanel Text="@_type.DisplayName" Icon="@WorkItemRoutes.Icon(_type)">
+                <div class="tab-panel">@workItemContent</div>
+            </MudTabPanel>
+            <MudTabPanel Icon="@Icons.Material.Filled.Difference">
+                <TabContent>
+                    Pull request #@pullRequestNumber
+                    @if (_pullRequest.Pending.Count > 0)
+                    {
+                        <span class="tab-count tab-count-primary" title="Pending line comments">@_pullRequest.Pending.Count</span>
+                    }
+                </TabContent>
+                <ChildContent><div class="tab-panel">
+                    <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" State="_pullRequest" Section="PullRequestSection.Changes"
+                                         Active="@(_tab == ChangesTab)" OnNavigate="ShowPullRequestSection" />
+                </div></ChildContent>
+            </MudTabPanel>
+            <MudTabPanel Icon="@Icons.Material.Filled.Forum">
+                <TabContent>
+                    Discussion
+                    @if (_pullRequest.Changes is { Comments.Count: > 0 } changes)
+                    {
+                        <span class="tab-count" title="Comments">@changes.Comments.Count</span>
+                    }
+                </TabContent>
+                <ChildContent><div class="tab-panel">
+                    <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" State="_pullRequest" Section="PullRequestSection.Discussion"
+                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" />
+                </div></ChildContent>
+            </MudTabPanel>
+        </MudTabs>
+    }
+    else
+    {
+        @workItemContent
     }
 }
 
@@ -359,6 +394,12 @@ else if (_item is not null)
 
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
+
+    private const int ChangesTab = 1;
+    private const int DiscussionTab = 2;
+
+    private int _tab;
+    private WorkItemPullRequestState _pullRequest = null!;
 
     private AssistantTools? _assistantTools;
     private AssistantChat? _chat;
@@ -460,6 +501,28 @@ else if (_item is not null)
         _ => ["Upgrade the project to the latest .NET version", "Add unit tests for the order service", "Set up a GitHub Actions build"]
     };
 
+    protected override void OnInitialized()
+    {
+        _pullRequest = new WorkItemPullRequestState(WorkItemService);
+        _pullRequest.Changed += OnPullRequestChanged;
+    }
+
+    /// <summary>The tabs (and their badges) follow what either pull request tab changes.</summary>
+    private void OnPullRequestChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ChangeTab(int index)
+    {
+        _tab = index;
+    }
+
+    private void ShowPullRequestSection(PullRequestSection section)
+    {
+        _tab = section == PullRequestSection.Changes ? ChangesTab : DiscussionTab;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (WorkItemRoutes.IsOutOfStep(RouteData, GetType(), Id))
@@ -476,6 +539,9 @@ else if (_item is not null)
         _initialized = true;
         _loadedParameters = parameters;
         _type = type;
+        // Another work item: start on its own tab, with nothing of the previous pull request.
+        _tab = 0;
+        _pullRequest.Follow(null);
         _loading = true;
         _error = null;
         _templates = [];
@@ -748,6 +814,7 @@ else if (_item is not null)
 
     public void Dispose()
     {
+        _pullRequest.Changed -= OnPullRequestChanged;
         CancelModelSuggestion();
     }
 

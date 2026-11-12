@@ -83,7 +83,7 @@
                                             </MudLink>
                                         }
                                     </td>
-                                    <td class="infographic-number">@Ago(pullRequest.UpdatedAt)</td>
+                                    <td class="infographic-number"><TimeAgo At="pullRequest.UpdatedAt" /></td>
                                 </tr>
                             }
                         </tbody>
@@ -145,7 +145,7 @@
             @if (session.IsQueued)
             {
                 <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Style="vertical-align:text-bottom" />
-                <span> Queued @Ago(session.StartedAt)</span>
+                <span> Queued <TimeAgo At="session.StartedAt" /></span>
             }
             else
             {
@@ -180,19 +180,5 @@
         return elapsed < TimeSpan.FromHours(1)
             ? $"{(int)elapsed.TotalMinutes} min"
             : $"{(int)elapsed.TotalHours} h {elapsed.Minutes} min";
-    }
-
-    private string Ago(DateTimeOffset at)
-    {
-        var elapsed = Time.GetUtcNow() - at;
-        if (elapsed < TimeSpan.FromHours(1))
-        {
-            return elapsed < TimeSpan.FromMinutes(1) ? "just now" : $"{(int)elapsed.TotalMinutes} min ago";
-        }
-        if (elapsed < TimeSpan.FromDays(1))
-        {
-            return $"{(int)elapsed.TotalHours} h ago";
-        }
-        return at.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 }

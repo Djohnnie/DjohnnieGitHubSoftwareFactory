@@ -395,16 +395,20 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Navigation.NavigateTo($"/tasks/{task.Id}");
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
-        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Show changes")));
-
-        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Show changes")).Click());
-        cut.WaitForAssertion(() => Assert.Contains("var renamed = 1;", cut.Markup));
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Pull request #12")));
         Assert.Contains("Ready for review", cut.Markup);
+        // The pull request is only loaded when its tab is opened.
+        Assert.DoesNotContain(_gitHub.Bodies.Keys, k => k.StartsWith("GET /repos/owner/repo/pulls/12"));
+        Assert.DoesNotContain("var renamed = 1;", cut.Markup);
+
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Pull request #12")).Click());
+        cut.WaitForAssertion(() => Assert.Contains("var renamed = 1;", cut.Markup));
 
         await cut.InvokeAsync(() => cut.Find("button[aria-label='Comment on line 1'].pr-add").Click());
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Comment on line 1").Find("textarea").Input("Use a clearer name"));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add comment").Click());
         cut.WaitForAssertion(() => Assert.Contains("1 pending", cut.Markup));
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "What should Copilot change?").Find("textarea").Input("Almost done."));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Send to Copilot")).Click());
 

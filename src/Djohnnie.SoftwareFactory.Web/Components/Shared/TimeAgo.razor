@@ -1,0 +1,11 @@
+@inject TimeProvider Time
+
+@* A relative time ("3 hours ago") with the exact local date and time in a tooltip. *@
+<MudTooltip Text="@At.ToLocalDateTimeText()" Inline="true">
+    <span class="time-ago">@At.ToTimeAgo(Time)</span>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateTimeOffset At { get; set; }
+}

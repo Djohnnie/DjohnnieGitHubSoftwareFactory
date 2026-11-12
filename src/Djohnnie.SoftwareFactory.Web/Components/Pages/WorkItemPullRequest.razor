@@ -1,55 +1,63 @@
 @inject WorkItemService WorkItemService
 @inject ISnackbar Snackbar
 
-@* The diff of a work item's pull request with its discussion, and a form to send feedback to Copilot (an @copilot comment or review). *@
+@* One tab of a work item's pull request: the diff with line comments, or the discussion with a form to send feedback to Copilot
+   (an @copilot comment or review). Both tabs share the State, which is loaded the first time one of them is shown. *@
 <MudPaper Class="pa-4" Outlined="true" Elevation="0">
     <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudText Typo="Typo.h6">
             Pull request <MudLink Href="@Item.PullRequestUrl" Target="_blank">#@Item.PullRequestNumber</MudLink>
         </MudText>
-        @if (_changes is not null)
+        @if (Changes is not null)
         {
-            <MudText Typo="Typo.body2" Class="mono">@_changes.Title</MudText>
+            <MudText Typo="Typo.body2" Class="mono">@Changes.Title</MudText>
             <MudText Typo="Typo.body2">
-                <span class="pr-additions">+@_changes.Additions</span> <span class="pr-deletions">−@_changes.Deletions</span>
-                in @_changes.Files.Count @(_changes.Files.Count == 1 ? "file" : "files")
+                <span class="pr-additions">+@Changes.Additions</span> <span class="pr-deletions">−@Changes.Deletions</span>
+                in @Changes.Files.Count @(Changes.Files.Count == 1 ? "file" : "files")
             </MudText>
-            @if (!_changes.IsOpen)
+            @if (!Changes.IsOpen)
             {
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(_changes.IsMerged ? Color.Success : Color.Default)">@(_changes.IsMerged ? "Merged" : "Closed")</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(Changes.IsMerged ? Color.Success : Color.Default)">@(Changes.IsMerged ? "Merged" : "Closed")</MudChip>
             }
-            else if (_changes.IsDraft)
+            else if (Changes.IsDraft)
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Draft</MudChip>
             }
         }
         <MudSpacer />
-        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="LoadAsync" Disabled="_loading || _sending"
-                   StartIcon="@(_changes is null ? Icons.Material.Filled.Difference : Icons.Material.Filled.Refresh)">@(_changes is null ? "Show changes" : "Reload changes")</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="LoadAsync" Disabled="State.Loading || State.Sending"
+                   StartIcon="@Icons.Material.Filled.Refresh">@(Changes is null ? "Load" : "Reload")</MudButton>
     </MudStack>
 
-    @if (_loading)
+    @if (State.Loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
     }
-    @if (_error is not null)
+    @if (State.Error is not null)
     {
-        <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_error</MudAlert>
+        <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@State.Error</MudAlert>
     }
 
-    @if (_changes is not null)
+    @if (Changes is not null && Section == PullRequestSection.Changes)
     {
-        @if (_changes.FilesTruncated)
+        @if (Changes.FilesTruncated)
         {
             <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true" Class="mt-2">
                 GitHub lists only the first 3,000 files of a pull request; see the rest on GitHub.
             </MudAlert>
         }
+        @if (State.Pending.Count > 0)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true" Class="mt-2">
+                @State.Pending.Count line @(State.Pending.Count == 1 ? "comment is" : "comments are") pending. They are sent to Copilot as one review
+                from the <MudLink OnClick="() => OnNavigate.InvokeAsync(PullRequestSection.Discussion)">discussion</MudLink>.
+            </MudAlert>
+        }
 
         <div class="pr-files mt-3">
-            @foreach (var file in _changes.Files)
+            @foreach (var file in Changes.Files)
             {
-                var expanded = _expanded.Contains(file.FileName);
+                var expanded = State.Expanded.Contains(file.FileName);
                 <div class="pr-file">
                     <div class="pr-file-header" @onclick="() => Toggle(file.FileName)" role="button" aria-expanded="@(expanded ? "true" : "false")">
                         <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)" Size="Size.Small" />
@@ -84,13 +92,13 @@
                         {
                             <table class="pr-diff">
                                 <tbody>
-                                    @foreach (var line in _patches[file.FileName])
+                                    @foreach (var line in State.Patches[file.FileName])
                                     {
                                         <tr class="@RowClass(line)">
                                             <td class="pr-num">@line.OldLine</td>
                                             <td class="pr-num">@line.NewLine</td>
                                             <td class="pr-gutter">
-                                                @if (CanSendFeedback && line.CanComment)
+                                                @if (State.CanSendFeedback && line.CanComment)
                                                 {
                                                     <button type="button" class="pr-add" title="Comment on this line" aria-label="Comment on line @line.CommentLine"
                                                             @onclick="() => StartComment(file.FileName, line)">+</button>
@@ -104,7 +112,7 @@
                                                 <td colspan="4">
                                                     <div class="pr-comment">
                                                         <b>@(existing.AuthorLogin ?? "someone")</b>
-                                                        <MudLink Href="@existing.Url" Target="_blank" Typo="Typo.caption">@existing.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudLink>
+                                                        <MudLink Href="@existing.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="existing.CreatedAt" /></MudLink>
                                                         <div class="pr-comment-body">@existing.Body</div>
                                                     </div>
                                                 </td>
@@ -116,7 +124,7 @@
                                                 <td colspan="4">
                                                     <div class="pr-comment pr-comment-pending">
                                                         <b>Pending</b>
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="_sending"
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="State.Sending"
                                                                        OnClick="() => RemoveComment(comment)" aria-label="Remove comment" />
                                                         <div class="pr-comment-body">@comment.Body</div>
                                                     </div>
@@ -147,145 +155,128 @@
                 </div>
             }
         </div>
+    }
 
-        @if (_changes.Comments.Count > 0)
+    @if (Changes is not null && Section == PullRequestSection.Discussion)
+    {
+        @if (Changes.Comments.Count == 0)
         {
-            <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Discussion</b></MudText>
-            @foreach (var comment in _changes.Comments)
-            {
-                <div class="pr-comment mt-2">
-                    <b>@(comment.AuthorLogin ?? "someone")</b>
-                    @if (comment.Path is not null)
-                    {
-                        <span class="mono"> on @comment.Path@(comment.Line is { } line ? $":{line}" : string.Empty)</span>
-                    }
-                    · <MudLink Href="@comment.Url" Target="_blank" Typo="Typo.caption">@comment.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudLink>
-                    <div class="pr-comment-body">@comment.Body</div>
-                </div>
-            }
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">No comments yet.</MudText>
+        }
+        @foreach (var comment in Changes.Comments)
+        {
+            <div class="pr-comment mt-2">
+                <b>@(comment.AuthorLogin ?? "someone")</b>
+                @if (comment.Path is not null)
+                {
+                    <span class="mono"> on @comment.Path@(comment.Line is { } line ? $":{line}" : string.Empty)</span>
+                }
+                · <MudLink Href="@comment.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="comment.CreatedAt" /></MudLink>
+                <div class="pr-comment-body">@comment.Body</div>
+            </div>
         }
 
-        @if (CanSendFeedback)
+        @if (State.CanSendFeedback)
         {
             <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Feedback for Copilot</b></MudText>
-            @if (_sentUrl is not null)
+            @if (State.SentUrl is not null)
             {
-                <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mb-2" ShowCloseIcon="true" CloseIconClicked="() => _sentUrl = null">
-                    Feedback sent. <MudLink Href="@_sentUrl" Target="_blank">View it on GitHub</MudLink>; refresh the work item to follow Copilot's progress.
+                <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mb-2" ShowCloseIcon="true" CloseIconClicked="CloseSent">
+                    Feedback sent. <MudLink Href="@State.SentUrl" Target="_blank">View it on GitHub</MudLink>; refresh the work item to follow Copilot's progress.
                 </MudAlert>
             }
-            <MudTextField T="string" @bind-Value="_body" Label="What should Copilot change?" Variant="Variant.Outlined" Lines="4" Sizing="InputSizing.Auto"
-                          Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="_sending" />
-            <MudCheckBox T="bool" @bind-Value="_requestChanges" Label="Request changes (submit as a review that requests changes)" Disabled="_sending" Dense="true" />
+            <MudTextField T="string" Value="State.Body" ValueChanged="ChangeBody" Label="What should Copilot change?" Variant="Variant.Outlined" Lines="4" Sizing="InputSizing.Auto"
+                          Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="State.Sending" />
+            <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Request changes (submit as a review that requests changes)"
+                         Disabled="State.Sending" Dense="true" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                Posted as you on pull request #@_changes.Number, starting with @WorkItemPullRequests.CopilotMention.
-                @(_pending.Count == 0 && !_requestChanges
+                Posted as you on pull request #@Changes.Number, starting with @WorkItemPullRequests.CopilotMention.
+                @(State.Pending.Count == 0 && !State.RequestChanges
                     ? "It becomes a comment in the conversation."
-                    : $"It becomes one review with {_pending.Count} line {(_pending.Count == 1 ? "comment" : "comments")}.")
+                    : $"It becomes one review with {State.Pending.Count} line {(State.Pending.Count == 1 ? "comment" : "comments")}.")
                 Copilot uses the model that created the pull request.
             </MudText>
+            @if (State.Pending.Count > 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    The line comments are the ones you wrote on the <MudLink Typo="Typo.caption" OnClick="() => OnNavigate.InvokeAsync(PullRequestSection.Changes)">changes</MudLink>.
+                </MudText>
+            }
             <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" OnClick="SendAsync"
-                           Disabled="@(_sending || (string.IsNullOrWhiteSpace(_body) && _pending.Count == 0))">Send to Copilot</MudButton>
-                @if (_pending.Count > 0)
+                           Disabled="@(State.Sending || (string.IsNullOrWhiteSpace(State.Body) && State.Pending.Count == 0))">Send to Copilot</MudButton>
+                @if (State.Pending.Count > 0)
                 {
-                    <MudButton Variant="Variant.Text" OnClick="ClearComments" Disabled="_sending">Discard line comments</MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="ClearComments" Disabled="State.Sending">Discard line comments</MudButton>
                 }
-                @if (_sending)
+                @if (State.Sending)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                 }
             </MudStack>
         }
-        else if (!_changes.IsOpen)
+        else if (!Changes.IsOpen)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">
-                The pull request is @(_changes.IsMerged ? "merged" : "closed"), so Copilot no longer works on it.
+                The pull request is @(Changes.IsMerged ? "merged" : "closed"), so Copilot no longer works on it.
             </MudText>
         }
     }
 </MudPaper>
 
 @code {
-    /// <summary>Above this many diff lines in total, files start collapsed so the page stays responsive.</summary>
-    private const int ExpandAllLimit = 2000;
-
     [Parameter, EditorRequired] public string RepositoryName { get; set; } = string.Empty;
 
     /// <summary>A work item with a pull request (<see cref="WorkItem.PullRequestNumber"/> set).</summary>
     [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
 
-    private PullRequestChanges? _changes;
-    private int? _loadedNumber;
-    private Dictionary<string, IReadOnlyList<DiffLine>> _patches = [];
-    private readonly HashSet<string> _expanded = [];
-    private readonly List<PullRequestLineComment> _pending = [];
+    /// <summary>The pull request as loaded, shared with the other tab.</summary>
+    [Parameter, EditorRequired] public WorkItemPullRequestState State { get; set; } = null!;
+
+    [Parameter] public PullRequestSection Section { get; set; }
+
+    /// <summary>Whether this tab is shown: the pull request is loaded the first time it is.</summary>
+    [Parameter] public bool Active { get; set; }
+
+    /// <summary>Asks to show the other tab, e.g. to send the pending line comments from the discussion.</summary>
+    [Parameter] public EventCallback<PullRequestSection> OnNavigate { get; set; }
+
     private (string Path, DiffSide Side, int Line)? _draftTarget;
     private string? _draftText;
-    private string? _body;
-    private bool _requestChanges;
+    private int? _draftNumber;
 
-    /// <summary>The comment or review that was sent last, so it can be followed on GitHub.</summary>
-    private string? _sentUrl;
-    private bool _loading;
-    private bool _sending;
-    private string? _error;
-
-    private bool CanSendFeedback
+    private PullRequestChanges? Changes
     {
         get
         {
-            return _changes is { IsOpen: true };
+            return State.Changes;
         }
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
-        // Another pull request (e.g. after a refresh): what was loaded and commented belongs to the old one.
-        if (_loadedNumber is not null && _loadedNumber != Item.PullRequestNumber)
+        State.Follow(Item.PullRequestNumber);
+        if (_draftNumber != State.Number)
         {
-            _changes = null;
-            _loadedNumber = null;
-            _patches = [];
-            _expanded.Clear();
-            _pending.Clear();
+            _draftNumber = State.Number;
             CancelComment();
+        }
+        if (Active && State.NeedsLoading)
+        {
+            await LoadAsync();
         }
     }
 
     private async Task LoadAsync()
     {
-        _loading = true;
-        _error = null;
-        try
-        {
-            var changes = await WorkItemService.GetPullRequestChangesAsync(RepositoryName, Item.Id);
-            _patches = changes.Files.ToDictionary(f => f.FileName, f => DiffPatch.Parse(f.Patch));
-            var firstLoad = _changes is null;
-            _changes = changes;
-            _loadedNumber = Item.PullRequestNumber;
-            if (firstLoad && _patches.Values.Sum(p => p.Count) <= ExpandAllLimit)
-            {
-                _expanded.UnionWith(_patches.Keys);
-            }
-            // Comments on lines that are no longer in the diff couldn't be sent.
-            _pending.RemoveAll(c => !_patches.TryGetValue(c.Path, out var lines) || !lines.Any(l => l.CanComment && l.Side == c.Side && l.CommentLine == c.Line));
-        }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-        {
-            _error = $"Could not load the pull request: {ex.Message}";
-        }
-        finally
-        {
-            _loading = false;
-        }
+        await State.LoadAsync(RepositoryName, Item.Id);
     }
 
     private void Toggle(string fileName)
     {
-        if (!_expanded.Remove(fileName))
+        if (!State.Expanded.Remove(fileName))
         {
-            _expanded.Add(fileName);
+            State.Expanded.Add(fileName);
         }
     }
 
@@ -307,9 +298,10 @@
             return;
         }
         // One pending comment per line: commenting again replaces it.
-        _pending.RemoveAll(c => c.Path == target.Path && c.Side == target.Side && c.Line == target.Line);
-        _pending.Add(new(target.Path, target.Line, target.Side, _draftText.Trim()));
+        State.Pending.RemoveAll(c => c.Path == target.Path && c.Side == target.Side && c.Line == target.Line);
+        State.Pending.Add(new(target.Path, target.Line, target.Side, _draftText.Trim()));
         CancelComment();
+        State.NotifyChanged();
     }
 
     private void CancelComment()
@@ -320,13 +312,30 @@
 
     private void RemoveComment(PullRequestLineComment comment)
     {
-        _pending.Remove(comment);
+        State.Pending.Remove(comment);
+        State.NotifyChanged();
     }
 
     private void ClearComments()
     {
-        _pending.Clear();
+        State.Pending.Clear();
         CancelComment();
+        State.NotifyChanged();
+    }
+
+    private void ChangeBody(string? body)
+    {
+        State.Body = body;
+    }
+
+    private void ChangeRequestChanges(bool requestChanges)
+    {
+        State.RequestChanges = requestChanges;
+    }
+
+    private void CloseSent()
+    {
+        State.SentUrl = null;
     }
 
     private IEnumerable<PullRequestLineComment> PendingOn(string path, DiffLine line)
@@ -335,36 +344,37 @@
         {
             return [];
         }
-        return _pending.Where(c => c.Path == path && c.Side == line.Side && c.Line == line.CommentLine);
+        return State.Pending.Where(c => c.Path == path && c.Side == line.Side && c.Line == line.CommentLine);
     }
 
     private int PendingFor(string path)
     {
-        return _pending.Count(c => c.Path == path);
+        return State.Pending.Count(c => c.Path == path);
     }
 
     /// <summary>GitHub's line comments that are on this line of the new file (where comments usually are).</summary>
     private IEnumerable<PullRequestComment> ExistingOn(string path, DiffLine line)
     {
-        if (_changes is null || line.Kind is not (DiffLineKind.Added or DiffLineKind.Context))
+        if (Changes is null || line.Kind is not (DiffLineKind.Added or DiffLineKind.Context))
         {
             return [];
         }
-        return _changes.Comments.Where(c => c.Path == path && c.Line == line.NewLine);
+        return Changes.Comments.Where(c => c.Path == path && c.Line == line.NewLine);
     }
 
     private async Task SendAsync()
     {
-        _sending = true;
+        State.Sending = true;
+        State.NotifyChanged();
         try
         {
             var result = await WorkItemService.SendPullRequestFeedbackAsync(
-                new PullRequestFeedback(RepositoryName, Item.Id, _body?.Trim() ?? string.Empty, _pending.ToList(), _requestChanges));
-            Snackbar.Add($"Sent your feedback to Copilot on pull request #{_changes!.Number}.", Severity.Success);
-            _body = null;
-            _requestChanges = false;
-            ClearComments();
-            _sentUrl = result.Url;
+                new PullRequestFeedback(RepositoryName, Item.Id, State.Body?.Trim() ?? string.Empty, State.Pending.ToList(), State.RequestChanges));
+            Snackbar.Add($"Sent your feedback to Copilot on pull request #{Changes!.Number}.", Severity.Success);
+            State.Body = null;
+            State.RequestChanges = false;
+            State.Pending.Clear();
+            State.SentUrl = result.Url;
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
@@ -373,7 +383,8 @@
         }
         finally
         {
-            _sending = false;
+            State.Sending = false;
+            State.NotifyChanged();
         }
         await LoadAsync();
     }
