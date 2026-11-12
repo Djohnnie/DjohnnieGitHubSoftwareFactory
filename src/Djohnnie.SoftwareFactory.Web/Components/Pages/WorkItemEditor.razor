@@ -19,6 +19,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @inject ILogger<WorkItemEditor> Logger
 
 <PageTitle>@Heading</PageTitle>
@@ -28,6 +29,18 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h4">@Heading</MudText>
     <WorkItemTypeChip Type="_type" />
+    @if (!_loading && _item?.PullRequestBranch is { } branch)
+    {
+        @* Copilot's branch, to check the pull request out locally. *@
+        <span class="pr-branch">
+            <MudIcon Icon="@Icons.Material.Filled.AltRoute" Size="Size.Small" />
+            <MudLink Href="@BranchUrl(branch)" Target="_blank" Class="pr-branch-name" title="Open the branch on GitHub">@branch</MudLink>
+            <MudTooltip Text="Copy branch name">
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Class="pr-branch-copy" aria-label="Copy branch name"
+                               OnClick="() => CopyBranchAsync(branch)" />
+            </MudTooltip>
+        </span>
+    }
 </MudStack>
 
 @if (!_loading && _item is not null)
@@ -376,7 +389,7 @@ else if (_item is not null)
                 </TabContent>
                 <ChildContent><div class="tab-panel">
                     <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" State="_pullRequest" Section="PullRequestSection.Discussion"
-                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" />
+                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" OnApproved="RefreshAsync" />
                 </div></ChildContent>
             </MudTabPanel>
         </MudTabs>
@@ -986,6 +999,26 @@ else if (_item is not null)
         finally
         {
             _busy = false;
+        }
+    }
+
+    /// <summary>The branch on GitHub; each path segment is escaped, the slashes between them stay.</summary>
+    private string BranchUrl(string branch)
+    {
+        return $"https://github.com/{RepositoryName}/tree/{string.Join('/', branch.Split('/').Select(Uri.EscapeDataString))}";
+    }
+
+    private async Task CopyBranchAsync(string branch)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", branch);
+            Snackbar.Add($"Copied '{branch}' to the clipboard.", Severity.Success);
+        }
+        catch (JSException ex)
+        {
+            // E.g. the browser denies clipboard access.
+            Snackbar.Add($"Could not copy the branch name: {ex.Message}", Severity.Error);
         }
     }
 

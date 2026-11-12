@@ -78,6 +78,10 @@ public sealed record WorkItem
     [MaxLength(500)]
     public string? AgentRunUrl { get; set; }
 
+    /// <summary>The pull request's head branch, to check it out locally.</summary>
+    [MaxLength(250)]
+    public string? PullRequestBranch { get; set; }
+
     public bool IsDraft => Status == WorkItemStatus.Draft;
 
     /// <summary>Whether the item was accepted and has a GitHub issue it can be refreshed from.</summary>

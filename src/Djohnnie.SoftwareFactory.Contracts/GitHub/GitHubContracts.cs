@@ -31,9 +31,12 @@ public sealed record GitHubPullRequest(
 /// <summary>A pull request's head or base: the branch it comes from or goes into.</summary>
 public sealed record GitHubBranchRef([property: JsonPropertyName("ref")] string Ref);
 
+/// <param name="State"><c>APPROVED</c>, <c>CHANGES_REQUESTED</c>, <c>COMMENTED</c>, <c>DISMISSED</c> or <c>PENDING</c>.</param>
 public sealed record GitHubPullRequestReview(
     [property: JsonPropertyName("user")] GitHubOwner? User,
-    [property: JsonPropertyName("submitted_at")] DateTimeOffset? SubmittedAt);
+    [property: JsonPropertyName("submitted_at")] DateTimeOffset? SubmittedAt,
+    [property: JsonPropertyName("state")] string? State = null,
+    [property: JsonPropertyName("html_url")] string? HtmlUrl = null);
 
 public sealed record GitHubRepository(
     [property: JsonPropertyName("id")] long Id,
@@ -155,7 +158,8 @@ public sealed record GitHubPullRequestDetails(
     [property: JsonPropertyName("merged_at")] DateTimeOffset? MergedAt,
     [property: JsonPropertyName("additions")] int Additions,
     [property: JsonPropertyName("deletions")] int Deletions,
-    [property: JsonPropertyName("changed_files")] int ChangedFiles)
+    [property: JsonPropertyName("changed_files")] int ChangedFiles,
+    [property: JsonPropertyName("mergeable_state")] string? MergeableState = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 }

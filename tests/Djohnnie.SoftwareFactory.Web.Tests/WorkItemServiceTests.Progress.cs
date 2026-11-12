@@ -38,6 +38,7 @@ public partial class WorkItemServiceTests
         Assert.Equal("https://github.com/owner/repo/pull/7", refreshed.PullRequestUrl);
         Assert.Equal(PullRequestChecks.Pending, refreshed.PullRequestChecks);
         Assert.Equal("https://github.com/owner/repo/actions/runs/500", refreshed.AgentRunUrl);
+        Assert.Equal("copilot/fix-42", refreshed.PullRequestBranch);
         Assert.Equal(WorkItemStatus.InProgress, refreshed.Status);
     }
 

@@ -440,6 +440,12 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>When set, submitting a review is refused with this status (e.g. 422 for a line no longer in the diff).</summary>
         public HttpStatusCode? ReviewFailure { get; set; }
 
+        /// <summary>The submitted reviews of every pull request, oldest first.</summary>
+        public List<(string Login, string State)> Reviews { get; } = [];
+
+        /// <summary>The <c>mergeable_state</c> of every pull request.</summary>
+        public string? MergeableState { get; set; }
+
         /// <summary>When set, GraphQL requests are refused with this status and message.</summary>
         public (HttpStatusCode Status, string Message)? GraphQlFailure { get; set; }
 
@@ -564,8 +570,13 @@ public partial class WorkItemServiceTests : IDisposable
                     number, title = "Fix the task", html_url = $"https://github.com/owner/repo/pull/{number}",
                     state = state == "merged" ? "closed" : state, draft = false, user = new { login = "Copilot" },
                     merged_at = state == "merged" ? DateTimeOffset.UnixEpoch : (DateTimeOffset?)null,
-                    additions = 3, deletions = 1, changed_files = PullRequestFiles.Count
+                    additions = 3, deletions = 1, changed_files = PullRequestFiles.Count, mergeable_state = MergeableState
                 })),
+                ("GET", "/reviews") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(Reviews.Select((r, index) => new
+                {
+                    id = 200 + index, user = new { login = r.Login }, state = r.State,
+                    submitted_at = DateTimeOffset.UnixEpoch.AddHours(index), html_url = $"https://github.com/owner/repo/pull/{number}#pullrequestreview-{200 + index}"
+                }))),
                 ("GET", "/files") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(PullRequestFiles.Select(f => new
                 {
                     filename = f.FileName, status = "modified", additions = 1, deletions = 1, patch = f.Patch,

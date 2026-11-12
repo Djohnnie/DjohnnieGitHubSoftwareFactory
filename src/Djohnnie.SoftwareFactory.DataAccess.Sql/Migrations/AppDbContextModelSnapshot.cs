@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261110204615_AddWorkItemProgress";
+    public override string LastMigrationId => "20261112123453_AddWorkItemPullRequestBranch";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -698,6 +698,10 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<int>("Progress")
                     .HasColumnType("int");
+
+                b.Property<string>("PullRequestBranch")
+                    .HasMaxLength(250)
+                    .HasColumnType("nvarchar(250)");
 
                 b.Property<int>("PullRequestChecks")
                     .HasColumnType("int");

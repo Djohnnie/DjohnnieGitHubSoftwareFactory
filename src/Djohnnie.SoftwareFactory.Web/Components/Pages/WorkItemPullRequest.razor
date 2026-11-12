@@ -19,9 +19,20 @@
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(Changes.IsMerged ? Color.Success : Color.Default)">@(Changes.IsMerged ? "Merged" : "Closed")</MudChip>
             }
-            else if (Changes.IsDraft)
+            else
             {
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Draft</MudChip>
+                @if (Changes.IsDraft)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Draft</MudChip>
+                }
+                var (decision, decisionColor) = DecisionChip(Changes.Review.Decision);
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="decisionColor" Class="pr-review-decision">@decision</MudChip>
+                @if (MergeChip(Changes.Review.MergeState) is { } merge)
+                {
+                    <MudTooltip Text="@merge.Hint">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="merge.Color" Class="pr-merge-state">@merge.Text</MudChip>
+                    </MudTooltip>
+                }
             }
         }
         <MudSpacer />
@@ -113,7 +124,7 @@
                                                     <div class="pr-comment">
                                                         <b>@(existing.AuthorLogin ?? "someone")</b>
                                                         <MudLink Href="@existing.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="existing.CreatedAt" /></MudLink>
-                                                        <div class="pr-comment-body">@existing.Body</div>
+                                                        <div class="pr-comment-body pr-markdown">@CommentHtml(existing)</div>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -172,8 +183,37 @@
                     <span class="mono"> on @comment.Path@(comment.Line is { } line ? $":{line}" : string.Empty)</span>
                 }
                 · <MudLink Href="@comment.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="comment.CreatedAt" /></MudLink>
-                <div class="pr-comment-body">@comment.Body</div>
+                <div class="pr-comment-body pr-markdown">@CommentHtml(comment)</div>
             </div>
+        }
+
+        <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Reviews</b></MudText>
+        @if (Changes.Review.Reviewers.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Nobody reviewed this pull request yet.</MudText>
+        }
+        else
+        {
+            <ul class="pr-reviewers">
+                @foreach (var reviewer in Changes.Review.Reviewers)
+                {
+                    <li>
+                        <b>@reviewer.Login</b> @ReviewerVerdict(reviewer.State)
+                        @if (reviewer.SubmittedAt is { } submitted)
+                        {
+                            <span> · </span>
+                            @if (reviewer.Url is not null)
+                            {
+                                <MudLink Href="@reviewer.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="submitted" /></MudLink>
+                            }
+                            else
+                            {
+                                <TimeAgo At="submitted" />
+                            }
+                        }
+                    </li>
+                }
+            </ul>
         }
 
         @if (State.CanSendFeedback)
@@ -214,6 +254,24 @@
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                 }
             </MudStack>
+
+            <MudText Typo="Typo.subtitle1" Class="mt-6"><b>Approve</b></MudText>
+            @if (State.ApprovedUrl is not null)
+            {
+                <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mb-2" ShowCloseIcon="true" CloseIconClicked="CloseApproved">
+                    Approved. <MudLink Href="@State.ApprovedUrl" Target="_blank">View the review on GitHub</MudLink>.
+                </MudAlert>
+            }
+            <MudTextField T="string" Value="State.ApprovalBody" ValueChanged="ChangeApprovalBody" Label="Comment (optional)" Variant="Variant.Outlined" Lines="2"
+                          Sizing="InputSizing.Auto" Immediate="true" MaxLength="PullRequestApproval.MaxBodyLength" Disabled="State.Sending" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                Submitted as you as a review that approves pull request #@Changes.Number. It doesn't mention @WorkItemPullRequests.CopilotMention, so Copilot doesn't start working on it.
+                Merging stays on GitHub.
+            </MudText>
+            <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="ApproveAsync"
+                           Disabled="State.Sending" Class="pr-approve">Approve</MudButton>
+            </MudStack>
         }
         else if (!Changes.IsOpen)
         {
@@ -240,6 +298,9 @@
 
     /// <summary>Asks to show the other tab, e.g. to send the pending line comments from the discussion.</summary>
     [Parameter] public EventCallback<PullRequestSection> OnNavigate { get; set; }
+
+    /// <summary>Raised after the pull request was approved, so the work item can refresh its progress.</summary>
+    [Parameter] public EventCallback OnApproved { get; set; }
 
     private (string Path, DiffSide Side, int Line)? _draftTarget;
     private string? _draftText;
@@ -387,6 +448,88 @@
             State.NotifyChanged();
         }
         await LoadAsync();
+    }
+
+    private void ChangeApprovalBody(string? body)
+    {
+        State.ApprovalBody = body;
+    }
+
+    private void CloseApproved()
+    {
+        State.ApprovedUrl = null;
+    }
+
+    private async Task ApproveAsync()
+    {
+        State.Sending = true;
+        State.NotifyChanged();
+        try
+        {
+            var result = await WorkItemService.ApprovePullRequestAsync(new PullRequestApproval(RepositoryName, Item.Id, State.ApprovalBody?.Trim()));
+            Snackbar.Add($"Approved pull request #{Changes!.Number}.", Severity.Success);
+            State.ApprovalBody = null;
+            State.ApprovedUrl = result.Url;
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not approve: {ex.Message}", Severity.Error);
+            return;
+        }
+        finally
+        {
+            State.Sending = false;
+            State.NotifyChanged();
+        }
+        await LoadAsync();
+        await OnApproved.InvokeAsync();
+    }
+
+    /// <summary>
+    /// A GitHub comment is Markdown written by anyone who can comment, so it goes through <see cref="ChatMarkdown"/>, which escapes
+    /// raw HTML and keeps only safe links. HTML comments are dropped first, because GitHub hides them too.
+    /// </summary>
+    private static MarkupString CommentHtml(PullRequestComment comment)
+    {
+        return (MarkupString)ChatMarkdown.ToHtml(HtmlComment.Replace(comment.Body, string.Empty));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex HtmlComment =
+        new("<!--.*?-->", System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static (string Text, Color Color) DecisionChip(PullRequestReviewDecision decision)
+    {
+        return decision switch
+        {
+            PullRequestReviewDecision.Approved => ("Approved", Color.Success),
+            PullRequestReviewDecision.ChangesRequested => ("Changes requested", Color.Warning),
+            _ => ("Not approved yet", Color.Default)
+        };
+    }
+
+    /// <summary>GitHub's merge state as a chip; nothing while GitHub is still computing it, or for a draft (that has its own chip).</summary>
+    private static (string Text, Color Color, string Hint)? MergeChip(string? mergeState)
+    {
+        return mergeState switch
+        {
+            "clean" or "has_hooks" => ("Ready to merge", Color.Success, "GitHub would merge it now: the required reviews and checks are in."),
+            "blocked" => ("Merge blocked", Color.Warning, "A branch rule blocks merging, e.g. a required approval or required checks."),
+            "behind" => ("Behind base", Color.Warning, "The base branch moved on; the branch has to be updated before it can be merged."),
+            "dirty" => ("Merge conflicts", Color.Error, "The branch conflicts with the base branch."),
+            "unstable" => ("Checks failing", Color.Warning, "It can be merged, but some checks that aren't required fail."),
+            _ => null
+        };
+    }
+
+    private static string ReviewerVerdict(string state)
+    {
+        return state switch
+        {
+            "APPROVED" => "approved",
+            "CHANGES_REQUESTED" => "requested changes",
+            "DISMISSED" => "had their review dismissed",
+            _ => "commented"
+        };
     }
 
     private static string RowClass(DiffLine line)

@@ -25,3 +25,21 @@
 .tab-panel {
     padding-top: 24px;
 }
+
+/* The pull request's branch next to the heading, with a button to copy its name. */
+.pr-branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 0 2px 0 8px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 16px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-branch ::deep .pr-branch-name {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+}

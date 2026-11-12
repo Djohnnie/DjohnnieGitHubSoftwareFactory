@@ -34,6 +34,12 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
     public string? Body { get; set; }
     public bool RequestChanges { get; set; }
 
+    /// <summary>The optional comment with an approval.</summary>
+    public string? ApprovalBody { get; set; }
+
+    /// <summary>The approving review that was submitted last, so it can be followed on GitHub.</summary>
+    public string? ApprovedUrl { get; set; }
+
     /// <summary>The comment or review that was sent last, so it can be followed on GitHub.</summary>
     public string? SentUrl { get; set; }
     public bool Loading { get; private set; }
@@ -72,6 +78,8 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
         Body = null;
         RequestChanges = false;
         SentUrl = null;
+        ApprovalBody = null;
+        ApprovedUrl = null;
         Error = null;
     }
 

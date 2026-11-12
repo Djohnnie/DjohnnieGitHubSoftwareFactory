@@ -34,7 +34,7 @@ public static class CopilotProgressEvaluator
             { IsOpen: false } => CopilotProgress.Closed,
             _ => OpenProgress(pullRequest, run)
         };
-        return new(progress, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), run?.HtmlUrl);
+        return new(progress, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), run?.HtmlUrl, pullRequest.HeadRefName);
     }
 
     private static CopilotProgress OpenProgress(GitHubLinkedPullRequest pullRequest, GitHubWorkflowRun? run)

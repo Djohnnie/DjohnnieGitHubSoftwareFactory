@@ -246,6 +246,8 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             entity.PullRequestUrl = progress.PullRequestUrl;
             entity.PullRequestChecks = progress.Checks;
             entity.AgentRunUrl = progress.AgentRunUrl;
+            // Git allows longer names than the column; such a branch is just not shown.
+            entity.PullRequestBranch = progress.PullRequestBranch is { Length: <= 250 } branch ? branch : null;
         }
 
         if (db.ChangeTracker.HasChanges())

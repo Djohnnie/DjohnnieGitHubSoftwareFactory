@@ -15,7 +15,41 @@ public sealed record PullRequestChanges(
     int Deletions,
     IReadOnlyList<PullRequestFileChange> Files,
     bool FilesTruncated,
-    IReadOnlyList<PullRequestComment> Comments);
+    IReadOnlyList<PullRequestComment> Comments,
+    PullRequestReviewStatus Review);
+
+/// <summary>Where the pull request stands with its reviewers and whether GitHub would merge it.</summary>
+/// <param name="Reviewers">Each reviewer's verdict, most recent first.</param>
+/// <param name="MergeState">GitHub's <c>mergeable_state</c>: <c>clean</c>, <c>blocked</c>, <c>behind</c>, <c>dirty</c>, <c>unstable</c>, <c>draft</c>, <c>has_hooks</c> or <c>unknown</c> (still being computed).</param>
+public sealed record PullRequestReviewStatus(
+    PullRequestReviewDecision Decision,
+    IReadOnlyList<PullRequestReviewer> Reviewers,
+    string? MergeState)
+{
+    public static PullRequestReviewStatus None { get; } = new(PullRequestReviewDecision.None, [], null);
+}
+
+public enum PullRequestReviewDecision
+{
+    /// <summary>Nobody approved or requested changes (yet).</summary>
+    None = 0,
+
+    /// <summary>At least one reviewer approved and nobody's latest verdict requests changes.</summary>
+    Approved = 1,
+
+    /// <summary>At least one reviewer's latest verdict requests changes.</summary>
+    ChangesRequested = 2
+}
+
+/// <param name="State">The reviewer's verdict: <c>APPROVED</c>, <c>CHANGES_REQUESTED</c>, <c>DISMISSED</c>, or <c>COMMENTED</c> when they only commented.</param>
+public sealed record PullRequestReviewer(string Login, string State, DateTimeOffset? SubmittedAt, string? Url);
+
+/// <summary>Approves a work item's pull request as the signed-in user. It doesn't mention Copilot, so Copilot doesn't start working.</summary>
+/// <param name="Body">An optional comment with the approval.</param>
+public sealed record PullRequestApproval(string RepositoryFullName, Guid Id, string? Body = null)
+{
+    public const int MaxBodyLength = PullRequestFeedback.MaxBodyLength;
+}
 
 /// <param name="Status"><c>added</c>, <c>removed</c>, <c>modified</c>, <c>renamed</c>, <c>copied</c>, <c>changed</c> or <c>unchanged</c>.</param>
 /// <param name="Patch">The unified diff hunks; <c>null</c> for binary files and diffs GitHub considers too large.</param>

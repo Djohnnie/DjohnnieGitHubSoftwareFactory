@@ -436,6 +436,17 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
+    /// <summary>Submits a review that approves the pull request, optionally with a comment.</summary>
+    /// <returns>The review's URL.</returns>
+    public async Task<string> ApprovePullRequestAsync(string repositoryFullName, int number, string body, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/reviews",
+            JsonContent.Create(new Api.CreateReviewRequest(body, "APPROVE", [])), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<Api.HtmlUrlResponse>(cancellationToken))?.HtmlUrl
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
     private async Task<List<T>> GetAllPagesAsync<T>(string firstUrl, CancellationToken cancellationToken)
     {
         var items = new List<T>();

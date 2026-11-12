@@ -111,7 +111,8 @@ internal static class ContractMapping
                 PullRequestNumber = value.PullRequestNumber,
                 PullRequestUrl = value.PullRequestUrl,
                 PullRequestChecks = value.PullRequestChecks,
-                AgentRunUrl = value.AgentRunUrl
+                AgentRunUrl = value.AgentRunUrl,
+                PullRequestBranch = value.PullRequestBranch
             };
         }
 

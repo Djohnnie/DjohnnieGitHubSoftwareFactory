@@ -78,4 +78,7 @@ public class WorkItem : Entity
 
     [MaxLength(500)]
     public string? AgentRunUrl { get; set; }
+
+    [MaxLength(250)]
+    public string? PullRequestBranch { get; set; }
 }

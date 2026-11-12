@@ -12,7 +12,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
 {
     public const string CopilotMention = "@copilot";
 
-    /// <summary>Reads the pull request, its files and its comments from GitHub (four or more requests); nothing is stored.</summary>
+    /// <summary>Reads the pull request, its files, its comments and its reviews from GitHub (five or more requests); nothing is stored.</summary>
     public async Task<PullRequestChanges> GetChangesAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var number = await PullRequestNumberAsync(repositoryFullName, id, cancellationToken);
@@ -20,6 +20,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         var files = await gitHub.GetPullRequestFilesAsync(repositoryFullName, number, cancellationToken);
         var conversation = await gitHub.GetIssueCommentsAsync(repositoryFullName, number, cancellationToken);
         var lineComments = await gitHub.GetPullRequestReviewCommentsAsync(repositoryFullName, number, cancellationToken);
+        var reviews = await gitHub.GetPullRequestReviewsAsync(repositoryFullName, number, cancellationToken);
 
         var comments = conversation.Select(c => ToComment(c, onLine: false))
             .Concat(lineComments.Select(c => ToComment(c, onLine: true)))
@@ -30,7 +31,50 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             pullRequest.User?.Login, pullRequest.Additions, pullRequest.Deletions,
             files.Select(f => new PullRequestFileChange(f.FileName, f.PreviousFileName, f.Status, f.Additions, f.Deletions, f.Patch, f.BlobUrl)).ToList(),
             pullRequest.ChangedFiles > files.Count && files.Count >= GitHubApiClient.MaxPullRequestFiles,
-            comments);
+            comments,
+            ReviewStatus(reviews, pullRequest.MergeableState));
+    }
+
+    /// <summary>
+    /// Each reviewer's verdict the way GitHub counts it: their latest review that approves, requests changes or was dismissed;
+    /// a later comment-only review doesn't change it. Reviewers who only commented are listed as <c>COMMENTED</c>.
+    /// </summary>
+    /// <param name="reviews">The pull request's reviews, oldest first.</param>
+    public static PullRequestReviewStatus ReviewStatus(IReadOnlyList<GitHubPullRequestReview> reviews, string? mergeableState)
+    {
+        var reviewers = reviews
+            .Where(r => r.User is not null && r.State is not null && r.State != "PENDING")
+            .GroupBy(r => r.User!.Login, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.LastOrDefault(r => r.State != "COMMENTED") ?? g.Last())
+            .Select(r => new PullRequestReviewer(r.User!.Login, r.State!, r.SubmittedAt, r.HtmlUrl))
+            .OrderByDescending(r => r.SubmittedAt)
+            .ToList();
+
+        var decision = reviewers.Any(r => r.State == "CHANGES_REQUESTED") ? PullRequestReviewDecision.ChangesRequested
+            : reviewers.Any(r => r.State == "APPROVED") ? PullRequestReviewDecision.Approved
+            : PullRequestReviewDecision.None;
+        return new(decision, reviewers, mergeableState);
+    }
+
+    /// <summary>Approves the pull request as the signed-in user, without mentioning Copilot.</summary>
+    public async Task<PullRequestFeedbackResult> ApproveAsync(PullRequestApproval approval, CancellationToken cancellationToken = default)
+    {
+        var number = await PullRequestNumberAsync(approval.RepositoryFullName, approval.Id, cancellationToken);
+        var pullRequest = await gitHub.GetPullRequestAsync(approval.RepositoryFullName, number, cancellationToken);
+        if (!pullRequest.IsOpen)
+        {
+            throw new DomainRuleException($"Pull request #{number} is {(pullRequest.MergedAt is null ? "closed" : "merged")}, so it can no longer be approved.");
+        }
+
+        try
+        {
+            return new(await gitHub.ApprovePullRequestAsync(approval.RepositoryFullName, number, approval.Body?.Trim() ?? string.Empty, cancellationToken));
+        }
+        catch (GitHubApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity)
+        {
+            // E.g. approving your own pull request, or one Copilot opened on your request where the repository needs an independent approval.
+            throw new DomainRuleException($"GitHub didn't accept the approval: {ex.Message}");
+        }
     }
 
     private static PullRequestComment ToComment(GitHubComment comment, bool onLine)

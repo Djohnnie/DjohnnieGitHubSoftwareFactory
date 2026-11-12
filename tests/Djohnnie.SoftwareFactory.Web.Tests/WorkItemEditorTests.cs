@@ -391,6 +391,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
             """;
         _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = "[]";
         _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = "[]";
         _gitHub.Responses["POST /repos/owner/repo/pulls/12/reviews"] = """{"id":3,"html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}""";
         Navigation.NavigateTo($"/tasks/{task.Id}");
         Render<MudPopoverProvider>();
@@ -419,6 +420,105 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal(("src/App.cs", 1, "LEFT", "Use a clearer name"),
             (comment.GetProperty("path").GetString(), comment.GetProperty("line").GetInt32(), comment.GetProperty("side").GetString(), comment.GetProperty("body").GetString()));
         Assert.DoesNotContain("1 pending", cut.Markup);
+    }
+
+    [Fact]
+    public async Task PullRequestBranch_IsALinkAtTheTop_AndCanBeCopied()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            entity.PullRequestBranch = "copilot/fix-#7";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Equal("copilot/fix-#7", cut.Find(".pr-branch a").TextContent.Trim()));
+        Assert.Equal("https://github.com/owner/repo/tree/copilot/fix-%237", cut.Find(".pr-branch a").GetAttribute("href"));
+        await cut.InvokeAsync(() => cut.Find("button[aria-label='Copy branch name']").Click());
+
+        var copy = Assert.Single(JSInterop.Invocations, i => i.Identifier == "navigator.clipboard.writeText");
+        Assert.Equal("copilot/fix-#7", copy.Arguments.Single());
+    }
+
+    [Fact]
+    public async Task WithoutAPullRequest_NoBranchIsShown()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Accepted task", cut.Markup));
+        Assert.Empty(cut.FindAll(".pr-branch"));
+    }
+
+    [Fact]
+    public async Task PullRequest_ShowsTheReviewStatus_AndApprovesIt()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.ReadyForReview;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = """
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":false,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":1,"deletions":1,"changed_files":0,"mergeable_state":"blocked"}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = """
+            [{"id":1,"user":{"login":"Copilot"},"body":"> @copilot add tests\n\nAdded **tests**.<!-- session: 42 --> <script>alert(1)</script>",
+              "created_at":"2026-11-12T07:00:00Z","html_url":"https://github.com/owner/repo/pull/12#issuecomment-1"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = """
+            [{"user":{"login":"copilot-pull-request-reviewer[bot]"},"state":"COMMENTED","submitted_at":"2026-11-12T08:00:00Z","html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-1"}]
+            """;
+        _gitHub.Responses["POST /repos/owner/repo/pulls/12/reviews"] = """{"id":3,"html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}""";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Discussion")));
+
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+        cut.WaitForAssertion(() => Assert.Equal("Not approved yet", cut.Find(".pr-review-decision").TextContent.Trim()));
+        Assert.Equal("Merge blocked", cut.Find(".pr-merge-state").TextContent.Trim());
+        Assert.Contains("commented", cut.Find(".pr-reviewers").TextContent);
+        // Comments are Markdown: a quote of an earlier comment is a blockquote, HTML comments are hidden like on GitHub, raw HTML stays text.
+        var comment = cut.Find(".pr-comment .pr-markdown");
+        Assert.Equal("@copilot add tests", comment.QuerySelector("blockquote")!.TextContent.Trim());
+        Assert.Equal("tests", comment.QuerySelector("strong")!.TextContent);
+        Assert.DoesNotContain("session: 42", comment.TextContent);
+        Assert.Null(comment.QuerySelector("script"));
+        Assert.Contains("<script>alert(1)</script>", comment.TextContent);
+
+        // After approving, GitHub lists the approval and no longer blocks the merge.
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = """
+            [{"user":{"login":"djohnnie"},"state":"APPROVED","submitted_at":"2026-11-12T09:00:00Z","html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = _gitHub.Responses["GET /repos/owner/repo/pulls/12"].Replace("blocked", "clean");
+        await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Comment (optional)").Find("textarea").Input("Looks good."));
+        await cut.InvokeAsync(() => cut.Find("button.pr-approve").Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("View the review on GitHub", cut.Markup));
+        cut.WaitForAssertion(() => Assert.Equal("Approved", cut.Find(".pr-review-decision").TextContent.Trim()));
+        Assert.Equal("Ready to merge", cut.Find(".pr-merge-state").TextContent.Trim());
+        using var review = System.Text.Json.JsonDocument.Parse(_gitHub.Bodies["POST /repos/owner/repo/pulls/12/reviews"]!);
+        Assert.Equal("APPROVE", review.RootElement.GetProperty("event").GetString());
+        Assert.Equal("Looks good.", review.RootElement.GetProperty("body").GetString());
     }
 
     [Fact]

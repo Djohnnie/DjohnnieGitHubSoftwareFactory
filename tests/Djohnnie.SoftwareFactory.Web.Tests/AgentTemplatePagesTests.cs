@@ -100,8 +100,10 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
                 },
                 links.Select(link => link.GetAttribute("aria-label")));
             Assert.All(links, link => Assert.Empty(link.TextContent.Trim()));
-            var internalAgents = cut.Find(".app-header > .mud-appbar + .desktop-only > nav > a[href='/internal-agents']");
-            Assert.Equal("Internal agents", internalAgents.TextContent.Trim());
+            // Like every link in the bar, it's an icon with a tooltip: the label is for screen readers, not a caption.
+            var internalAgents = cut.Find(".app-header > .mud-appbar + .desktop-only > nav a[href='/internal-agents']");
+            Assert.Equal("Internal agents", internalAgents.GetAttribute("aria-label"));
+            Assert.Empty(internalAgents.TextContent.Trim());
             Assert.Contains("Select repository", cut.Find(".mud-appbar").TextContent);
         }
         else

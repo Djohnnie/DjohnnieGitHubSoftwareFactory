@@ -45,12 +45,14 @@ public enum PullRequestChecks
 
 /// <summary>What a work item stores about Copilot's work on it when it is refreshed.</summary>
 /// <param name="AgentRunUrl">The Actions run of Copilot's latest agent session, when the token may read Actions.</param>
+/// <param name="PullRequestBranch">The pull request's head branch, where Copilot pushes its commits.</param>
 public sealed record WorkItemProgressSnapshot(
     CopilotProgress Progress,
     int? PullRequestNumber = null,
     string? PullRequestUrl = null,
     PullRequestChecks Checks = PullRequestChecks.None,
-    string? AgentRunUrl = null)
+    string? AgentRunUrl = null,
+    string? PullRequestBranch = null)
 {
     public static WorkItemProgressSnapshot None { get; } = new(CopilotProgress.None);
 }
