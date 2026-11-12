@@ -82,7 +82,11 @@ public sealed record BillingUsageResponse(
     [property: JsonPropertyName("usageItems")] IReadOnlyList<CopilotBillingUsageItem>? UsageItems);
 
 public sealed record WorkflowRunsResponse(
-    [property: JsonPropertyName("workflow_runs")] IReadOnlyList<GitHubWorkflowRun>? WorkflowRuns);
+    [property: JsonPropertyName("workflow_runs")] IReadOnlyList<GitHubWorkflowRun>? WorkflowRuns,
+    [property: JsonPropertyName("total_count")] int TotalCount = 0);
+
+public sealed record WorkflowsResponse(
+    [property: JsonPropertyName("workflows")] IReadOnlyList<GitHubWorkflow>? Workflows);
 
 public sealed record GraphQlRequest(
     [property: JsonPropertyName("query")] string Query,

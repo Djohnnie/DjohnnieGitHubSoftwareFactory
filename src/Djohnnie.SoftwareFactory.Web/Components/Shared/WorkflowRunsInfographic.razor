@@ -1,0 +1,117 @@
+@using System.Net
+@inject GitHubService GitHub
+
+@* The latest run of every GitHub Actions workflow of the repository, read live from GitHub. *@
+<section class="usage-infographic mb-6" aria-labelledby="workflow-runs-title">
+    <div class="usage-infographic-header">
+        <MudText Typo="Typo.h6" id="workflow-runs-title">GitHub Actions</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Latest run per workflow</MudText>
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadAsync" Disabled="_loading"
+                       title="Check again" aria-label="Check the latest workflow runs again" />
+    </div>
+
+    @if (_loading && _workflows is null)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="8rem" />
+    }
+    else if (_workflows is not { } workflows)
+    {
+        <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-message">
+            <MudText Typo="Typo.body1">Could not load the workflow runs: @_error</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-panel">
+            <div class="usage-infographic-panel-header">
+                <MudText Typo="Typo.subtitle2">Workflows</MudText>
+                <MudLink Href="/actions" Typo="Typo.body2">All runs</MudLink>
+            </div>
+            @if (workflows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">This repository has no workflows.</MudText>
+            }
+            else
+            {
+                <div class="workflow-runs-scroll">
+                    <table class="infographic-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Workflow</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Latest run</th>
+                                <th scope="col">Branch</th>
+                                <th scope="col" class="infographic-number">Started</th>
+                                <th scope="col" class="infographic-number">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (workflow, run) in workflows)
+                            {
+                                <tr>
+                                    <th scope="row">
+                                        <MudLink Href="@($"/actions?workflow={workflow.Id}")" title="@workflow.Path">@workflow.Name</MudLink>
+                                        @if (!workflow.IsActive)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">Disabled</MudChip>
+                                        }
+                                    </th>
+                                    @if (run is null)
+                                    {
+                                        <td colspan="5" class="workflow-runs-none">No runs yet</td>
+                                    }
+                                    else
+                                    {
+                                        <td>
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@WorkflowRunDisplay.Color(run)"
+                                                     Icon="@WorkflowRunDisplay.Icon(run)">@WorkflowRunDisplay.Label(run)</MudChip>
+                                        </td>
+                                        <td class="workflow-runs-title">
+                                            <MudLink Href="@run.HtmlUrl" Target="_blank" rel="noopener">@(run.DisplayTitle ?? $"#{run.RunNumber}")</MudLink>
+                                        </td>
+                                        <td class="mono">@run.HeadBranch</td>
+                                        <td class="infographic-number"><TimeAgo At="@WorkflowRunDisplay.StartedAt(run)" /></td>
+                                        <td class="infographic-number">@WorkflowRunDisplay.Duration(run)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </MudPaper>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public GitHubRepository Repository { get; set; } = null!;
+
+    private bool _loading = true;
+    private IReadOnlyList<LatestWorkflowRun>? _workflows;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _workflows = await GitHub.GetLatestWorkflowRunsAsync(Repository.FullName);
+            _error = null;
+        }
+        catch (Exception ex) when (ex is GitHubApiException or HttpRequestException or System.Text.Json.JsonException
+                                       or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException)
+        {
+            _workflows = null;
+            _error = ex is GitHubApiException { StatusCode: HttpStatusCode.Forbidden or HttpStatusCode.NotFound }
+                ? $"{ex.Message} Reading workflows requires access to the repository's Actions, and Actions must be enabled for it."
+                : ex.Message;
+        }
+        _loading = false;
+    }
+}

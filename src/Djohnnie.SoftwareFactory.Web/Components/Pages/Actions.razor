@@ -1,0 +1,201 @@
+@page "/actions"
+@using System.Net
+@using Djohnnie.SoftwareFactory.Contracts.Common
+@inject GitHubService GitHub
+@inject RepositoryContext Repository
+
+<PageTitle>Actions</PageTitle>
+
+<PageBreadcrumbs Current="Actions" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Actions</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            The GitHub Actions workflows of <b>@Repository.Current?.FullName</b> and their runs, newest first, read live from GitHub.
+            This includes GitHub's own workflows, such as the Copilot cloud agent's sessions.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudButton Href="@($"{Repository.Current?.HtmlUrl}/actions")" Target="_blank" rel="noopener" Variant="Variant.Text" Color="Color.Primary"
+                   StartIcon="@Icons.Custom.Brands.GitHub">Actions on GitHub</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync" Disabled="_loadingWorkflows" title="Reload" aria-label="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_workflowsError is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_workflowsError</MudAlert>
+}
+@if (_runsError is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_runsError</MudAlert>
+}
+
+<MudGrid Spacing="4">
+    <MudItem xs="12" md="3">
+        <MudPaper Outlined="true" Elevation="0">
+            @if (_loadingWorkflows)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            <MudList T="long" SelectedValue="_workflowId" SelectedValueChanged="WorkflowChangedAsync" Dense="true" aria-label="Workflows">
+                <MudListSubheader>Workflows</MudListSubheader>
+                <MudListItem T="long" Value="AllWorkflows" Icon="@Icons.Material.Filled.ViewList">All workflows</MudListItem>
+                @foreach (var workflow in _workflows)
+                {
+                    <MudListItem T="long" Value="workflow.Id" Icon="@Icons.Material.Filled.AccountTree" SecondaryText="@workflow.Path">
+                        @workflow.Name
+                        @if (!workflow.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">Disabled</MudChip>
+                        }
+                    </MudListItem>
+                }
+            </MudList>
+            @if (!_loadingWorkflows && _workflowsError is null && _workflows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="px-4 pb-4">This repository has no workflows.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="9">
+        <MudTable @ref="_table" T="GitHubWorkflowRun" ServerData="LoadRunsAsync" RowsPerPage="25" Outlined="true" Striped="true" Dense="true" Hover="true"
+                  Elevation="0" LoadingProgressColor="Color.Primary" aria-label="Workflow runs">
+            <HeaderContent>
+                <MudTh>Status</MudTh>
+                <MudTh>Run</MudTh>
+                <MudTh>Event</MudTh>
+                <MudTh>Branch</MudTh>
+                <MudTh>Actor</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Duration</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@WorkflowRunDisplay.Color(context)"
+                             Icon="@WorkflowRunDisplay.Icon(context)">@WorkflowRunDisplay.Label(context)</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Run" Style="overflow-wrap:anywhere">
+                    <MudLink Href="@context.HtmlUrl" Target="_blank" rel="noopener" Typo="Typo.body2">@(context.DisplayTitle ?? context.Name ?? $"Run {context.Id}")</MudLink>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                        @context.Name #@context.RunNumber@(context.RunAttempt > 1 ? $" (attempt {context.RunAttempt})" : string.Empty)
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Event">@context.Event</MudTd>
+                <MudTd DataLabel="Branch" Class="mono" Style="overflow-wrap:anywhere">@context.HeadBranch</MudTd>
+                <MudTd DataLabel="Actor">@context.Actor?.Login</MudTd>
+                <MudTd DataLabel="Started" Style="white-space:nowrap">
+                    <TimeAgo At="@WorkflowRunDisplay.StartedAt(context)" />
+                </MudTd>
+                <MudTd DataLabel="Duration" Style="white-space:nowrap">@WorkflowRunDisplay.Duration(context)</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                    <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText>@(_workflowId == AllWorkflows ? "This repository has no workflow runs." : "This workflow has no runs.")</MudText>
+                </MudStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="[25, 50, 100]" />
+            </PagerContent>
+        </MudTable>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private const long AllWorkflows = 0;
+
+    /// <summary>The workflow whose runs are shown first (<c>?workflow=</c>), e.g. from the overview's latest runs.</summary>
+    [SupplyParameterFromQuery(Name = "workflow")]
+    public long? Workflow { get; set; }
+
+    private MudTable<GitHubWorkflowRun>? _table;
+    private IReadOnlyList<GitHubWorkflow> _workflows = [];
+    private long _workflowId = AllWorkflows;
+    private bool _loadingWorkflows = true;
+    private string? _workflowsError;
+    private string? _runsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Before the first render, so the table's first load already filters on it.
+        _workflowId = Workflow is > 0 and { } workflow ? workflow : AllWorkflows;
+        await LoadWorkflowsAsync();
+    }
+
+    private async Task LoadWorkflowsAsync()
+    {
+        _loadingWorkflows = true;
+        _workflowsError = null;
+        try
+        {
+            _workflows = await GitHub.GetWorkflowsAsync(Repository.Current!.FullName);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _workflowsError = $"Could not load the workflows: {Describe(ex)}";
+        }
+        finally
+        {
+            _loadingWorkflows = false;
+        }
+    }
+
+    private async Task<TableData<GitHubWorkflowRun>> LoadRunsAsync(TableState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var workflowId = _workflowId == AllWorkflows ? (long?)null : _workflowId;
+            var page = await GitHub.GetWorkflowRunsAsync(new WorkflowRunsRequest(Repository.Current!.FullName, workflowId, state.Page, state.PageSize), cancellationToken);
+            SetRunsError(null);
+            return new TableData<GitHubWorkflowRun> { Items = page.Items, TotalItems = page.TotalCount };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            SetRunsError($"Could not load the workflow runs: {Describe(ex)}");
+            return new TableData<GitHubWorkflowRun> { Items = [], TotalItems = 0 };
+        }
+    }
+
+    // The table loads its rows on its own, so only it re-renders afterwards; the page has to show a changed error itself.
+    private void SetRunsError(string? error)
+    {
+        if (_runsError != error)
+        {
+            _runsError = error;
+            StateHasChanged();
+        }
+    }
+
+    private async Task WorkflowChangedAsync(long workflowId)
+    {
+        _workflowId = workflowId;
+        await ReloadRunsAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await Task.WhenAll(LoadWorkflowsAsync(), ReloadRunsAsync());
+    }
+
+    private async Task ReloadRunsAsync()
+    {
+        if (_table is not null)
+        {
+            // Back to the newest runs: the page number of the old workflow means nothing for the new one.
+            _table.NavigateTo(Page.First);
+            await _table.ReloadServerData();
+        }
+    }
+
+    private static string Describe(Exception exception)
+    {
+        return exception is GitHubApiException { StatusCode: HttpStatusCode.Forbidden or HttpStatusCode.NotFound }
+            ? $"{exception.Message} Reading workflows requires access to the repository's Actions, and Actions must be enabled for it."
+            : exception.Message;
+    }
+
+}

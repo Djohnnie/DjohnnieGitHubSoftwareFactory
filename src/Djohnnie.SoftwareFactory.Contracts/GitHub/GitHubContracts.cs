@@ -144,7 +144,40 @@ public sealed record GitHubWorkflowRun(
     [property: JsonPropertyName("html_url")] string HtmlUrl,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("head_branch")] string? HeadBranch = null,
-    [property: JsonPropertyName("run_started_at")] DateTimeOffset? RunStartedAt = null);
+    [property: JsonPropertyName("run_started_at")] DateTimeOffset? RunStartedAt = null,
+    [property: JsonPropertyName("display_title")] string? DisplayTitle = null,
+    [property: JsonPropertyName("run_number")] int RunNumber = 0,
+    [property: JsonPropertyName("run_attempt")] int RunAttempt = 1,
+    [property: JsonPropertyName("workflow_id")] long WorkflowId = 0,
+    [property: JsonPropertyName("updated_at")] DateTimeOffset? UpdatedAt = null,
+    [property: JsonPropertyName("actor")] GitHubOwner? Actor = null)
+{
+    [JsonIgnore]
+    public bool IsCompleted => string.Equals(Status, "completed", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// How long a completed run took: from the start of its latest attempt to its last update (GitHub's runs list has no
+    /// completion time; a completed run isn't updated anymore). <c>null</c> while it runs.
+    /// </summary>
+    [JsonIgnore]
+    public TimeSpan? Duration => IsCompleted && UpdatedAt is { } updated && updated >= (RunStartedAt ?? CreatedAt)
+        ? updated - (RunStartedAt ?? CreatedAt)
+        : null;
+}
+
+/// <summary>A GitHub Actions workflow of a repository, as <c>GET /repos/{owner}/{repo}/actions/workflows</c> lists it.</summary>
+/// <param name="Path">The workflow file, e.g. <c>.github/workflows/release.yml</c>; GitHub's own workflows (such as Copilot's agent) have a <c>dynamic/</c> path.</param>
+/// <param name="State"><c>active</c>, <c>disabled_manually</c>, <c>disabled_inactivity</c>, …</param>
+public sealed record GitHubWorkflow(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("html_url")] string? HtmlUrl)
+{
+    [JsonIgnore]
+    public bool IsActive => string.Equals(State, "active", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>Copilot's latest agent run on a branch, as far as the token may see it.</summary>
 /// <param name="Run"><c>null</c> when there is none, or when <paramref name="CanReadActions"/> is false.</param>
@@ -236,3 +269,7 @@ public sealed record OpenPullRequestWorkItem(Guid Id, Djohnnie.SoftwareFactory.C
 /// <summary>A Copilot cloud agent session: the Actions run it works in.</summary>
 /// <param name="StartedAt">When it started running, or when it was queued.</param>
 public sealed record CopilotSession(long RunId, string Url, bool IsQueued, DateTimeOffset StartedAt, string? Branch);
+
+/// <summary>A workflow with its most recent run.</summary>
+/// <param name="LatestRun"><c>null</c> when the workflow never ran.</param>
+public sealed record LatestWorkflowRun(GitHubWorkflow Workflow, GitHubWorkflowRun? LatestRun);

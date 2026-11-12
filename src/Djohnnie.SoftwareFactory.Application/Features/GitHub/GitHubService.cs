@@ -1,5 +1,6 @@
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using MediatR;
 
@@ -69,6 +70,24 @@ public sealed class GitHubService(ISender mediator)
     public async Task<CopilotBillingUsage> GetCopilotBillingUsageAsync(string repositoryFullName, bool ownedByOrganization, CopilotBillingReport report, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetCopilotBillingUsageQuery(new(repositoryFullName, ownedByOrganization, report)), cancellationToken)).Dto;
+    }
+
+    /// <summary>The repository's GitHub Actions workflows, by name.</summary>
+    public async Task<IReadOnlyList<GitHubWorkflow>> GetWorkflowsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetWorkflowsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items;
+    }
+
+    /// <summary>One page of the repository's workflow runs (of one workflow, or of all), newest first.</summary>
+    public async Task<PagedResult<GitHubWorkflowRun>> GetWorkflowRunsAsync(WorkflowRunsRequest request, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetWorkflowRunsQuery(request), cancellationToken)).Dto;
+    }
+
+    /// <summary>Every workflow of the repository with its latest run, most recently run first.</summary>
+    public async Task<IReadOnlyList<LatestWorkflowRun>> GetLatestWorkflowRunsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetLatestWorkflowRunsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items;
     }
 
     public async Task<List<AgentSummary>> GetCustomAgentsAsync(string repositoryFullName, CancellationToken cancellationToken = default)

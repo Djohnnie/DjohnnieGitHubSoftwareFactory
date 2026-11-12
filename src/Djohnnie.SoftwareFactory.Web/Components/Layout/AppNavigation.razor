@@ -6,6 +6,7 @@
         @if (HasRepository)
         {
             <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
+            <MudButton Href="/actions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PlayCircle">Actions</MudButton>
             <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                        StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
             <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
@@ -48,6 +49,7 @@ else
         @if (HasRepository)
         {
             @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
+            @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
             @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
         }
         <div class="navigation-group" role="group" aria-label="Agents and templates">

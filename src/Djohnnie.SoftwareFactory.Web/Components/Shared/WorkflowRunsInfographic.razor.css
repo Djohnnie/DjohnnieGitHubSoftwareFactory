@@ -1,0 +1,14 @@
+/* The table scrolls sideways on narrow screens instead of widening the page. */
+.workflow-runs-scroll {
+    overflow-x: auto;
+}
+
+/* Run titles wrap; the other columns stay on one line (the shared infographic table doesn't wrap). */
+.workflow-runs-title {
+    white-space: normal !important;
+    min-width: 14rem;
+}
+
+.workflow-runs-none {
+    color: var(--mud-palette-text-secondary);
+}

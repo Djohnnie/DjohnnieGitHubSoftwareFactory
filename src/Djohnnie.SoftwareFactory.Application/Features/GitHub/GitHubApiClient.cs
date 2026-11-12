@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Api = Djohnnie.SoftwareFactory.Contracts.GitHub.Api;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
@@ -330,6 +331,32 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
 
         var runs = (await response.Content.ReadFromJsonAsync<Api.WorkflowRunsResponse>(cancellationToken))?.WorkflowRuns ?? [];
         return new(runs.Where(IsCopilotRun).MaxBy(r => r.CreatedAt), CanReadActions: true);
+    }
+
+    /// <summary>The repository's GitHub Actions workflows (all pages), including GitHub's own dynamic ones such as Copilot's agent.</summary>
+    public async Task<IReadOnlyList<GitHubWorkflow>> GetWorkflowsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        var workflows = new List<GitHubWorkflow>();
+        string? url = $"repos/{repositoryFullName}/actions/workflows?per_page={PageSize}";
+        while (url is not null)
+        {
+            using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+            workflows.AddRange((await response.Content.ReadFromJsonAsync<Api.WorkflowsResponse>(cancellationToken))?.Workflows ?? []);
+            url = GetNextLink(response);
+        }
+        return workflows;
+    }
+
+    /// <summary>One page of the repository's workflow runs (of one workflow, or of all), newest first, with the number of runs on all pages.</summary>
+    /// <param name="page">Zero-based.</param>
+    public async Task<PagedResult<GitHubWorkflowRun>> GetWorkflowRunsAsync(string repositoryFullName, long? workflowId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var runs = workflowId is { } id ? $"actions/workflows/{id}/runs" : "actions/runs";
+        using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/{runs}?per_page={pageSize}&page={page + 1}", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<Api.WorkflowRunsResponse>(cancellationToken);
+        return new(result?.WorkflowRuns ?? [], result?.TotalCount ?? 0);
     }
 
     /// <summary>The open pull requests of a repository, most recently updated first.</summary>
