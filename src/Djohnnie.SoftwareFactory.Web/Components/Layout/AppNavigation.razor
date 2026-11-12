@@ -1,4 +1,4 @@
-@* The main navigation links: a horizontal bar below the app bar on desktop, a vertical list in the navigation panel on mobile. *@
+@* The main navigation links: a horizontal bar of icons with tooltips below the app bar on desktop, a vertical list in the navigation panel on mobile. *@
 
 @if (Vertical)
 {
@@ -45,20 +45,16 @@ else
     <nav class="app-navigation app-navigation-horizontal" aria-label="Main navigation">
         @if (HasRepository)
         {
-            <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
-            <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                       StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+            @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
+            @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
         }
         <div class="navigation-group" role="group" aria-label="Agents and templates">
             @if (HasRepository)
             {
-                <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
+                @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
+                <span class="navigation-separator" aria-hidden="true">/</span>
             }
-            else
-            {
-                <span class="navigation-label">Agents</span>
-            }
-            @TemplatesIconLink("/agent-templates", "Manage agent templates")
+            @IconLink("/agent-templates", Icons.Material.Filled.LibraryBooks, "Manage agent templates")
         </div>
         @foreach (var type in WorkItemTypeRules.All)
         {
@@ -67,25 +63,19 @@ else
             <div class="navigation-group" role="group" aria-label="@($"{plural} and templates")">
                 @if (HasRepository)
                 {
-                    <MudButton Href="@WorkItemRoutes.ListPath(type)" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                               StartIcon="@WorkItemRoutes.Icon(type)">@plural</MudButton>
+                    @IconLink(WorkItemRoutes.ListPath(type), WorkItemRoutes.Icon(type), plural)
+                    <span class="navigation-separator" aria-hidden="true">/</span>
                 }
-                else
-                {
-                    <span class="navigation-label">@plural</span>
-                }
-                @TemplatesIconLink(WorkItemRoutes.TemplatesPath(type), templatesLabel)
+                @IconLink(WorkItemRoutes.TemplatesPath(type), Icons.Material.Filled.LibraryBooks, templatesLabel)
             </div>
         }
         @if (HasRepository)
         {
-            <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
-            <MudButton Href="/models"Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+            @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
+            @IconLink("/models", Icons.Material.Filled.Memory, "Models")
         }
-        <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                   StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
-        <MudButton Href="/internal-models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                   StartIcon="@Icons.Material.Filled.Memory">Internal models</MudButton>
+        @IconLink("/internal-agents", Icons.Material.Filled.Psychology, "Internal agents")
+        @IconLink("/internal-models", Icons.Material.Filled.Memory, "Internal models")
     </nav>
 }
 
@@ -107,14 +97,10 @@ else
         return type.DisplayName;
     }
 
-    private RenderFragment TemplatesIconLink(string href, string label)
+    private RenderFragment IconLink(string href, string icon, string label)
     {
-        return @<text>
-            <span class="navigation-separator" aria-hidden="true">/</span>
-            <MudTooltip Text="@label">
-                <MudIconButton Href="@href" Icon="@Icons.Material.Filled.LibraryBooks" Color="Color.Inherit"
-                               Size="Size.Small" Class="header-link" aria-label="@label" />
-            </MudTooltip>
-        </text>;
+        return @<MudTooltip Text="@label">
+            <MudIconButton Href="@href" Icon="@icon" Color="Color.Inherit" Class="header-link" aria-label="@label" />
+        </MudTooltip>;
     }
 }

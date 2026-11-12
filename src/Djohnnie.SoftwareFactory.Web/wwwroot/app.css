@@ -34,10 +34,6 @@ h1:focus {
     align-items: center;
 }
 
-.navigation-label {
-    padding: 0 0.75rem;
-}
-
 .navigation-separator {
     color: var(--mud-palette-text-secondary);
     padding: 0 0.25rem;
