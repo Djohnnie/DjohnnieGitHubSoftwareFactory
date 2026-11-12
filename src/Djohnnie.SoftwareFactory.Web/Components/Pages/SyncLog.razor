@@ -1,0 +1,190 @@
+@page "/sync-log"
+@attribute [RepositoryIndependent]
+@using Djohnnie.SoftwareFactory.Application.Features.SyncLog
+@using Djohnnie.SoftwareFactory.Contracts.SyncLog
+@inject SyncLogService SyncLogService
+
+<PageTitle>Sync log</PageTitle>
+
+<PageBreadcrumbs Current="Sync log" />
+
+<div class="sync-log">
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Sync log</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            What the sync function did each time it refreshed the accepted work items of every repository from GitHub, newest first:
+            the work items that changed, the problems it ran into and a summary per run. Consecutive runs without changes share one line.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudSelect T="SyncLogLevel" Label="Show" Value="_level" ValueChanged="LevelChangedAsync" Variant="Variant.Outlined" Dense="true"
+                   Class="sync-log-filter" aria-label="Level">
+            <MudSelectItem Value="SyncLogLevel.Information">Everything</MudSelectItem>
+            <MudSelectItem Value="SyncLogLevel.Warning">Warnings and errors</MudSelectItem>
+            <MudSelectItem Value="SyncLogLevel.Error">Errors only</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="string" Label="Repository" Value="_repository" ValueChanged="RepositoryChangedAsync" Variant="Variant.Outlined" Dense="true"
+                   Clearable="true" Placeholder="All repositories" Class="sync-log-filter" aria-label="Repository">
+            @foreach (var repository in _repositories)
+            {
+                <MudSelectItem Value="repository">@repository</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync" title="Reload" aria-label="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable @ref="_table" T="SyncLogEvent" ServerData="LoadAsync" RowsPerPage="25" Outlined="true" Striped="true" Dense="true" Hover="true" Elevation="0"
+          LoadingProgressColor="Color.Primary" aria-label="Sync log">
+    <HeaderContent>
+        <MudTh>When</MudTh>
+        <MudTh>Level</MudTh>
+        <MudTh>Repository</MudTh>
+        <MudTh>Issue</MudTh>
+        <MudTh>Event</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="When" Style="white-space:nowrap">
+            @Format(context.LastOccurredAt)
+            @if (context.Iterations > 1)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">since @Format(context.OccurredAt)</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Level">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@ColorOf(context.Level)" Icon="@IconOf(context.Level)">@LabelOf(context.Level)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Repository" Class="mono">@context.RepositoryFullName</MudTd>
+        <MudTd DataLabel="Issue">
+            @if (context.IssueUrl is { } url)
+            {
+                <MudLink Href="@url" Target="_blank" rel="noopener" Typo="Typo.body2">#@context.IssueNumber</MudLink>
+            }
+        </MudTd>
+        <MudTd DataLabel="Event" Class="sync-log-message">
+            @context.Message
+            @if (context.Detail is { } detail)
+            {
+                <details class="sync-log-detail">
+                    <summary>Details</summary>
+                    <pre>@detail</pre>
+                </details>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>
+                @(_level == SyncLogLevel.Information && _repository is null
+                    ? "Nothing logged yet. The sync function writes here once it has run."
+                    : "No events match the filter.")
+            </MudText>
+        </MudStack>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="[25, 50, 100]" />
+    </PagerContent>
+</MudTable>
+
+</div>
+
+@code {
+    private MudTable<SyncLogEvent>? _table;
+    private IReadOnlyList<string> _repositories = [];
+    private SyncLogLevel _level = SyncLogLevel.Information;
+    private string? _repository;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _repositories = await SyncLogService.GetRepositoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the repositories to filter on: {ex.Message}";
+        }
+    }
+
+    private async Task<TableData<SyncLogEvent>> LoadAsync(TableState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var page = await SyncLogService.GetPageAsync(new SyncLogQuery(state.Page, state.PageSize, _level, _repository), cancellationToken);
+            _error = null;
+            return new TableData<SyncLogEvent> { Items = page.Items, TotalItems = page.TotalCount };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = $"Could not load the sync log: {ex.Message}";
+            return new TableData<SyncLogEvent> { Items = [], TotalItems = 0 };
+        }
+    }
+
+    private async Task LevelChangedAsync(SyncLogLevel level)
+    {
+        _level = level;
+        await ReloadAsync();
+    }
+
+    private async Task RepositoryChangedAsync(string? repository)
+    {
+        _repository = string.IsNullOrEmpty(repository) ? null : repository;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_table is not null)
+        {
+            // Back to the newest events: the page number of the old filter means nothing for the new one.
+            _table.NavigateTo(Page.First);
+            await _table.ReloadServerData();
+        }
+    }
+
+    private static string Format(DateTimeOffset moment)
+    {
+        return moment.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private static string LabelOf(SyncLogLevel level)
+    {
+        return level switch
+        {
+            SyncLogLevel.Error => "Error",
+            SyncLogLevel.Warning => "Warning",
+            _ => "Info"
+        };
+    }
+
+    private static Color ColorOf(SyncLogLevel level)
+    {
+        return level switch
+        {
+            SyncLogLevel.Error => Color.Error,
+            SyncLogLevel.Warning => Color.Warning,
+            _ => Color.Info
+        };
+    }
+
+    private static string IconOf(SyncLogLevel level)
+    {
+        return level switch
+        {
+            SyncLogLevel.Error => Icons.Material.Filled.Error,
+            SyncLogLevel.Warning => Icons.Material.Filled.Warning,
+            _ => Icons.Material.Filled.Info
+        };
+    }
+}

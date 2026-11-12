@@ -2,6 +2,7 @@ using System.Net;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts.SyncLog;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -89,5 +90,9 @@ public partial class WorkItemServiceTests
 
         Assert.Equal(status, error.StatusCode);
         Assert.Single(_gitHub.Requests);
+        var stopped = Assert.Single(await SyncLogAsync());
+        Assert.Equal((SyncLogEventKind.RunStopped, SyncLogLevel.Error, 42), (stopped.Kind, stopped.Level, stopped.IssueNumber));
+        Assert.Contains("after 0 of 2 work items, so 2 were skipped", stopped.Message);
+        Assert.Contains(status == HttpStatusCode.Unauthorized ? "refused the token" : "rate limit", stopped.Message);
     }
 }

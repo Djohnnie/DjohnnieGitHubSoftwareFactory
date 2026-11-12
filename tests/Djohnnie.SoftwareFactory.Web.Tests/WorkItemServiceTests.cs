@@ -31,6 +31,7 @@ public partial class WorkItemServiceTests : IDisposable
         var dbOptions = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var client = new GitHubApiClient(new HttpClient(_gitHub) { BaseAddress = new Uri("https://api.github.com/") }, new GitHubTokenProvider(new TokenAuth()));
         _services = new ServiceCollection().AddLogging().AddApplication()
+            .Configure<WorkItemSyncOptions>(options => options.RetryDelays = [TimeSpan.Zero, TimeSpan.Zero])
             .AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(dbOptions))
             .AddSingleton(client).BuildServiceProvider();
         _service = _services.GetRequiredService<WorkItemService>();
@@ -455,6 +456,12 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>When set, every request that reads an issue is refused like this.</summary>
         public (HttpStatusCode Status, string Message)? IssueReadFailure { get; set; }
 
+        /// <summary>The number of next issue reads that fail with 502 Bad Gateway, like a GitHub hiccup.</summary>
+        public int TransientIssueFailures { get; set; }
+
+        /// <summary>The issues GitHub answers with something that isn't JSON, an error nobody expects.</summary>
+        public HashSet<int> MalformedIssues { get; } = [];
+
         /// <summary>
         /// The status of the next issue creation. A client error creates nothing; a server error still creates the issue,
         /// like a gateway error after GitHub created it.
@@ -537,6 +544,18 @@ public partial class WorkItemServiceTests : IDisposable
                 return new HttpResponseMessage(HttpStatusCode.NotFound);
             }
             var number = int.Parse(match.Groups[1].Value);
+            if (method == "GET" && match.Groups[2].Value == "")
+            {
+                if (TransientIssueFailures > 0)
+                {
+                    TransientIssueFailures--;
+                    return Json(HttpStatusCode.BadGateway, """{"message":"Server Error"}""");
+                }
+                if (MalformedIssues.Contains(number))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<html>Unicorn!</html>", Encoding.UTF8, "application/json") };
+                }
+            }
             return (method, match.Groups[2].Value) switch
             {
                 ("GET", "") when IssueReadFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),

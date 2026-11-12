@@ -30,6 +30,7 @@ public static class DependencyInjection
             services.TryAddScoped<IInternalModelStore, InternalModelStore>();
             services.TryAddScoped<IAuthSessionStore, AuthSessionStore>();
             services.TryAddScoped<IChatConversationStore, ChatConversationStore>();
+            services.TryAddScoped<ISyncLogStore, SyncLogStore>();
             return services;
         }
     }

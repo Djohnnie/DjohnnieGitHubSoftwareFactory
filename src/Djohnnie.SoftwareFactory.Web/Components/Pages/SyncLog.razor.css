@@ -1,0 +1,23 @@
+.sync-log ::deep .sync-log-filter {
+    min-width: 220px;
+    max-width: 320px;
+}
+
+.sync-log ::deep .sync-log-message {
+    overflow-wrap: anywhere;
+}
+
+.sync-log-detail summary {
+    cursor: pointer;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.sync-log-detail pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.75rem;
+    max-height: 16rem;
+    overflow: auto;
+    margin: 0.25rem 0 0;
+}

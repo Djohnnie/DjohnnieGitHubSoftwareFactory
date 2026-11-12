@@ -2,6 +2,15 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql;
 
 internal static class ContractMapping
 {
+    extension(Entities.SyncLogEvent value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.SyncLog.SyncLogEvent ToContract()
+        {
+            return new(value.Id, value.RunId, value.OccurredAt, value.LastOccurredAt, value.Iterations, value.Level, value.Kind,
+                value.RepositoryFullName, value.IssueNumber, value.WorkItemId, value.Message, value.Detail);
+        }
+    }
+
     extension(Entities.InternalAgent value)
     {
         /// <summary>Requires <see cref="Entities.InternalAgent.InternalModel"/> to be loaded.</summary>

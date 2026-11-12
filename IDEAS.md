@@ -95,7 +95,7 @@ An Azure Function polls GitHub on a CRON schedule (no webhooks), and only for re
 
 **Implemented (manual refresh):** accepted items have a **Refresh from GitHub** button on the list and detail pages. It stores the issue's title, description and state: closed becomes **Closed**, open becomes **In progress** when Copilot is assigned and otherwise **Accepted**.
 
-**Implemented (Azure Function):** `Djohnnie.SoftwareFactory.Sync` does the same refresh for every accepted item of every repository in the database on a CRON schedule, reading GitHub with a token from configuration. Labels, comments, linked pull requests and agent sessions are still to do.
+**Implemented (Azure Function):** `Djohnnie.SoftwareFactory.Sync` does the same refresh for every accepted item of every repository in the database on a CRON schedule, reading GitHub with a token from configuration, including Copilot's progress from the linked pull request and its agent session. Transient errors are retried, and a failing item never stops the others. What every run did is shown on the **Sync log** page, newest first, with quiet runs collapsed into one line. Labels and comments are still to do.
 
 ### 4.8 DGHSF Copilot
 

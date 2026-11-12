@@ -4,6 +4,7 @@ using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AuthSessions;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.InternalModels;
+using Djohnnie.SoftwareFactory.Contracts.SyncLog;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Microsoft.EntityFrameworkCore;
@@ -259,6 +260,28 @@ public class SqlServerStoreTests
         Assert.Equal(WorkItemTypeRules.All, counts.Select(c => c.Type));
         Assert.Equal(new WorkItemCounts(WorkItemType.Task, 1, 1, 1), counts.Single(c => c.Type == WorkItemType.Task));
         Assert.Equal(new WorkItemCounts(WorkItemType.Epic, 0, 0, 0), counts.Single(c => c.Type == WorkItemType.Epic));
+    }
+
+    [Fact]
+    public async Task SyncLog_PagesNewestFirstAndFiltersOnTheLevelAndUp()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new SyncLogStore(database.Factory);
+        var start = new DateTimeOffset(2026, 11, 12, 8, 0, 0, TimeSpan.Zero);
+        var run = Guid.NewGuid();
+        // One batch, one tick apart, like the events of one run.
+        var events = Enumerable.Range(0, 30).Select(i => new SyncLogEvent(Guid.NewGuid(), run, start.AddTicks(i), start.AddTicks(i), 1,
+            i % 3 == 0 ? SyncLogLevel.Error : SyncLogLevel.Information, SyncLogEventKind.WorkItemChanged, Repo, i, null, $"Event {i}", null)).ToList();
+        await store.AddAsync(events, _cancellationToken);
+
+        var newest = await store.GetPageAsync(new SyncLogQuery(0, 25), _cancellationToken);
+        var oldest = await store.GetPageAsync(new SyncLogQuery(1, 25), _cancellationToken);
+        var errors = await store.GetPageAsync(new SyncLogQuery(0, 25, SyncLogLevel.Warning, "OWNER/repo"), _cancellationToken);
+
+        Assert.Equal(30, newest.TotalCount);
+        Assert.Equal(Enumerable.Range(0, 30).Reverse().Select(i => $"Event {i}"), newest.Items.Concat(oldest.Items).Select(e => e.Message));
+        Assert.Equal(10, errors.TotalCount);
+        Assert.All(errors.Items, e => Assert.Equal(SyncLogLevel.Error, e.Level));
     }
 
     private Task<WorkItem> SaveAsync(WorkItemStore store, WorkItemType type, string title, Guid? parentId = null)

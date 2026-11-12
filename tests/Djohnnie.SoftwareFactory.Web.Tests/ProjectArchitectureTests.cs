@@ -47,7 +47,7 @@ public class ProjectArchitectureTests
                 "20261105104758_AddInternalAgents",
                 "20261105123925_AddWorkItemAcceptClaim", "20261105131621_AddWorkItemAcceptIssueSince",
                 "20261105131859_AddAuthSessions", "20261109080819_AddInternalAgentModel", "20261109103448_AddChatConversations",
-                "20261109105650_AddWorkItemTemplateDefault", "20261109122056_UseGuidPrimaryKeysAndSysId", "20261109125325_AddInternalModelsAndUsage", "20261109130440_AddCachedInputTokens", "20261109130942_AddReasoningTokens", "20261109132641_AddInternalModelLabel", "20261109133036_AddInternalModelFlags", "20261109135557_AddUsageSource", "20261110204615_AddWorkItemProgress", "20261112123453_AddWorkItemPullRequestBranch"],
+                "20261109105650_AddWorkItemTemplateDefault", "20261109122056_UseGuidPrimaryKeysAndSysId", "20261109125325_AddInternalModelsAndUsage", "20261109130440_AddCachedInputTokens", "20261109130942_AddReasoningTokens", "20261109132641_AddInternalModelLabel", "20261109133036_AddInternalModelFlags", "20261109135557_AddUsageSource", "20261110204615_AddWorkItemProgress", "20261112123453_AddWorkItemPullRequestBranch", "20261112130729_AddSyncLog"],
             db.Database.GetMigrations());
         Assert.All(db.Model.GetEntityTypes(), entity =>
         {

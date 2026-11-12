@@ -146,6 +146,11 @@ public sealed record GitHubWorkflowRun(
     [property: JsonPropertyName("head_branch")] string? HeadBranch = null,
     [property: JsonPropertyName("run_started_at")] DateTimeOffset? RunStartedAt = null);
 
+/// <summary>Copilot's latest agent run on a branch, as far as the token may see it.</summary>
+/// <param name="Run"><c>null</c> when there is none, or when <paramref name="CanReadActions"/> is false.</param>
+/// <param name="CanReadActions">False when GitHub refused to list the runs (a token without Actions access, or Actions disabled).</param>
+public sealed record CopilotRunLookup(GitHubWorkflowRun? Run, bool CanReadActions);
+
 /// <summary>One pull request as <c>GET /repos/{owner}/{repo}/pulls/{number}</c> returns it.</summary>
 /// <param name="State"><c>open</c> or <c>closed</c>; a merged pull request is closed with <see cref="MergedAt"/> set.</param>
 public sealed record GitHubPullRequestDetails(

@@ -16,7 +16,7 @@ The engineering is careful. The duplicate-safe accept with its marker and claim 
 6. **The sync doesn't scale and repeats failures.**
    - It sends one GitHub request per accepted item, forever, including closed items, so the cost only grows.
    - It loads every item of every repo, drafts included, and filters in memory (`WorkItemSyncService`).
-   - An issue body longer than `MaxDescriptionLength` fails again every 15 minutes, with only a warning log.
+   - An issue body longer than `MaxDescriptionLength` fails again every 15 minutes. (Since 2026-11-12 the failure shows on the Sync log page instead of only in the function's logs, but it still repeats every run.)
    - Better: one `issues?state=all&since=<last sync>` call per repo, or conditional requests with ETags (304 answers don't count against the rate limit).
 7. **The docs contradict the code.**
    - `docs/azure-deployment.md:376` says auth tickets are kept in memory and you sign in again after a restart. `SqlTicketStore` exists to prevent exactly that.
@@ -48,7 +48,7 @@ The engineering is careful. The duplicate-safe accept with its marker and claim 
    - installation tokens for the sync, with no PAT to expire unnoticed
    - webhooks instead of polling
    - higher rate limits
-3. **Monitoring.** There's no Application Insights or OpenTelemetry. When the sync token expires, the function fails quietly in logs nobody reads.
+3. **Monitoring.** There's no Application Insights or OpenTelemetry. When the sync token expires, the function fails quietly in logs nobody reads. (Since 2026-11-12 a stopped run is shown as an error on the Sync log page, but nothing alerts anyone.)
 4. **Features IDEAS.md promises that don't exist yet:** label management (§4.4), diff issues (§4.5), and chat mode with confirmed destructive actions (§4.8).
 5. **A spend cap for the internal agents**, since every request's cost is already tracked.
 6. **Backup or export.** Drafts exist only in the SQL database, and that database is the entire planning system.

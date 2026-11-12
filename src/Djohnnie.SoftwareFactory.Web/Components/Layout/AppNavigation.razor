@@ -38,6 +38,8 @@
                    StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
         <MudButton Href="/internal-models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.Memory">Internal models</MudButton>
+        <MudButton Href="/sync-log" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                   StartIcon="@Icons.Material.Filled.ManageHistory">Sync log</MudButton>
     </nav>
 }
 else
@@ -76,6 +78,7 @@ else
         }
         @IconLink("/internal-agents", Icons.Material.Filled.Psychology, "Internal agents")
         @IconLink("/internal-models", Icons.Material.Filled.Memory, "Internal models")
+        @IconLink("/sync-log", Icons.Material.Filled.ManageHistory, "Sync log")
     </nav>
 }
 

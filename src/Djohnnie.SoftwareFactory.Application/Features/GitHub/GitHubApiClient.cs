@@ -314,19 +314,22 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
     /// Copilot's latest agent session on <paramref name="branch"/>: the newest Actions run that GitHub started for the
     /// Copilot cloud agent (a <c>dynamic</c> run) rather than for a workflow file of the repository.
     /// </summary>
-    /// <returns><c>null</c> when there is none or the token may not read Actions (that only hides the run, nothing else).</returns>
-    public async Task<GitHubWorkflowRun?> GetLatestCopilotRunAsync(string repositoryFullName, string branch, CancellationToken cancellationToken = default)
+    /// <returns>
+    /// No run when there is none or the token may not read Actions; the latter only hides the run, nothing else, and is
+    /// told by <see cref="CopilotRunLookup.CanReadActions"/>.
+    /// </returns>
+    public async Task<CopilotRunLookup> GetLatestCopilotRunAsync(string repositoryFullName, string branch, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get,
             $"repos/{repositoryFullName}/actions/runs?branch={Uri.EscapeDataString(branch)}&per_page=30", null, cancellationToken);
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden && !await IsRateLimitedAsync(response, cancellationToken))
         {
-            return null;
+            return new(null, CanReadActions: false);
         }
         await EnsureSuccessAsync(response, cancellationToken);
 
         var runs = (await response.Content.ReadFromJsonAsync<Api.WorkflowRunsResponse>(cancellationToken))?.WorkflowRuns ?? [];
-        return runs.Where(IsCopilotRun).MaxBy(r => r.CreatedAt);
+        return new(runs.Where(IsCopilotRun).MaxBy(r => r.CreatedAt), CanReadActions: true);
     }
 
     /// <summary>The open pull requests of a repository, most recently updated first.</summary>

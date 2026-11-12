@@ -121,14 +121,14 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         }
 
         var assignedToCopilot = GitHubApiClient.IsAssignedToCopilot(issue);
-        var progress = item.Type.CanBeAssigned
+        var (progress, progressWarning) = item.Type.CanBeAssigned
             ? await GetProgressAsync(repositoryFullName, number, issue.IsClosed, assignedToCopilot, cancellationToken)
-            : WorkItemProgressSnapshot.None;
+            : (WorkItemProgressSnapshot.None, null);
 
         var refreshed = await store.ApplyIssueAsync(repositoryFullName, id,
             new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, assignedToCopilot, progress),
             cancellationToken);
-        return new(refreshed, refreshed != item);
+        return new(refreshed, refreshed != item, progressWarning);
     }
 
     /// <summary>
@@ -136,24 +136,33 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     /// Actions run on its branch.
     /// </summary>
     /// <returns>
-    /// <c>null</c> (keep the stored progress) when GitHub refuses to show the pull requests, e.g. to a token without
-    /// access to them; that shouldn't stop the issue itself from being refreshed.
+    /// No progress (keep the stored progress) when GitHub refuses to show the pull requests, e.g. to a token without
+    /// access to them; that shouldn't stop the issue itself from being refreshed. The warning says why, also when only
+    /// the agent run was refused (the progress then follows from the pull request alone).
     /// </returns>
-    private async Task<WorkItemProgressSnapshot?> GetProgressAsync(string repositoryFullName, int issueNumber, bool issueClosed, bool assignedToCopilot, CancellationToken cancellationToken)
+    private async Task<(WorkItemProgressSnapshot? Progress, string? Warning)> GetProgressAsync(string repositoryFullName, int issueNumber, bool issueClosed,
+        bool assignedToCopilot, CancellationToken cancellationToken)
     {
         try
         {
             var pullRequest = CopilotProgressEvaluator.SelectPullRequest(await gitHub.GetLinkedPullRequestsAsync(repositoryFullName, issueNumber, cancellationToken));
-            var run = pullRequest is { IsOpen: true }
+            var lookup = pullRequest is { IsOpen: true }
                 ? await gitHub.GetLatestCopilotRunAsync(repositoryFullName, pullRequest.HeadRefName, cancellationToken)
                 : null;
-            return CopilotProgressEvaluator.Evaluate(issueClosed, assignedToCopilot, pullRequest, run);
+            var warning = lookup is { CanReadActions: false }
+                ? ActionsRefusedWarning
+                : null;
+            return (CopilotProgressEvaluator.Evaluate(issueClosed, assignedToCopilot, pullRequest, lookup?.Run), warning);
         }
         catch (GitHubApiException ex) when (!StopsEveryRequest(ex))
         {
-            return null;
+            return (null, $"Copilot's progress was kept as it was, because GitHub refused to show the linked pull requests: {ex.Message}");
         }
     }
+
+    /// <summary>The same for every item (no pull request number), so the sync can report the items of a repository together.</summary>
+    public const string ActionsRefusedWarning =
+        "GitHub refused to list the Actions runs, so Copilot's agent run is unknown; whether Copilot is still working follows from the pull request's title.";
 
     /// <summary>An expired token or the rate limit: the next requests would fail too, so it isn't hidden.</summary>
     private static bool StopsEveryRequest(GitHubApiException ex)

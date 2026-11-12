@@ -12,6 +12,7 @@ using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Application.Features.Speech;
+using Djohnnie.SoftwareFactory.Application.Features.SyncLog;
 using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using FluentValidation;
@@ -45,6 +46,8 @@ public static class DependencyInjection
             services.AddScoped<AiModelService>();
             services.AddScoped<WorkItemService>();
             services.AddScoped<WorkItemSyncService>();
+            services.AddOptions<WorkItemSyncOptions>();
+            services.AddScoped<SyncLogService>();
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<WorkItemTemplateService>();
             services.AddScoped<GitHubService>();

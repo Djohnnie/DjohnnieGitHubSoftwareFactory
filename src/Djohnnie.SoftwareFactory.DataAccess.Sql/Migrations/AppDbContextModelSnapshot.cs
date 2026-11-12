@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261112123453_AddWorkItemPullRequestBranch";
+    public override string LastMigrationId => "20261112130729_AddSyncLog";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -634,6 +634,74 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("LastAccessedAt");
 
                 b.ToTable("Repositories");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.SyncLogEvent", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<string>("Detail")
+                    .HasMaxLength(4000)
+                    .HasColumnType("nvarchar(4000)");
+
+                b.Property<int?>("IssueNumber")
+                    .HasColumnType("int");
+
+                b.Property<int>("Iterations")
+                    .HasColumnType("int");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
+
+                b.Property<DateTimeOffset>("LastOccurredAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<int>("Level")
+                    .HasColumnType("int");
+
+                b.Property<string>("Message")
+                    .IsRequired()
+                    .HasMaxLength(2000)
+                    .HasColumnType("nvarchar(2000)");
+
+                b.Property<DateTimeOffset>("OccurredAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("RepositoryFullName")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
+
+                b.Property<Guid>("RunId")
+                    .HasColumnType("uniqueidentifier");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<Guid?>("WorkItemId")
+                    .HasColumnType("uniqueidentifier");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("LastOccurredAt");
+
+                b.HasIndex("Level");
+
+                b.HasIndex("RepositoryFullName");
+
+                b.ToTable("SyncLogEvents");
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>
