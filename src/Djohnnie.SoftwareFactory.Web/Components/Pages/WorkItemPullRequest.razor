@@ -129,7 +129,7 @@
                                                 <td colspan="4">
                                                     <div class="pr-comment">
                                                         <MudTextField T="string" @bind-Value="_draftText" Label="@($"Comment on line {line.CommentLine}")" Variant="Variant.Outlined"
-                                                                      Lines="3" AutoGrow="true" Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" />
+                                                                      Lines="3" Sizing="InputSizing.Auto" Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" />
                                                         <MudStack Row="true" Class="mt-1">
                                                             <MudButton Variant="Variant.Text" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_draftText)"
                                                                        OnClick="AddComment">Add comment</MudButton>
@@ -174,7 +174,7 @@
                     Feedback sent. <MudLink Href="@_sentUrl" Target="_blank">View it on GitHub</MudLink>; refresh the work item to follow Copilot's progress.
                 </MudAlert>
             }
-            <MudTextField T="string" @bind-Value="_body" Label="What should Copilot change?" Variant="Variant.Outlined" Lines="4" AutoGrow="true"
+            <MudTextField T="string" @bind-Value="_body" Label="What should Copilot change?" Variant="Variant.Outlined" Lines="4" Sizing="InputSizing.Auto"
                           Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="_sending" />
             <MudCheckBox T="bool" @bind-Value="_requestChanges" Label="Request changes (submit as a review that requests changes)" Disabled="_sending" Dense="true" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
