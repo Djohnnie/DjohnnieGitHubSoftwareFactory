@@ -97,6 +97,43 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task NewItemForAMindmapIdea_WithoutTheWriter_UsesTheIdeaAsTitle_AndLinksTheIdeaOnSave()
+    {
+        await SelectRepositoryAsync();
+        var mindmaps = Services.GetRequiredService<Application.Features.Mindmaps.MindmapService>();
+        var epic = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Security", Description = "Safer." }, _cancellationToken);
+        var map = Contracts.Mindmaps.Mindmap.Create(Repo, "Release 2.0");
+        var security = MindmapLayout.AddChild(map, map.Root!.Id, "Security");
+        security.WorkItemId = epic.Id;
+        var passkeys = MindmapLayout.AddChild(map, security.Id, "Passkey login");
+        map = await mindmaps.SaveAsync(map, _cancellationToken);
+        var parent = MindmapLayout.ProposedParent(map, passkeys.Id, WorkItemType.Feature, new Dictionary<Guid, WorkItem> { [epic.Id] = epic });
+        Assert.Equal(epic.Id, parent);
+        Navigation.NavigateTo(WorkItemRoutes.NewPath(WorkItemType.Feature, parent, mindmapId: map.Id, ideaId: passkeys.Id));
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Passkey login", cut.Find(".mindmap-origin").TextContent));
+        Assert.Contains("Release 2.0", cut.Find(".mindmap-origin").TextContent);
+        Assert.DoesNotContain("Write again", cut.Find(".mindmap-origin").TextContent);
+        Assert.Equal("Passkey login", cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").GetAttribute("value"));
+
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save draft")).Click());
+
+        var feature = Assert.Single(await Items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken));
+        Assert.Equal(("Passkey login", epic.Id), (feature.Title, feature.ParentId));
+        Assert.Equal(feature.Id, (await mindmaps.GetAsync(Repo, map.Id, _cancellationToken))!.Find(passkeys.Id)!.WorkItemId);
+
+        // The stored item links back to the idea.
+        Navigation.NavigateTo(WorkItemRoutes.ItemPath(WorkItemType.Feature, feature.Id));
+        var stored = Render<WorkItemEditor>(p => p.Add(e => e.Id, feature.Id));
+        var chip = stored.WaitForElement(".mindmap-idea-chip");
+        Assert.Contains("Release 2.0 › Passkey login", chip.TextContent);
+        Assert.EndsWith($"/mindmaps?id={map.Id}&idea={passkeys.Id}", (chip.GetAttribute("href") ?? chip.QuerySelector("a")?.GetAttribute("href"))!);
+    }
+
+    [Fact]
     public async Task NewEpic_ExplicitTemplateAndSwitching_PreserveTitleAndConfirmEditedDescription()
     {
         await SelectRepositoryAsync();

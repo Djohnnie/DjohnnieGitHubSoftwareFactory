@@ -24,5 +24,6 @@ public enum InternalAgentUsageSource
     [Description("Model Selector")] ModelSelector,
     [Description("Chat Suggestions")] ChatSuggestions,
     [Description("Description Writer")] DescriptionWriter,
-    [Description("Work Item Breakdown")] WorkItemBreakdown
+    [Description("Work Item Breakdown")] WorkItemBreakdown,
+    [Description("Mindmap Work Item Writer")] MindmapWorkItemWriter
 }

@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261113145406_AddSkills";
+    public override string LastMigrationId => "20261113152336_AddMindmaps";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -592,6 +592,49 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("InternalModels");
             });
 
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Mindmap", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Nodes")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
+
+                b.Property<Guid>("RepositoryId")
+                    .HasColumnType("uniqueidentifier");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("RepositoryId");
+
+                b.ToTable("Mindmaps");
+            });
+
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
             {
                 b.Property<Guid>("Id")
@@ -1009,6 +1052,17 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsRequired();
 
                 b.Navigation("InternalAgent");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Mindmap", b =>
+            {
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", "Repository")
+                    .WithMany()
+                    .HasForeignKey("RepositoryId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+
+                b.Navigation("Repository");
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>

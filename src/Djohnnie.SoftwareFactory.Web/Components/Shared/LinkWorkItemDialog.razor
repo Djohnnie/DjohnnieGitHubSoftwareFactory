@@ -1,0 +1,128 @@
+@* Picks an existing work item of the repository to link a mindmap idea to. The items most like the idea come first. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Search epics, features, stories, bugs and tasks"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" AutoFocus="true" />
+        <MudChipSet T="WorkItemType?" @bind-SelectedValue="_type" SelectionMode="SelectionMode.ToggleSelection" Size="Size.Small" CheckMark="true" Class="mt-2">
+            @foreach (var type in WorkItemTypeRules.All)
+            {
+                @* A selected type is a solid chip in the type's colour, so it's clear the list is filtered. *@
+                <MudChip T="WorkItemType?" Value="type" Icon="@WorkItemRoutes.Icon(type)" Variant="@(_type == type ? Variant.Filled : Variant.Outlined)"
+                         Style="@ChipStyle(type)">@type.PluralName</MudChip>
+            }
+        </MudChipSet>
+        <div class="link-list mt-2">
+            @if (Matches.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+                    @(Items.Count == 0 ? "This repository has no work items yet. Create one from the idea instead." : "No work items match your search.")
+                </MudText>
+            }
+            @foreach (var item in Matches)
+            {
+                <button type="button" class="@($"link-item {(item.Id == _selected ? "link-item-selected" : null)}")" @onclick="() => _selected = item.Id"
+                        @ondblclick="() => Close(item.Id)" aria-pressed="@(item.Id == _selected ? "true" : "false")">
+                    <span class="link-item-icon" style="@($"color:#{item.Type.LabelColor}")">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)WorkItemRoutes.Icon(item.Type))</svg>
+                    </span>
+                    <span class="link-item-text">
+                        <span class="link-item-title">@item.Title</span>
+                        <span class="link-item-meta">@Meta(item)</span>
+                    </span>
+                </button>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="() => MudDialog.Cancel()">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_selected is null" OnClick="() => Close(_selected!.Value)"
+                   StartIcon="@Icons.Material.Filled.Link">Link</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int MaxShown = 60;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The work items of the repository.</summary>
+    [Parameter] public IReadOnlyList<WorkItem> Items { get; set; } = [];
+
+    /// <summary>The text of the idea, to put the items that are most like it first.</summary>
+    [Parameter] public string IdeaText { get; set; } = string.Empty;
+
+    /// <summary>The items other ideas of the mindmap are linked to.</summary>
+    [Parameter] public IReadOnlySet<Guid> LinkedIds { get; set; } = new HashSet<Guid>();
+
+    /// <summary>The item the idea is linked to now, if any.</summary>
+    [Parameter] public Guid? Current { get; set; }
+
+    private string? _search;
+    private WorkItemType? _type;
+    private Guid? _selected;
+
+    protected override void OnInitialized()
+    {
+        _selected = Current;
+    }
+
+    private List<WorkItem> Matches
+    {
+        get
+        {
+            var words = Words(string.IsNullOrWhiteSpace(_search) ? IdeaText : _search);
+            return Items
+                .Where(item => _type is null || item.Type == _type)
+                .Where(item => string.IsNullOrWhiteSpace(_search) || item.Title.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase)
+                               || words.Count > 0 && words.All(word => item.Title.Contains(word, StringComparison.CurrentCultureIgnoreCase)))
+                .OrderByDescending(item => item.Id == Current)
+                .ThenByDescending(item => words.Count(word => item.Title.Contains(word, StringComparison.CurrentCultureIgnoreCase)))
+                .ThenBy(item => item.Status == WorkItemStatus.Done)
+                .ThenBy(item => item.Type)
+                .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
+                .Take(MaxShown)
+                .ToList();
+        }
+    }
+
+    private string ChipStyle(WorkItemType type)
+    {
+        return _type == type
+            ? $"background-color:#{type.LabelColor}; border-color:#{type.LabelColor}; color:#fff"
+            : $"border-color:#{type.LabelColor}; color:#{type.LabelColor}";
+    }
+
+    // One string, so the line wraps as plain text instead of as separate pieces.
+    private string Meta(WorkItem item)
+    {
+        var parts = new List<string> { item.Type.DisplayName, WorkItemStatusChip.LabelOf(item.Status) };
+        if (item.IssueNumber is { } number)
+        {
+            parts.Add($"#{number}");
+        }
+        if (item.Parent is { } parent)
+        {
+            parts.Add($"in {parent.Title}");
+        }
+        if (LinkedIds.Contains(item.Id))
+        {
+            parts.Add("already linked in this mindmap");
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private static List<string> Words(string? text)
+    {
+        return (text ?? string.Empty)
+            .Split([' ', ',', '.', ':', ';', '-', '/', '(', ')'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(word => word.Length > 2)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    private void Close(Guid id)
+    {
+        MudDialog.Close(DialogResult.Ok(id));
+    }
+}

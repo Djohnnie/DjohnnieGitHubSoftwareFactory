@@ -12,6 +12,7 @@ public static class InternalAgentKeys
     public const string ChatSuggestions = "chat-suggestions";
     public const string DescriptionWriter = "description-writer";
     public const string WorkItemBreakdown = "work-item-breakdown";
+    public const string MindmapWorkItemWriter = "mindmap-work-item-writer";
 
     /// <summary>The Copilot of the work item pages of a type, e.g. <c>story-copilot</c>.</summary>
     public static string ForWorkItem(WorkItemType type)

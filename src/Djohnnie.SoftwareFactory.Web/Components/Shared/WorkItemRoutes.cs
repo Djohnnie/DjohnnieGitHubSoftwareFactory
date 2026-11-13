@@ -15,7 +15,8 @@ public static class WorkItemRoutes
         return "/" + Segment(type);
     }
 
-    public static string NewPath(WorkItemType type, Guid? parentId = null, Guid? templateId = null)
+    /// <param name="mindmapId">With <paramref name="ideaId"/>: the mindmap idea the new item is written for and linked to on save.</param>
+    public static string NewPath(WorkItemType type, Guid? parentId = null, Guid? templateId = null, Guid? mindmapId = null, Guid? ideaId = null)
     {
         var query = new List<string>();
         if (parentId is { } parent)
@@ -25,6 +26,11 @@ public static class WorkItemRoutes
         if (templateId is { } template)
         {
             query.Add($"template={template}");
+        }
+        if (mindmapId is { } mindmap && ideaId is { } idea)
+        {
+            query.Add($"mindmap={mindmap}");
+            query.Add($"idea={idea}");
         }
         return $"{ListPath(type)}/new{(query.Count == 0 ? string.Empty : "?" + string.Join('&', query))}";
     }

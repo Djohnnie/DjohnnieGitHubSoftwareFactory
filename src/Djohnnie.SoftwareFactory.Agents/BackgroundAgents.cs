@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
 using Djohnnie.SoftwareFactory.Contracts.Speech;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
@@ -162,6 +163,74 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             .Where(item => item.Title.Length > 0 && titles.Add(item.Title))
             .Take(GeneratedWorkItem.MaxPerRun)
             .ToList();
+    }
+
+    /// <summary>Writes the title and description of a new work item for one idea of a mindmap; <c>null</c> when the agent returns no title.</summary>
+    /// <param name="agent">The Mindmap Work Item Writer agent.</param>
+    /// <param name="linkedItems">The work items ideas of the map are linked to, by id.</param>
+    /// <param name="template">The template the item follows, if any.</param>
+    /// <param name="parent">The parent the item will get, if chosen.</param>
+    public async Task<GeneratedWorkItem?> WriteMindmapWorkItemAsync(InternalAgent agent, Mindmap mindmap, Guid ideaId, WorkItemType type,
+        IReadOnlyDictionary<Guid, WorkItem> linkedItems, WorkItemTemplate? template, WorkItem? parent, CancellationToken cancellationToken = default)
+    {
+        var input = new
+        {
+            Type = type.DisplayName,
+            Idea = mindmap.Find(ideaId)?.Text,
+            Template = template is null ? null : new { TitleExample = template.TitleTemplate, DescriptionSkeleton = Truncate(template.Description, MaxDescriptionLength) },
+            Parent = parent is null ? null : new { Type = parent.Type.DisplayName, parent.Title, Description = Truncate(parent.Description, MaxDescriptionLength) }
+        };
+        var message = $"""
+            Write the {type.DisplayName.ToLowerInvariant()} for the idea marked with ⟵ in this mindmap.
+
+            ```text
+            {MindmapOutline(mindmap, ideaId, linkedItems)}
+            ```
+
+            ```json
+            {JsonSerializer.Serialize(input, JsonOptions)}
+            ```
+            """;
+
+        var response = await CreateAgent(agent, InternalAgentUsageSource.MindmapWorkItemWriter)
+            .RunAsync<ChildOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var title = Truncate(response.Result?.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength);
+        return title.Length == 0
+            ? null
+            : new GeneratedWorkItem(title, Truncate(response.Result?.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength));
+    }
+
+    /// <summary>The mindmap as an indented outline, with the chosen idea marked and the done and linked ideas annotated.</summary>
+    public static string MindmapOutline(Mindmap mindmap, Guid ideaId, IReadOnlyDictionary<Guid, WorkItem> linkedItems)
+    {
+        var builder = new System.Text.StringBuilder();
+        void Write(MindmapNode node, int depth)
+        {
+            builder.Append(' ', depth * 2).Append("- ").Append(node.Text.ReplaceLineEndings(" "));
+            if (node.IsDone)
+            {
+                builder.Append(" [done]");
+            }
+            if (node.WorkItemId is { } id && linkedItems.TryGetValue(id, out var item))
+            {
+                builder.Append(" [linked to ").Append(item.Type.DisplayName.ToLowerInvariant()).Append(": ").Append(item.Title).Append(']');
+            }
+            if (node.Id == ideaId)
+            {
+                builder.Append("  ⟵ write the work item for this idea");
+            }
+            builder.AppendLine();
+            foreach (var child in mindmap.ChildrenOf(node.Id))
+            {
+                Write(child, depth + 1);
+            }
+        }
+
+        if (mindmap.Root is { } root)
+        {
+            Write(root, 0);
+        }
+        return Truncate(builder.ToString().TrimEnd(), MaxDescriptionLength);
     }
 
     private AIAgent CreateAgent(InternalAgent agent, InternalAgentUsageSource source)

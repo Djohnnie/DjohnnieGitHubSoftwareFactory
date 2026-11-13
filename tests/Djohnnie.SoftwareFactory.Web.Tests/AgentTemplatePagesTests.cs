@@ -77,6 +77,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
     [InlineData(typeof(InternalAgentEditor), true)]
     [InlineData(typeof(SkillEditor), true)]
     [InlineData(typeof(Components.Pages.Skills), false)]
+    [InlineData(typeof(Components.Pages.Mindmaps), false)]
     [InlineData(typeof(WorkItems), false)]
     [InlineData(typeof(WorkItemEditor), false)]
     [InlineData(typeof(Components.Pages.Agents), false)]
@@ -151,7 +152,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         var navigation = cut.Find(".app-header > .mud-appbar + .desktop-only > nav[aria-label='Main navigation']");
         Assert.Equal(new[]
             {
-                "/", "/work-item-map", "/actions", "/copilot-instructions", "/skills", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
+                "/", "/mindmaps", "/work-item-map", "/actions", "/copilot-instructions", "/skills", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
                 "/copilot-code-review", "/models", "/internal-agents", "/internal-models", "/sync-log"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));

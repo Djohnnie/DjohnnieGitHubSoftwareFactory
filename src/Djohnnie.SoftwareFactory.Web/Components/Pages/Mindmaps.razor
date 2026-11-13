@@ -1,0 +1,843 @@
+@page "/mindmaps"
+@inject MindmapService MindmapData
+@inject WorkItemService WorkItems
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Mindmaps</PageTitle>
+
+<PageBreadcrumbs Current="Mindmaps" BackDisabled="_saving" />
+
+<NavigationLock ConfirmExternalNavigation="_dirty" OnBeforeInternalNavigation="ConfirmNavigationAsync" />
+
+<MudStack Class="mb-3">
+    <div>
+        <MudText Typo="Typo.h4">Mindmaps</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Simple to-do lists of <b>@Repository.Current?.FullName</b> as mindmaps: one central idea with ideas around it, and ideas below those.
+            Mark ideas done as you go.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="NewAsync" Disabled="_loading || _saving" StartIcon="@Icons.Material.Filled.Add">
+            New mindmap
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_loading || _saving || !_dirty"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save mindmap
+        </MudButton>
+        @if (_map is not null && !IsNew)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving || !_dirty" StartIcon="@Icons.Material.Filled.Undo">
+                Reset
+            </MudButton>
+        }
+        @if (_map is not null)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="DeleteMapAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Delete">
+                Delete mindmap
+            </MudButton>
+        }
+        <MudSpacer />
+        @if (_map is not null)
+        {
+            <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Color="@(DoneCount == _map.Nodes.Count ? Color.Success : Color.Default)"
+                     Icon="@Icons.Material.Filled.TaskAlt">
+                @DoneCount of @_map.Nodes.Count done
+            </MudChip>
+        }
+        <MudSelect T="Guid" Value="@(_map?.Id ?? Guid.Empty)" ValueChanged="SwitchAsync" Label="Mindmap" Variant="Variant.Outlined" Dense="true"
+                   Margin="Margin.Dense" Style="min-width:200px; max-width:280px" Disabled="_loading || _saving" AnchorOrigin="Origin.BottomCenter">
+            @if (IsNew)
+            {
+                <MudSelectItem Value="Guid.Empty">@(_map!.Title) (not saved)</MudSelectItem>
+            }
+            @foreach (var summary in _maps)
+            {
+                <MudSelectItem Value="summary.Id">@(summary.Id == _map?.Id ? _map.Title : summary.Title)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-3">@_error</MudAlert>
+}
+
+<div class="mindmap-stage" @ref="_stage">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mindmap-progress" />
+    }
+    <div class="mindmap-world" @ref="_world">
+        @if (_map is not null && !_loading)
+        {
+            <svg class="mindmap-edges" aria-hidden="true">
+                @foreach (var node in _map.Nodes)
+                {
+                    if (node.ParentId is { } parentId && _map.Find(parentId) is { } parent)
+                    {
+                        <path @key="node.Id" data-from="@parent.Id" data-to="@node.Id" d="@MindmapLayout.EdgePath(parent, node)"
+                              class="@($"mindmap-edge branch-{MindmapLayout.BranchOf(_map, node.Id)}")" />
+                    }
+                }
+                <path class="mindmap-edge mindmap-drag-edge" />
+            </svg>
+
+            @foreach (var node in _map.Nodes)
+            {
+                <div @key="node.Id" class="@NodeClass(node)" style="@NodeStyle(node)" data-node="@node.Id" data-parent="@node.ParentId"
+                     data-x="@Number(node.X)" data-y="@Number(node.Y)" tabindex="0" role="button" aria-pressed="@(node.Id == _selectedId ? "true" : "false")"
+                     aria-label="@($"{node.Text}{(node.IsDone ? ", done" : null)}")" @onkeydown="e => OnNodeKeyDown(e, node.Id)">
+                    @if (node.IsDone)
+                    {
+                        <svg viewBox="0 0 24 24" class="mindmap-check" aria-hidden="true">@((MarkupString)Icons.Material.Filled.CheckCircle)</svg>
+                    }
+                    @if (node.Id == _editingId)
+                    {
+                        <input @ref="_editInput" class="mindmap-edit" @bind="_editText" @bind:event="oninput" maxlength="@Mindmap.MaxTextLength"
+                               size="@Math.Clamp(_editText.Length + 1, 6, 40)" aria-label="@(node.ParentId is null ? "Central idea" : "Idea")"
+                               @onkeydown="e => OnEditKeyDown(e, node.Id)" @onblur="() => CommitEdit(node.Id)" />
+                    }
+                    else
+                    {
+                        <span class="mindmap-label">@(string.IsNullOrWhiteSpace(node.Text) ? "…" : node.Text)</span>
+                    }
+                    @if (node.WorkItemId is { } linkedId)
+                    {
+                        @LinkBadge(linkedId)
+                    }
+                    @if (node.Id == _selectedId)
+                    {
+                        <span class="mindmap-actions">
+                            @if (node.Id != _editingId)
+                            {
+                                @Action(Icons.Material.Filled.Edit, "Edit idea", () => StartEdit(node.Id))
+                            }
+                            @Action(Icons.Material.Filled.Add, "Add idea below", () => AddChild(node.Id))
+                            @Action(node.IsDone ? Icons.Material.Filled.Undo : Icons.Material.Filled.Check, node.IsDone ? "Mark not done" : "Mark done",
+                                    () => ToggleDone(node.Id))
+                            @WorkItemMenu(node)
+                            @if (node.ParentId is not null)
+                            {
+                                @Action(Icons.Material.Filled.DeleteOutline, "Remove idea", () => RemoveAsync(node.Id), "mindmap-action-remove")
+                            }
+                        </span>
+                    }
+                </div>
+            }
+        }
+    </div>
+    <div class="mindmap-hint">
+        Double-click an idea to edit it (Enter to finish, Tab to add an idea below). Drag an idea to move it with everything below it, or drop it on
+        another idea to move it there. Drag the background to look around.
+    </div>
+    <div class="mindmap-overlay">
+        <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small" OnClick="CenterAsync" title="Back to the central idea"
+                       aria-label="Back to the central idea" />
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")] public Guid? Id { get; set; }
+
+    /// <summary>An idea to select and bring into view, e.g. from a work item linked to it.</summary>
+    [SupplyParameterFromQuery(Name = "idea")] public Guid? IdeaQuery { get; set; }
+
+    // The idea from the URL that was brought into view last, so selecting another one isn't overruled, and whether to do it after rendering.
+    private Guid? _focusedIdea;
+    private bool _focusIdea;
+
+    private ElementReference _stage;
+    private ElementReference _world;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _handle;
+    private DotNetObjectReference<Mindmaps>? _selfReference;
+    private ElementReference _editInput;
+
+    private List<MindmapSummary> _maps = [];
+
+    // The work items of the repository, for the ideas linked to them (and the dialog that links an idea).
+    private Dictionary<Guid, WorkItem> _workItems = [];
+    private Mindmap? _map;
+    private Guid? _selectedId;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _dirty;
+    private string? _error;
+
+    // After a move, the browser drops its drag offsets once the moved positions are rendered.
+    private bool _settle;
+
+    // The idea being edited in place, its text so far, and its text before editing (for Escape).
+    private Guid? _editingId;
+    private string _editText = string.Empty;
+    private string _editOriginal = string.Empty;
+
+    // Focus and select the inline editor once it is rendered.
+    private bool _focusEdit;
+
+    private bool IsNew => _map is not null && _map.Id == Guid.Empty;
+
+    private MindmapNode? Selected => _selectedId is { } id ? _map?.Find(id) : null;
+
+    private int DoneCount => _map?.Nodes.Count(node => node.IsDone) ?? 0;
+
+    private string RepositoryName => Repository.Current!.FullName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Loads the first time, and again when the URL names another mindmap (back and forward, or picking one).
+        if (_map is not null && (Id ?? Guid.Empty) == _map.Id)
+        {
+            FocusIdeaFromUrl();
+            return;
+        }
+        if (_map is not null && Id is null && !_loading)
+        {
+            return;
+        }
+        await LoadAsync(Id);
+        FocusIdeaFromUrl();
+    }
+
+    private void FocusIdeaFromUrl()
+    {
+        if (IdeaQuery is { } ideaId && ideaId != _focusedIdea && _map?.Find(ideaId) is not null)
+        {
+            _focusedIdea = ideaId;
+            _selectedId = ideaId;
+            _editingId = null;
+            _focusIdea = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Mindmaps.razor.js");
+                _selfReference = DotNetObjectReference.Create(this);
+                _handle = await _module.InvokeAsync<IJSObjectReference>("attach", _stage, _world, _selfReference);
+            }
+            if (_settle && _handle is not null)
+            {
+                _settle = false;
+                await _handle.InvokeVoidAsync("settle");
+            }
+            if (_focusIdea && _handle is not null && Selected is { } idea)
+            {
+                _focusIdea = false;
+                await _handle.InvokeVoidAsync("centerOn", idea.X, idea.Y);
+            }
+            if (_focusEdit && _editingId is not null && _handle is not null)
+            {
+                _focusEdit = false;
+                await _handle.InvokeVoidAsync("focusEditor", _editInput);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task LoadAsync(Guid? id)
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _maps = await MindmapData.GetAllAsync(RepositoryName);
+            await LoadWorkItemsAsync();
+            var pick = id ?? _maps.FirstOrDefault()?.Id;
+            var map = pick is { } pickId ? await MindmapData.GetAsync(RepositoryName, pickId) : null;
+            if (id is not null && map is null)
+            {
+                _error = "This mindmap does not exist (anymore).";
+            }
+            Show(map ?? Mindmap.Create(RepositoryName));
+            if (id is null && map is not null)
+            {
+                Navigate($"/mindmaps?id={map.Id}", replace: true);
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the mindmaps: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Show(Mindmap map)
+    {
+        _map = map.Copy();
+        // Shown done right away when a linked item was closed after the map was saved; saving stores it.
+        foreach (var node in _map.Nodes.Where(n => n.WorkItemId is { } linked && _workItems.TryGetValue(linked, out var item) && item.Status == WorkItemStatus.Done))
+        {
+            node.IsDone = true;
+        }
+        _dirty = false;
+        _selectedId = null;
+        _editingId = null;
+        if (map.Id == Guid.Empty && _map.Root is { } root)
+        {
+            // A new map starts by naming its central idea.
+            StartEdit(root.Id);
+        }
+    }
+
+    private void Navigate(string uri, bool replace = false)
+    {
+        Navigation.NavigateTo(uri, replace: replace);
+    }
+
+    private async Task<bool> ConfirmDiscardAsync()
+    {
+        return !_dirty || await Dialogs.ShowMessageBoxAsync("Unsaved changes", "Discard the changes to this mindmap?",
+            yesText: "Discard", cancelText: "Cancel") == true;
+    }
+
+    private async Task ConfirmNavigationAsync(LocationChangingContext context)
+    {
+        // The page only navigates itself without unsaved changes, so this only asks when leaving or picking another map elsewhere.
+        if (!await ConfirmDiscardAsync())
+        {
+            context.PreventNavigation();
+        }
+    }
+
+    private async Task SwitchAsync(Guid id)
+    {
+        if (_map is null || id == _map.Id || !await ConfirmDiscardAsync())
+        {
+            return;
+        }
+        _dirty = false;
+        Navigate(id == Guid.Empty ? "/mindmaps" : $"/mindmaps?id={id}");
+    }
+
+    private async Task NewAsync()
+    {
+        if (!await ConfirmDiscardAsync())
+        {
+            return;
+        }
+        _error = null;
+        Show(Mindmap.Create(RepositoryName));
+        await CenterAsync();
+        if (Id is not null)
+        {
+            Navigate("/mindmaps");
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await SaveCoreAsync();
+    }
+
+    /// <returns>Whether the mindmap is saved.</returns>
+    private async Task<bool> SaveCoreAsync()
+    {
+        if (_map is null)
+        {
+            return false;
+        }
+        if (_editingId is { } editing)
+        {
+            CommitEdit(editing);
+        }
+        if (_map.Nodes.FirstOrDefault(node => string.IsNullOrWhiteSpace(node.Text)) is { } empty)
+        {
+            StartEdit(empty.Id);
+            Snackbar.Add("Every idea needs a text.", Severity.Warning);
+            return false;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            var wasNew = IsNew;
+            var selected = _selectedId;
+            var saved = await MindmapData.SaveAsync(_map);
+            _maps = await MindmapData.GetAllAsync(RepositoryName);
+            _map = saved.Copy();
+            _dirty = false;
+            _selectedId = selected is { } id && _map.Find(id) is not null ? id : null;
+            Snackbar.Add($"Saved the mindmap '{saved.Title}'.", Severity.Success);
+            if (wasNew)
+            {
+                Navigate($"/mindmaps?id={saved.Id}", replace: true);
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException
+                                       or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not save the mindmap: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Loads the stored mindmap again and discards unsaved changes.</summary>
+    private async Task ResetAsync()
+    {
+        if (_map is null || IsNew || await Dialogs.ShowMessageBoxAsync("Reset mindmap", "Discard your changes and load the saved mindmap again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            if (await MindmapData.GetAsync(RepositoryName, _map.Id) is { } stored)
+            {
+                Show(stored);
+            }
+            else
+            {
+                _error = "This mindmap does not exist (anymore).";
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not reset the mindmap: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteMapAsync()
+    {
+        if (_map is null || await Dialogs.ShowMessageBoxAsync("Delete mindmap",
+                $"Delete the mindmap '{_map.Title}' with all its {_map.Nodes.Count} ideas? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            if (!IsNew)
+            {
+                await MindmapData.DeleteAsync(RepositoryName, _map.Id);
+                Snackbar.Add($"Deleted the mindmap '{_map.Title}'.", Severity.Success);
+            }
+            _dirty = false;
+            _map = null;
+            await LoadAsync(null);
+            if (Id is not null && IsNew)
+            {
+                Navigate("/mindmaps", replace: true);
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not delete the mindmap: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Edits an idea in place: its text becomes an input, focused with the text selected.</summary>
+    private void StartEdit(Guid id)
+    {
+        if (_map?.Find(id) is not { } node)
+        {
+            return;
+        }
+        if (_editingId is { } editing && editing != id)
+        {
+            CommitEdit(editing);
+        }
+        _selectedId = id;
+        _editingId = id;
+        _editText = node.Text;
+        _editOriginal = node.Text;
+        _focusEdit = true;
+    }
+
+    /// <summary>Stores the edited text; an empty text keeps the text from before editing.</summary>
+    private void CommitEdit(Guid id)
+    {
+        if (_editingId != id || _map?.Find(id) is not { } node)
+        {
+            return;
+        }
+        var text = _editText.Trim();
+        if (text.Length == 0)
+        {
+            text = _editOriginal;
+        }
+        if (text != node.Text)
+        {
+            node.Text = text;
+            _dirty = true;
+        }
+        _editingId = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+    }
+
+    private void OnEditKeyDown(KeyboardEventArgs e, Guid id)
+    {
+        switch (e.Key)
+        {
+            case "Enter":
+                CommitEdit(id);
+                break;
+            case "Escape":
+                CancelEdit();
+                break;
+            case "Tab" when !e.ShiftKey:
+                CommitEdit(id);
+                AddChild(id);
+                break;
+        }
+    }
+
+    /// <summary>Without the work items the map still works; the linked ideas then can't show their item.</summary>
+    private async Task LoadWorkItemsAsync()
+    {
+        try
+        {
+            _workItems = (await WorkItems.GetAllAsync(RepositoryName)).ToDictionary(item => item.Id);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _workItems = [];
+            Snackbar.Add($"Could not load the work items: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    // The linked item on the idea: its type icon and state, a link to it (JavaScript doesn't start a drag on links).
+    private RenderFragment LinkBadge(Guid workItemId)
+    {
+        if (!_workItems.TryGetValue(workItemId, out var item))
+        {
+            return @<span class="mindmap-link mindmap-link-missing" title="The linked work item no longer exists">
+                <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.LinkOff)</svg>
+            </span>;
+        }
+
+        var state = item.IssueNumber is { } number ? $"#{number}" : WorkItemStatusChip.LabelOf(item.Status);
+        return @<a class="@($"mindmap-link status-{item.Status.ToString().ToLowerInvariant()}")" href="@WorkItemRoutes.ItemPath(item.Type, item.Id)"
+                   style="@($"--t:#{item.Type.LabelColor}")" title="@($"{item.Type.DisplayName}: {item.Title} ({WorkItemStatusChip.LabelOf(item.Status)})")"
+                   aria-label="@($"Open the linked {item.Type.DisplayName.ToLowerInvariant()} {item.Title}")">
+            <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)WorkItemRoutes.Icon(item.Type))</svg>
+            <span>@state</span>
+        </a>;
+    }
+
+    // The selected idea's work item button: open, link or unlink an existing item, or create one from the idea.
+    private RenderFragment WorkItemMenu(MindmapNode node)
+    {
+        var linked = node.WorkItemId is { } linkedId && _workItems.TryGetValue(linkedId, out var found) ? found : null;
+        return @<MudMenu AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Dense="true" title="Work item" aria-label="Work item">
+            @* MudBlazor 9: a custom activator opens the menu itself, through the context. *@
+            <ActivatorContent Context="menu">
+                <button type="button" class="@($"mindmap-action {(node.WorkItemId is null ? null : "mindmap-action-linked")}")" title="Work item"
+                        aria-label="Work item" aria-haspopup="menu" @onclick="menu.ToggleAsync">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)(node.WorkItemId is null ? Icons.Material.Filled.AddTask : Icons.Material.Filled.Link))</svg>
+                </button>
+            </ActivatorContent>
+            <ChildContent>
+                @if (linked is not null)
+                {
+                    <MudMenuItem Href="@WorkItemRoutes.ItemPath(linked.Type, linked.Id)" Icon="@WorkItemRoutes.Icon(linked.Type)">
+                        Open @linked.Type.DisplayName.ToLowerInvariant() <i>@linked.Title</i>
+                    </MudMenuItem>
+                }
+                <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => LinkExistingAsync(node.Id)">
+                    @(node.WorkItemId is null ? "Link an existing work item…" : "Link another work item…")
+                </MudMenuItem>
+                @if (node.WorkItemId is not null)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Filled.LinkOff" OnClick="() => Unlink(node.Id)">Unlink</MudMenuItem>
+                }
+                else
+                {
+                    <MudDivider Class="my-1" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1 d-block">Create from this idea, written by the Mindmap Work Item Writer</MudText>
+                    @foreach (var type in WorkItemTypeRules.All)
+                    {
+                        <MudMenuItem Icon="@WorkItemRoutes.Icon(type)" OnClick="() => CreateWorkItemAsync(node.Id, type)">New @type.DisplayName.ToLowerInvariant()</MudMenuItem>
+                    }
+                }
+            </ChildContent>
+        </MudMenu>;
+    }
+
+    private async Task LinkExistingAsync(Guid ideaId)
+    {
+        if (_map?.Find(ideaId) is not { } node)
+        {
+            return;
+        }
+        var linkedElsewhere = _map.Nodes.Where(n => n.Id != ideaId && n.WorkItemId is not null).Select(n => n.WorkItemId!.Value).ToHashSet();
+        var dialog = await Dialogs.ShowAsync<LinkWorkItemDialog>($"Link '{node.Text}' to a work item",
+            new DialogParameters<LinkWorkItemDialog>
+            {
+                { d => d.Items, _workItems.Values.ToList() },
+                { d => d.IdeaText, node.Text },
+                { d => d.LinkedIds, linkedElsewhere },
+                { d => d.Current, node.WorkItemId }
+            },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        if (await dialog.Result is not { Canceled: false, Data: Guid workItemId } || _map?.Find(ideaId) is not { } idea)
+        {
+            return;
+        }
+
+        idea.WorkItemId = workItemId;
+        if (_workItems.TryGetValue(workItemId, out var item) && item.Status == WorkItemStatus.Done)
+        {
+            idea.IsDone = true;
+        }
+        _selectedId = ideaId;
+        _dirty = true;
+        StateHasChanged();
+    }
+
+    private void Unlink(Guid ideaId)
+    {
+        if (_map?.Find(ideaId) is { WorkItemId: not null } node)
+        {
+            node.WorkItemId = null;
+            _dirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Opens the editor of a new item of <paramref name="type"/> for the idea, which the Mindmap Work Item Writer fills in and
+    /// links to the idea when it's saved. The agent reads the stored map, so the map is saved first.
+    /// </summary>
+    private async Task CreateWorkItemAsync(Guid ideaId, WorkItemType type)
+    {
+        if (_map is null || _map.Find(ideaId) is null)
+        {
+            return;
+        }
+        if ((_dirty || IsNew || _editingId is not null) && !await SaveCoreAsync())
+        {
+            return;
+        }
+        var parent = MindmapLayout.ProposedParent(_map, ideaId, type, _workItems);
+        Navigate(WorkItemRoutes.NewPath(type, parent, mindmapId: _map.Id, ideaId: ideaId));
+    }
+
+    private void ToggleDone(Guid id)
+    {
+        if (_map?.Find(id) is { } node)
+        {
+            node.IsDone = !node.IsDone;
+            _dirty = true;
+        }
+    }
+
+    // A small round button of the selected idea; JavaScript doesn't start a drag on buttons.
+    private RenderFragment Action(string icon, string label, Func<Task> onClick, string? extraClass = null)
+    {
+        return @<button type="button" class="@($"mindmap-action {extraClass}")" title="@label" aria-label="@label" @onclick="onClick"
+                        @onclick:stopPropagation="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)icon)</svg>
+        </button>;
+    }
+
+    private RenderFragment Action(string icon, string label, Action onClick, string? extraClass = null)
+    {
+        return Action(icon, label, () =>
+        {
+            onClick();
+            return Task.CompletedTask;
+        }, extraClass);
+    }
+
+    private void AddChild(Guid parentId)
+    {
+        if (_map is null || _map.Find(parentId) is null)
+        {
+            return;
+        }
+        if (_map.Nodes.Count >= Mindmap.MaxNodes)
+        {
+            Snackbar.Add($"A mindmap has at most {Mindmap.MaxNodes} ideas.", Severity.Warning);
+            return;
+        }
+        var node = MindmapLayout.AddChild(_map, parentId, "New idea");
+        _dirty = true;
+        StartEdit(node.Id);
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        if (_map?.Find(id) is not { ParentId: { } parentId } node)
+        {
+            return;
+        }
+        var below = _map.SubtreeOf(id).Count - 1;
+        if (below > 0 && await Dialogs.ShowMessageBoxAsync("Remove idea",
+                $"Remove '{node.Text}' and the {below} {(below == 1 ? "idea" : "ideas")} below it?", yesText: "Remove", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+        MindmapLayout.Remove(_map, id);
+        _selectedId = parentId;
+        _dirty = true;
+    }
+
+    private async Task CenterAsync()
+    {
+        try
+        {
+            if (_handle is not null)
+            {
+                await _handle.InvokeVoidAsync("center");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task OnNodeKeyDown(KeyboardEventArgs e, Guid id)
+    {
+        // Keys typed in the inline editor bubble up to the idea; the editor handles those itself.
+        if (_editingId == id)
+        {
+            return;
+        }
+        switch (e.Key)
+        {
+            case "Enter" or "F2":
+                StartEdit(id);
+                break;
+            case " ":
+                _selectedId = id;
+                break;
+            case "Insert":
+                AddChild(id);
+                break;
+            case "Delete":
+                await RemoveAsync(id);
+                break;
+        }
+    }
+
+    /// <summary>A click on an idea selects it; a click on the background (<c>null</c>) clears the selection.</summary>
+    [JSInvokable]
+    public void Select(string? id)
+    {
+        _selectedId = Guid.TryParse(id, out var value) && _map?.Find(value) is not null ? value : null;
+        StateHasChanged();
+    }
+
+    /// <summary>Edits the idea that was double-clicked in place.</summary>
+    [JSInvokable]
+    public void EditFromBrowser(string id)
+    {
+        if (Guid.TryParse(id, out var value))
+        {
+            StartEdit(value);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// An idea was dragged: dropped on another idea, it moves below that one (when that is allowed); otherwise it moves
+    /// (with everything below it) by the distance it was dragged.
+    /// </summary>
+    [JSInvokable]
+    public void Move(string id, double dx, double dy, string? targetId)
+    {
+        _settle = true;
+        if (_map is not null && Guid.TryParse(id, out var nodeId) && _map.Find(nodeId) is not null)
+        {
+            if (Guid.TryParse(targetId, out var target) && MindmapLayout.CanReparent(_map, nodeId, target))
+            {
+                MindmapLayout.Reparent(_map, nodeId, target);
+            }
+            else
+            {
+                MindmapLayout.Move(_map, nodeId, dx, dy);
+            }
+            _selectedId = nodeId;
+            _dirty = true;
+        }
+        StateHasChanged();
+    }
+
+    private string NodeClass(MindmapNode node)
+    {
+        var classes = node.ParentId is null ? "mindmap-node mindmap-root" : $"mindmap-node branch-{MindmapLayout.BranchOf(_map!, node.Id)}";
+        if (node.IsDone)
+        {
+            classes += " mindmap-done";
+        }
+        if (node.Id == _selectedId)
+        {
+            classes += " mindmap-selected";
+        }
+        return classes;
+    }
+
+    private static string NodeStyle(MindmapNode node)
+    {
+        return $"left:{Number(node.X)}px;top:{Number(node.Y)}px";
+    }
+
+    private static string Number(double value)
+    {
+        return value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_handle is not null)
+            {
+                await _handle.InvokeVoidAsync("dispose");
+                await _handle.DisposeAsync();
+            }
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _selfReference?.Dispose();
+    }
+}

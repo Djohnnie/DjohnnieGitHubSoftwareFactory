@@ -1,0 +1,81 @@
+.link-list {
+    max-height: min(55vh, 460px);
+    overflow-y: auto;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.link-item {
+    /* A fixed icon column and a text column, so the title and the line below it start at the same place. */
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 10px;
+    box-sizing: border-box;
+    margin: 0;
+    line-height: 1.35;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.link-item:last-child {
+    border-bottom: none;
+}
+
+.link-item:hover,
+.link-item:focus-visible {
+    background: color-mix(in srgb, var(--mud-palette-primary) 7%, transparent);
+    outline: none;
+}
+
+.link-item-selected,
+.link-item-selected:hover {
+    background: color-mix(in srgb, var(--mud-palette-primary) 16%, transparent);
+}
+
+.link-item-icon {
+    display: flex;
+    padding-top: 1px;
+}
+
+.link-item-icon svg {
+    display: block;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.link-item-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.link-item-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.link-item-title,
+.link-item-meta {
+    display: block;
+    margin: 0;
+    padding: 0;
+    text-indent: 0;
+}
+
+.link-item-meta {
+    overflow-wrap: anywhere;
+    font-size: .78rem;
+    color: var(--mud-palette-text-secondary);
+}

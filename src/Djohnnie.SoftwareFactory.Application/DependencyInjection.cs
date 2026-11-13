@@ -10,6 +10,7 @@ using Djohnnie.SoftwareFactory.Application.Features.InternalModels;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.Mindmaps;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Application.Features.Speech;
 using Djohnnie.SoftwareFactory.Application.Features.SyncLog;
@@ -52,6 +53,7 @@ public static class DependencyInjection
             services.AddScoped<SyncLogService>();
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<SkillService>();
+            services.AddScoped<MindmapService>();
             services.AddScoped<WorkItemTemplateService>();
             services.AddScoped<GitHubService>();
             services.AddScoped<RepositoryService>();

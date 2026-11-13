@@ -15,6 +15,7 @@
 @inject GitHubService GitHub
 @inject AssistantService Assistant
 @inject InternalAgentService InternalAgents
+@inject MindmapService Mindmaps
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -29,6 +30,15 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h4">@Heading</MudText>
     <WorkItemTypeChip Type="_type" />
+    @foreach (var link in _linkedIdeas)
+    {
+        @* The mindmap ideas this item is linked to; each opens the map with the idea selected. *@
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@(link.IsDone ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.BubbleChart)"
+                 Href="@($"/mindmaps?id={link.MindmapId}&idea={link.IdeaId}")" Class="mindmap-idea-chip"
+                 title="@($"Linked to the idea '{link.IdeaText}' of the mindmap '{link.MindmapTitle}'{(link.IsDone ? ", done" : null)}")">
+            @link.MindmapTitle › @link.IdeaText
+        </MudChip>
+    }
     @if (!_loading && _item?.PullRequestBranch is { } branch)
     {
         @* Copilot's branch, to check the pull request out locally. *@
@@ -101,6 +111,22 @@ else if (_item is not null)
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudStack Spacing="4">
+                    @if (IsNew && _idea is not null)
+                    {
+                        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Icon="@Icons.Material.Filled.BubbleChart" Class="mindmap-origin">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+                                <span>
+                                    For the idea <b>@_idea.Text</b> of the mindmap <MudLink Href="@($"/mindmaps?id={_mindmap!.Id}")">@_mindmap.Title</MudLink>.
+                                    @(_writing ? $"The Mindmap Work Item Writer is writing the {Name} from the whole mindmap…" : $"Saving links this {Name} to the idea; closing it marks the idea done.")
+                                </span>
+                                @if (_writerActive && !_writing)
+                                {
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                               OnClick="WriteAgainAsync" Disabled="_busy">Write again</MudButton>
+                                }
+                            </MudStack>
+                        </MudAlert>
+                    }
                     @if (IsNew && _templates.Count > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
@@ -405,6 +431,10 @@ else if (_item is not null)
     [SupplyParameterFromQuery(Name = "template")] public Guid? TemplateId { get; set; }
     [SupplyParameterFromQuery(Name = "parent")] public Guid? ParentIdQuery { get; set; }
 
+    /// <summary>With <see cref="IdeaId"/>: the mindmap idea a new item is written for (by the Mindmap Work Item Writer) and linked to on save.</summary>
+    [SupplyParameterFromQuery(Name = "mindmap")] public Guid? MindmapId { get; set; }
+    [SupplyParameterFromQuery(Name = "idea")] public Guid? IdeaId { get; set; }
+
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
 
@@ -441,7 +471,16 @@ else if (_item is not null)
     private Guid _selectedTemplateId;
     private Guid _templateChoiceId;
     private bool _initialized;
-    private (WorkItemType Type, Guid? Id, Guid? TemplateId, Guid? ParentId) _loadedParameters;
+    private (WorkItemType Type, Guid? Id, Guid? TemplateId, Guid? ParentId, Guid? MindmapId, Guid? IdeaId) _loadedParameters;
+
+    // The mindmap idea a new item is created for, and whether the Mindmap Work Item Writer can (and is) writing it.
+    private Mindmap? _mindmap;
+    private MindmapNode? _idea;
+
+    // The mindmap ideas a stored item is linked to.
+    private List<MindmapIdeaLink> _linkedIdeas = [];
+    private bool _writerActive;
+    private bool _writing;
 
     private bool IsNew => Id is null;
     private string Name => WorkItemActions.Name(_type);
@@ -474,7 +513,9 @@ else if (_item is not null)
         }
     }
 
-    private string BackPath => _item?.Parent is { } parent && !IsNew
+    private string BackPath => IsNew && _mindmap is not null
+        ? $"/mindmaps?id={_mindmap.Id}"
+        : _item?.Parent is { } parent && !IsNew
         ? WorkItemRoutes.ItemPath(parent.Type, parent.Id)
         : SelectedParent is { } selected ? WorkItemRoutes.ItemPath(selected.Type, selected.Id) : WorkItemRoutes.ListPath(_type);
 
@@ -544,7 +585,7 @@ else if (_item is not null)
         }
 
         var type = WorkItemRoutes.TypeOf(Navigation);
-        var parameters = (type, Id, TemplateId, ParentIdQuery);
+        var parameters = (type, Id, TemplateId, ParentIdQuery, MindmapId, IdeaId);
         if (_initialized && _loadedParameters == parameters)
         {
             return;
@@ -562,6 +603,9 @@ else if (_item is not null)
         _children = [];
         _selectedTemplateId = Guid.Empty;
         _templateChoiceId = Guid.Empty;
+        _mindmap = null;
+        _idea = null;
+        _linkedIdeas = [];
         try
         {
             _item = IsNew
@@ -580,9 +624,11 @@ else if (_item is not null)
             else
             {
                 await LoadHierarchyAsync();
+                await LoadLinkedIdeasAsync();
                 if (IsNew)
                 {
                     await LoadTemplatesAsync();
+                    await LoadMindmapIdeaAsync();
                 }
                 _generatorActive = !IsNew && _type.GeneratedChildType is not null && Assistant.IsConfigured
                     && (await InternalAgents.GetAsync(InternalAgentKeys.WorkItemBreakdown)).IsEnabled;
@@ -604,6 +650,10 @@ else if (_item is not null)
         _suggestionsForm = (_item?.Title ?? string.Empty, _item?.Description ?? string.Empty);
         await CreateAssistantToolsAsync();
         SuggestModelOnOpen();
+        if (_idea is not null && _item is not null)
+        {
+            await WriteFromMindmapAsync();
+        }
     }
 
     private async Task LoadHierarchyAsync()
@@ -645,6 +695,122 @@ else if (_item is not null)
         {
             Snackbar.Add($"Could not load the {Name} templates: {ex.Message}", Severity.Warning);
         }
+    }
+
+    /// <summary>Without them the item still works; the chips to its mindmap ideas are then missing.</summary>
+    private async Task LoadLinkedIdeasAsync()
+    {
+        if (IsNew || _item is null)
+        {
+            return;
+        }
+        try
+        {
+            _linkedIdeas = await Mindmaps.GetLinkedIdeasAsync(RepositoryName, _item.Id);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Logger.LogWarning(ex, "Could not load the mindmap ideas linked to work item {Id}.", _item.Id);
+        }
+    }
+
+    /// <summary>The idea a new item is created for (from the mindmap page); a removed idea or map only gives a warning.</summary>
+    private async Task LoadMindmapIdeaAsync()
+    {
+        if (MindmapId is not { } mindmapId || IdeaId is not { } ideaId)
+        {
+            return;
+        }
+        try
+        {
+            _mindmap = await Mindmaps.GetAsync(RepositoryName, mindmapId);
+            _idea = _mindmap?.Find(ideaId);
+            if (_idea is null)
+            {
+                Snackbar.Add("The mindmap idea no longer exists, so this item won't be linked to it.", Severity.Warning);
+                return;
+            }
+            _writerActive = Assistant.IsConfigured && (await InternalAgents.GetAsync(InternalAgentKeys.MindmapWorkItemWriter)).IsEnabled;
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not load the mindmap: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Lets the Mindmap Work Item Writer fill in the title and description from the whole map, following the chosen template.
+    /// Without the agent (or when it fails) the idea becomes the title and the template stays the description.
+    /// </summary>
+    private async Task WriteFromMindmapAsync()
+    {
+        if (_idea is null || _mindmap is null || _item is null)
+        {
+            return;
+        }
+        if (!_writerActive)
+        {
+            if (string.IsNullOrWhiteSpace(_item.Title))
+            {
+                _item.Title = _idea.Text.Length <= 256 ? _idea.Text : _idea.Text[..256];
+            }
+            return;
+        }
+
+        _writing = true;
+        _busy = true;
+        StateHasChanged();
+        try
+        {
+            var written = await Mindmaps.GenerateWorkItemAsync(new(RepositoryName, _mindmap.Id, _idea.Id, _type,
+                _selectedTemplateId == Guid.Empty ? null : _selectedTemplateId, _item.ParentId));
+            _item.Title = written.Title;
+            _item.Description = written.Description;
+            _suggestionsForm = (_item.Title, _item.Description);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            if (string.IsNullOrWhiteSpace(_item.Title))
+            {
+                _item.Title = _idea.Text.Length <= 256 ? _idea.Text : _idea.Text[..256];
+            }
+        }
+        finally
+        {
+            _writing = false;
+            _busy = false;
+        }
+    }
+
+    private async Task WriteAgainAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Write again?",
+                $"The Mindmap Work Item Writer replaces the title and description with a new {Name}, following the chosen template and parent.",
+                yesText: "Write again", cancelText: "Cancel") == true)
+        {
+            await WriteFromMindmapAsync();
+        }
+    }
+
+    /// <summary>Links a new item that was created for a mindmap idea to that idea.</summary>
+    private async Task LinkToMindmapIdeaAsync()
+    {
+        if (_mindmap is null || _idea is null || _item is null)
+        {
+            return;
+        }
+        try
+        {
+            await Mindmaps.LinkAsync(RepositoryName, _mindmap.Id, _idea.Id, _item.Id);
+            Snackbar.Add($"Linked to the idea '{_idea.Text}' of the mindmap '{_mindmap.Title}'.", Severity.Info);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Saved, but could not link it to the mindmap idea: {ex.Message}", Severity.Warning);
+        }
+        _mindmap = null;
+        _idea = null;
     }
 
     private async Task ChangeTemplateAsync(Guid templateId)
@@ -854,6 +1020,7 @@ else if (_item is not null)
         _item = await WorkItemService.SaveAsync(_item);
         if (wasNew)
         {
+            await LinkToMindmapIdeaAsync();
             if (_chat is not null)
             {
                 await _chat.AttachAsync(ChatOwner.ForWorkItem(RepositoryName, _item.Id));

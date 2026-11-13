@@ -1,0 +1,340 @@
+/* The map fills what is left of the window below the toolbar. The world is a zero-size anchor in the middle of the stage
+   at the central idea's position (0,0); ideas and lines are positioned in pixels around it, and the browser pans it. */
+.mindmap-stage {
+    position: relative;
+    height: calc(100dvh - 340px);
+    min-height: 480px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 14px;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+    background:
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--mud-palette-primary) 8%, transparent) 0, transparent 55%),
+        radial-gradient(circle, color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent) 1px, transparent 1.5px) 0 0 / 22px 22px,
+        var(--mud-palette-surface);
+}
+
+.mindmap-stage.mindmap-panning,
+.mindmap-stage.mindmap-dragging {
+    cursor: grabbing;
+}
+
+.mindmap-stage ::deep .mindmap-progress {
+    position: absolute;
+    inset: 0 0 auto 0;
+    z-index: 3;
+}
+
+.mindmap-world {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+}
+
+.mindmap-overlay {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 3;
+    border-radius: 50%;
+    background: var(--mud-palette-surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .15);
+}
+
+/* Branch colours: each idea around the centre and everything below it share one. */
+
+.branch-0 { --c: #6F42C1; }
+.branch-1 { --c: #0969DA; }
+.branch-2 { --c: #1A7F37; }
+.branch-3 { --c: #BF8700; }
+.branch-4 { --c: #CF222E; }
+.branch-5 { --c: #1B7C83; }
+
+/* Lines */
+
+.mindmap-edges {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.mindmap-edge {
+    fill: none;
+    stroke: color-mix(in srgb, var(--c, var(--mud-palette-text-secondary)) 60%, transparent);
+    stroke-width: 2px;
+    stroke-linecap: round;
+}
+
+.mindmap-drag-edge {
+    stroke-dasharray: 5 5;
+}
+
+/* Ideas: centred on their point. */
+
+.mindmap-node {
+    --c: var(--mud-palette-primary);
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* The world has no width, so without max-content an idea would shrink to its longest word. */
+    width: max-content;
+    max-width: 220px;
+    min-width: 64px;
+    padding: 7px 12px;
+    border-radius: 10px;
+    border: 1.5px solid color-mix(in srgb, var(--c) 55%, transparent);
+    border-left: 5px solid var(--c);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .08);
+    font-size: .85rem;
+    line-height: 1.25;
+    cursor: pointer;
+    z-index: 1;
+    animation: mindmap-pop 260ms cubic-bezier(.2, .9, .3, 1.3) backwards;
+    transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.mindmap-node:hover {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .14);
+}
+
+.mindmap-node:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 3px;
+}
+
+.mindmap-label {
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.mindmap-root {
+    max-width: 280px;
+    padding: 14px 22px;
+    border-radius: 999px;
+    border: none;
+    color: #fff;
+    background: radial-gradient(circle at 35% 30%, #4a3a5e, var(--mud-palette-appbar-background));
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--mud-palette-primary) 14%, transparent), 0 8px 24px rgba(42, 33, 54, .25);
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.mindmap-done .mindmap-label {
+    text-decoration: line-through;
+    opacity: .65;
+}
+
+.mindmap-check {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: var(--mud-palette-success);
+}
+
+.mindmap-root .mindmap-check {
+    fill: #fff;
+}
+
+.mindmap-selected {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent), 0 3px 10px rgba(0, 0, 0, .14);
+    z-index: 2;
+}
+
+.mindmap-root.mindmap-selected {
+    box-shadow: 0 0 0 4px var(--mud-palette-primary), 0 8px 24px rgba(42, 33, 54, .25);
+}
+
+.mindmap-dragging .mindmap-node {
+    transition: none;
+}
+
+.mindmap-drop-target {
+    background: color-mix(in srgb, var(--c) 18%, var(--mud-palette-surface));
+    box-shadow: 0 0 0 3px var(--c), 0 3px 10px rgba(0, 0, 0, .18);
+}
+
+.mindmap-root.mindmap-drop-target {
+    box-shadow: 0 0 0 4px var(--mud-palette-success), 0 8px 24px rgba(42, 33, 54, .25);
+}
+
+@keyframes mindmap-pop {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(.6);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mindmap-node {
+        animation: none;
+        transition: none;
+    }
+}
+
+/* Inline editing */
+
+.mindmap-edit {
+    field-sizing: content;
+    min-width: 6ch;
+    max-width: 100%;
+    padding: 1px 4px;
+    margin: -2px -4px;
+    border: none;
+    border-radius: 4px;
+    outline: 2px solid color-mix(in srgb, var(--c) 60%, transparent);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    user-select: text;
+    cursor: text;
+}
+
+.mindmap-root .mindmap-edit {
+    text-align: center;
+    outline-color: #fff;
+}
+
+/* The selected idea's buttons, in a row just below it. */
+
+.mindmap-actions {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--mud-palette-surface);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+    animation: mindmap-actions-in 160ms ease-out;
+}
+
+.mindmap-action {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    cursor: pointer;
+}
+
+.mindmap-action:hover,
+.mindmap-action:focus-visible {
+    background: color-mix(in srgb, var(--mud-palette-primary) 14%, transparent);
+    outline: none;
+}
+
+.mindmap-action svg {
+    width: 17px;
+    height: 17px;
+    fill: currentColor;
+}
+
+.mindmap-action-remove {
+    color: var(--mud-palette-error);
+}
+
+.mindmap-dragging .mindmap-actions {
+    display: none;
+}
+
+@keyframes mindmap-actions-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -4px);
+    }
+}
+
+.mindmap-hint {
+    position: absolute;
+    left: 12px;
+    bottom: 10px;
+    right: 60px;
+    z-index: 3;
+    font-size: .75rem;
+    color: var(--mud-palette-text-secondary);
+    pointer-events: none;
+}
+
+/* The work item an idea is linked to: its type icon and issue number (or state), linking to it. */
+
+.mindmap-link {
+    --t: var(--mud-palette-text-secondary);
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px 1px 4px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--t) 55%, transparent);
+    background: color-mix(in srgb, var(--t) 12%, var(--mud-palette-surface));
+    color: var(--mud-palette-text-primary);
+    font-size: .7rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.mindmap-link:hover {
+    background: color-mix(in srgb, var(--t) 24%, var(--mud-palette-surface));
+}
+
+.mindmap-link svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--t);
+}
+
+.mindmap-link.status-done {
+    opacity: .75;
+}
+
+.mindmap-link.status-inprogress::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mud-palette-warning);
+}
+
+.mindmap-link-missing {
+    --t: var(--mud-palette-error);
+    padding: 1px 4px;
+    cursor: help;
+}
+
+.mindmap-action-linked {
+    color: var(--mud-palette-primary);
+}
+
+.mindmap-gliding {
+    transition: transform 400ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mindmap-gliding {
+        transition: none;
+    }
+}
