@@ -1,0 +1,228 @@
+@page "/skills/new"
+@page "/skills/edit/{Id:guid}"
+@attribute [RepositoryIndependent]
+@inject SkillService SkillData
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New skill" : $"Edit skill {_title}")</PageTitle>
+
+<PageBreadcrumbs Parents="@([new("Skills", "/skills")])" Current="@(IsNew ? "New" : _title ?? "…")" BackDisabled="_saving" />
+
+<MudText Typo="Typo.h4" GutterBottom="true">@(IsNew ? "New skill" : $"Edit skill {_title}")</MudText>
+
+@if (!_loading && _skill is not null)
+{
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save skill
+        </MudButton>
+        @if (!IsNew)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Undo">Reset</MudButton>
+        }
+    </MudStack>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_skill is not null)
+{
+    <MudForm @ref="_form" Model="_skill">
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudStack Spacing="4">
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Skill</MudText>
+                        <MudTextField T="string" Variant="Variant.Outlined" Value="_skill.Name" ValueChanged="OnNameChanged" Label="Name" Required="true"
+                                      RequiredError="A name is required." MaxLength="Skill.MaxNameLength" Counter="Skill.MaxNameLength"
+                                      Validation="@(new Func<string?, string?>(ValidateName))"
+                                      HelperText="@($"Lowercase letters, digits and hyphens; also the directory name: {Skill.GetPath(string.IsNullOrEmpty(_skill.Name) ? "…" : _skill.Name)}")" />
+                        @if (Renamed)
+                        {
+                            <MudAlert Variant="Variant.Text" Severity="Severity.Warning" Dense="true" Class="mt-2">
+                                Renaming doesn't move the skill in repositories where it's enabled as '@_storedName': disable it there first,
+                                or it stays behind as a skill that isn't managed.
+                            </MudAlert>
+                        }
+                        <DictationTextField @bind-Value="_skill.Description" Label="Description" Required="true" Lines="3"
+                                            RequiredError="A description is required." MaxLength="Skill.MaxDescriptionLength"
+                                            HelperText="What the skill does and when Copilot should use it. Copilot reads this to decide whether to load the skill." />
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6">Instructions</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                            The Markdown below the frontmatter: the steps, examples and guidelines Copilot follows when it uses the skill.
+                        </MudText>
+                        <MarkdownEditor @bind-Value="_skill.Instructions" RawMarkdown="true" MaxLength="Skill.MaxInstructionsLength" Height="500px"
+                                        Placeholder="Describe step by step how Copilot should perform this task." />
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6">Optional properties</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">Left out of the frontmatter when empty.</MudText>
+                        <MudTextField @bind-Value="_skill.License" Variant="Variant.Outlined" Label="License" MaxLength="Skill.MaxLicenseLength"
+                                      HelperText="The license of the skill, e.g. MIT or Apache-2.0." />
+                        <MudTextField @bind-Value="_skill.Compatibility" Variant="Variant.Outlined" Label="Compatibility" Lines="2"
+                                      MaxLength="Skill.MaxCompatibilityLength" Counter="Skill.MaxCompatibilityLength"
+                                      HelperText="Environment requirements, e.g. required tools, packages or network access." />
+                        <MudTextField @bind-Value="_skill.AllowedTools" Variant="Variant.Outlined" Label="Allowed tools"
+                                      MaxLength="Skill.MaxAllowedToolsLength"
+                                      HelperText="Space-separated tools the skill may use without asking, e.g. shell(git:*) read. Experimental." />
+                    </MudPaper>
+                </MudStack>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudStack Spacing="4">
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Managed skill</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Stored in DGHSF, not in a repository. Enable it per repository on the Skills page. Saving doesn't change repositories
+                            where the skill is already enabled: the Skills page then shows that they differ and offers to update them.
+                        </MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                        <MudText Typo="Typo.h6" GutterBottom="true">@Skill.FileName</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">What enabling the skill commits.</MudText>
+                        <pre class="skill-preview">@SkillService.Render(_skill)</pre>
+                    </MudPaper>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private MudForm? _form;
+    private Skill? _skill;
+    private string? _title;
+    private string? _storedName;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private bool IsNew => Id is null;
+
+    private bool Renamed => !IsNew && _storedName is not null && _skill is not null && _skill.Name != _storedName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (IsNew)
+            {
+                _skill = new Skill();
+                return;
+            }
+
+            Load(await SkillData.GetAsync(Id!.Value));
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the skill: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Load(Skill? skill)
+    {
+        if (skill is null)
+        {
+            _error = "This skill does not exist.";
+            _skill = null;
+            return;
+        }
+
+        _title = skill.Name;
+        _storedName = skill.Name;
+        _skill = skill.Copy();
+    }
+
+    // Typed names become valid names when the field loses focus (e.g. "Review PR" becomes "review-pr").
+    private void OnNameChanged(string? value)
+    {
+        _skill!.Name = Skill.Slugify(value);
+    }
+
+    private static string? ValidateName(string? value)
+    {
+        return string.IsNullOrEmpty(value) || Skill.IsValidName(value)
+            ? null
+            : "Use lowercase letters, digits and single hyphens, without a hyphen at the start or end.";
+    }
+
+    /// <summary>Loads the stored skill again and discards unsaved changes.</summary>
+    private async Task ResetAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset skill", "Discard your changes and load the saved skill again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            Load(await SkillData.GetAsync(Id!.Value));
+            if (_form is not null)
+            {
+                await _form.ResetValidationAsync();
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not reset the skill: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            Snackbar.Add("Please fix the highlighted fields.", Severity.Warning);
+            return;
+        }
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            var skill = await SkillData.SaveAsync(_skill!);
+            Snackbar.Add($"Saved the skill '{skill.Name}'.", Severity.Success);
+            Navigation.NavigateTo("/skills");
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException
+                                       or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not save the skill: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

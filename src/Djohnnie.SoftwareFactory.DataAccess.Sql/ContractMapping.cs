@@ -216,4 +216,23 @@ internal static class ContractMapping
             };
         }
     }
+
+    extension(Entities.Skill value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.Skills.Skill ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                Name = value.Name,
+                Description = value.Description,
+                License = value.License,
+                Compatibility = value.Compatibility,
+                AllowedTools = value.AllowedTools,
+                Instructions = value.Instructions,
+                CreatedAt = value.CreatedAt,
+                UpdatedAt = value.UpdatedAt
+            };
+        }
+    }
 }

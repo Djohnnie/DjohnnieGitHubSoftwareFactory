@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261112130729_AddSyncLog";
+    public override string LastMigrationId => "20261113145406_AddSkills";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -634,6 +634,64 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("LastAccessedAt");
 
                 b.ToTable("Repositories");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Skill", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<string>("AllowedTools")
+                    .HasMaxLength(1000)
+                    .HasColumnType("nvarchar(1000)");
+
+                b.Property<string>("Compatibility")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Description")
+                    .IsRequired()
+                    .HasMaxLength(1024)
+                    .HasColumnType("nvarchar(1024)");
+
+                b.Property<string>("Instructions")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
+
+                b.Property<string>("License")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("Name")
+                    .IsUnique();
+
+                b.ToTable("Skills");
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.SyncLogEvent", b =>

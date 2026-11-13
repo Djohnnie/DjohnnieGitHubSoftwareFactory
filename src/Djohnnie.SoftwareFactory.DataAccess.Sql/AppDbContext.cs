@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
+    public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
     public DbSet<InternalAgent> InternalAgents => Set<InternalAgent>();
     public DbSet<InternalModel> InternalModels => Set<InternalModel>();
@@ -44,6 +45,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureWorkItemTemplate()
             .ConfigureAgent()
             .ConfigureAgentTemplate()
+            .ConfigureSkill()
             .ConfigureAiModel()
             .ConfigureInternalAgent()
             .ConfigureAuthSession()

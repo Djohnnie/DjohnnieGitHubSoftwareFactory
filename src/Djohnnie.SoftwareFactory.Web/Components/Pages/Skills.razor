@@ -1,0 +1,227 @@
+@page "/skills"
+@inject SkillService SkillData
+@inject RepositoryContext Repository
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>Skills</PageTitle>
+
+<PageBreadcrumbs Current="Skills" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Skills</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Copilot agent skills, managed in DGHSF and shared across repositories. Enabling a skill in <b>@Repository.Current?.FullName</b>
+            commits <code>@Skill.Directory/&lt;name&gt;/@Skill.FileName</code> directly to the default branch; disabling it deletes that file again.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="/skills/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New skill</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable Outlined="true" Striped="true" T="SkillRow" Items="_rows" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <HeaderContent>
+        <MudTh Style="width:1%">Enabled</MudTh>
+        <MudTh>Skill</MudTh>
+        <MudTh>In this repository</MudTh>
+        <MudTh>Updated</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Enabled">
+            @if (_busy.Contains(context.Skill.Id))
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" aria-label="@($"Committing {context.Skill.Name}")" />
+            }
+            else
+            {
+                <MudSwitch T="bool" Value="@(context.Status is SkillRepositoryStatus.Enabled or SkillRepositoryStatus.Outdated)"
+                           ValueChanged="enabled => SetEnabledAsync(context, enabled)" Color="Color.Primary"
+                           Disabled="@(context.Status is null || _busy.Count > 0)" aria-label="@($"Enable {context.Skill.Name}")" />
+            }
+        </MudTd>
+        <MudTd DataLabel="Skill">
+            <MudText Typo="Typo.body1"><b>@context.Skill.Name</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Skill.Description</MudText>
+        </MudTd>
+        <MudTd DataLabel="In this repository">
+            @switch (context.Status)
+            {
+                case SkillRepositoryStatus.Enabled:
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CheckCircle"
+                             Href="@context.FileUrl" Target="_blank">Enabled</MudChip>
+                    break;
+                case SkillRepositoryStatus.Outdated:
+                    <MudTooltip Text="The repository's SKILL.md differs from this skill. Update it to commit the managed version.">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Sync"
+                                 Href="@context.FileUrl" Target="_blank">Differs</MudChip>
+                    </MudTooltip>
+                    break;
+                case SkillRepositoryStatus.Disabled:
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Disabled</MudChip>
+                    break;
+                default:
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Unknown</MudChip>
+                    break;
+            }
+        </MudTd>
+        <MudTd DataLabel="Updated">@context.Skill.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd Style="text-align:right; white-space:nowrap">
+            @if (context.Status == SkillRepositoryStatus.Outdated)
+            {
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Upgrade" Color="Color.Primary" OnClick="() => SetEnabledAsync(context, true)"
+                               Disabled="_busy.Count > 0" title="Update in this repository" />
+            }
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" Href="@($"/skills/edit/{context.Skill.Id}")" title="Edit" />
+            <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(context)"
+                           Disabled="_busy.Contains(context.Skill.Id)" title="Delete" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Size="Size.Large" Color="Color.Secondary" />
+            <MudText>There are no skills yet. Create one, then enable it in the repositories that need it.</MudText>
+            <MudButton Href="/skills/new" Variant="Variant.Text" Color="Color.Primary">Create the first skill</MudButton>
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@if (_unmanaged.Count > 0)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mt-4">
+        This repository also has skills that aren't managed in DGHSF, so they can't be switched here:
+        @foreach (var name in _unmanaged)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@name</MudChip>
+        }
+    </MudAlert>
+}
+
+@code {
+    private sealed record SkillRow(Skill Skill, SkillRepositoryStatus? Status, string? FileUrl);
+
+    private List<SkillRow> _rows = [];
+    private IReadOnlyList<string> _unmanaged = [];
+    private readonly HashSet<Guid> _busy = [];
+    private bool _loading = true;
+    private string? _error;
+
+    private string RepositoryName => Repository.Current!.FullName;
+
+    protected override Task OnInitializedAsync()
+    {
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var skills = await SkillData.GetRepositorySkillsAsync(RepositoryName);
+            _rows = skills.Skills.Select(s => new SkillRow(s.Skill, s.Status, s.FileUrl)).ToList();
+            _unmanaged = skills.UnmanagedSkills;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            // GitHub can't tell which skills are enabled; still list the managed skills so they can be edited.
+            _error = $"Could not read the skills of {RepositoryName} from GitHub: {ex.Message}";
+            _unmanaged = [];
+            await LoadSkillsOnlyAsync();
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the skills: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadSkillsOnlyAsync()
+    {
+        try
+        {
+            _rows = (await SkillData.GetAllAsync()).Select(skill => new SkillRow(skill, null, null)).ToList();
+        }
+        catch (Djohnnie.SoftwareFactory.Contracts.PersistenceException ex)
+        {
+            _error += $" The skills couldn't be loaded either: {ex.Message}";
+        }
+    }
+
+    private async Task SetEnabledAsync(SkillRow row, bool enabled)
+    {
+        _busy.Add(row.Skill.Id);
+        try
+        {
+            var result = enabled
+                ? await SkillData.EnableAsync(RepositoryName, row.Skill.Id)
+                : await SkillData.DisableAsync(RepositoryName, row.Skill.Id);
+            var status = enabled ? SkillRepositoryStatus.Enabled : SkillRepositoryStatus.Disabled;
+            Replace(row, row with { Status = status, FileUrl = enabled ? row.FileUrl : null });
+
+            var action = !enabled ? "Disabled" : row.Status == SkillRepositoryStatus.Outdated ? "Updated" : "Enabled";
+            Snackbar.Add(result.Changed
+                ? $"{action} '{row.Skill.Name}' in {RepositoryName} (commit {Short(result.CommitSha)})."
+                : $"'{row.Skill.Name}' already was {(enabled ? "enabled" : "disabled")} in {RepositoryName}.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException or Djohnnie.SoftwareFactory.Contracts.DomainRuleException
+                                       or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not {(enabled ? "enable" : "disable")} '{row.Skill.Name}': {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy.Remove(row.Skill.Id);
+        }
+    }
+
+    private async Task DeleteAsync(SkillRow row)
+    {
+        var enabledHere = row.Status is SkillRepositoryStatus.Enabled or SkillRepositoryStatus.Outdated;
+        var message = enabledHere
+            ? $"Delete the skill '{row.Skill.Name}'? Its SKILL.md stays in the repositories where it's enabled, also in {RepositoryName}; disable it first to remove it there."
+            : $"Delete the skill '{row.Skill.Name}'? Its SKILL.md stays in the repositories where it's enabled; disable it there first to remove it.";
+        if (await Dialogs.ShowMessageBoxAsync("Delete skill", message, yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await SkillData.DeleteAsync(row.Skill.Id);
+            _rows.Remove(row);
+            Snackbar.Add($"Deleted the skill '{row.Skill.Name}'.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not delete '{row.Skill.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Replace(SkillRow row, SkillRow replacement)
+    {
+        var index = _rows.IndexOf(row);
+        if (index >= 0)
+        {
+            _rows[index] = replacement;
+        }
+    }
+
+    private static string Short(string? sha)
+    {
+        return string.IsNullOrEmpty(sha) ? "?" : sha[..Math.Min(7, sha.Length)];
+    }
+}

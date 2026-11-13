@@ -21,6 +21,7 @@ public class RepositoryInfographicTests : BunitContext
     private const string Repo = "owner/repo";
     private const string InstructionsUrl = "repos/owner/repo/contents/.github/copilot-instructions.md";
     private const string AgentsUrl = "repos/owner/repo/contents/.github/agents";
+    private const string SkillsUrl = "repos/owner/repo/contents/.github/skills";
     private readonly FakeGitHub _gitHub = new();
     private readonly CancellationToken _cancellationToken = Xunit.TestContext.Current.CancellationToken;
 
@@ -39,7 +40,7 @@ public class RepositoryInfographicTests : BunitContext
     }
 
     [Fact]
-    public async Task ShowsTheInstructions_TheAgentFilesAndHowFarEachTypeGot()
+    public async Task ShowsTheInstructions_TheAgentFiles_TheSkillsAndHowFarEachTypeGot()
     {
         _gitHub.Responses[InstructionsUrl] = """{"path":".github/copilot-instructions.md","sha":"a","content":"IyBIaQ==","encoding":"base64"}""";
         _gitHub.Responses[AgentsUrl] = """
@@ -48,6 +49,11 @@ public class RepositoryInfographicTests : BunitContext
              {"name":"notes.txt","path":".github/agents/notes.txt","sha":"c","type":"file"},
              {"name":"more.md","path":".github/agents/more.md","sha":"d","type":"dir"}]
             """;
+        _gitHub.Responses[SkillsUrl] = """
+            [{"name":"review","path":".github/skills/review","sha":"e","type":"dir"},
+             {"name":"release-notes","path":".github/skills/release-notes","sha":"f","type":"dir"},
+             {"name":"README.md","path":".github/skills/README.md","sha":"g","type":"file"}]
+            """;
         await SeedBugsAsync(Repo);
         await SeedBugsAsync("owner/other");
 
@@ -55,11 +61,12 @@ public class RepositoryInfographicTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("Available", cut.Markup));
         Assert.Equal("2", Stat(cut, "Custom agents"));
+        Assert.Equal("2", Stat(cut, "Skills"));
         Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
         Assert.Equal(["0", "0", "0"], Numbers(cut, "Epics"));
         Assert.Equal(WorkItemTypeRules.All.Count, cut.FindAll("tbody tr").Count);
-        // The count comes from the listing alone, not from reading every agent file.
-        Assert.Equal(2, _gitHub.Requests.Count);
+        // The counts come from the listings alone, not from reading every agent or skill file.
+        Assert.Equal(3, _gitHub.Requests.Count);
 
         var track = cut.Find("tbody .infographic-track");
         Assert.Null(track.GetAttribute("style"));
@@ -68,12 +75,13 @@ public class RepositoryInfographicTests : BunitContext
     }
 
     [Fact]
-    public void WithoutInstructionsAndAgentsDirectory_ShowsNotAvailableAndNoAgents()
+    public void WithoutInstructionsAgentsAndSkillsDirectories_ShowsNotAvailableAndNoAgentsOrSkills()
     {
         var cut = Render<RepositoryInfographic>(p => p.Add(x => x.RepositoryFullName, Repo));
 
         cut.WaitForAssertion(() => Assert.Contains("Not available", cut.Markup));
         Assert.Equal("0", Stat(cut, "Custom agents"));
+        Assert.Equal("0", Stat(cut, "Skills"));
         Assert.Empty(cut.FindAll(".infographic-track"));
     }
 
@@ -85,7 +93,9 @@ public class RepositoryInfographicTests : BunitContext
 
         var cut = Render<RepositoryInfographic>(p => p.Add(x => x.RepositoryFullName, Repo));
 
-        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".infographic-stat").Count(s => s.TextContent.Contains("Could not check"))));
+        cut.WaitForAssertion(() => Assert.Equal(3, Stats(cut).Count(s => s.TextContent.Contains("Could not check"))));
+        // The agents and skills share one box, so the boxes stay the same.
+        Assert.Equal(2, cut.FindAll(".infographic-stat").Count);
         Assert.DoesNotContain("Not available", cut.Markup);
         Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
     }
@@ -116,8 +126,14 @@ public class RepositoryInfographicTests : BunitContext
 
     private static string Stat(IRenderedComponent<RepositoryInfographic> cut, string label)
     {
-        var stat = cut.FindAll(".infographic-stat").Single(s => s.TextContent.Contains(label));
+        var stat = Stats(cut).Single(s => s.TextContent.Contains(label));
         return stat.QuerySelector("h6")!.TextContent.Trim();
+    }
+
+    /// <summary>The label and value of every stat; a box with two counts has a part per count.</summary>
+    private static IEnumerable<AngleSharp.Dom.IElement> Stats(IRenderedComponent<RepositoryInfographic> cut)
+    {
+        return cut.FindAll(".infographic-stat > div:not(.infographic-split), .infographic-part");
     }
 
     private static string[] Numbers(IRenderedComponent<RepositoryInfographic> cut, string pluralName)

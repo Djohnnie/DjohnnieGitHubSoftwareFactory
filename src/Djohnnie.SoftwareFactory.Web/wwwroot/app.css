@@ -234,6 +234,23 @@ h1:focus {
     padding: 1rem;
 }
 
+/* A box with two counts: equal halves split by a thin vertical line. */
+.infographic-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    flex: 1;
+    min-width: 0;
+}
+
+.infographic-part {
+    min-width: 0;
+}
+
+.infographic-part + .infographic-part {
+    padding-left: 1rem;
+    border-left: 1px solid var(--mud-palette-lines-default);
+}
+
 .infographic-status,
 .infographic-type {
     display: inline-flex;
@@ -578,4 +595,17 @@ h1:focus {
     .dictation-pulse {
         animation: none;
     }
+}
+
+/* The SKILL.md preview on the skill editor. */
+.skill-preview {
+    margin: 0;
+    padding: 12px;
+    max-height: 480px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.8125rem;
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--mud-palette-background-gray);
 }

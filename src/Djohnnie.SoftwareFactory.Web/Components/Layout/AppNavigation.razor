@@ -11,6 +11,7 @@
             <MudButton Href="/actions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PlayCircle">Actions</MudButton>
             <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                        StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+            <MudButton Href="/skills" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.AutoFixHigh">Skills</MudButton>
             <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
 
             <MudDivider Class="my-1" />
@@ -43,6 +44,7 @@ else
             @IconLink("/work-item-map", Icons.Material.Filled.Hub, "Work item map")
             @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
             @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
+            @IconLink("/skills", Icons.Material.Filled.AutoFixHigh, "Skills")
             @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
             @foreach (var type in WorkItemTypeRules.All)
             {

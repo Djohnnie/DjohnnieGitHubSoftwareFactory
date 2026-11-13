@@ -29,20 +29,16 @@
 
         <MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
             <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" />
-            <div>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">Custom agents</MudText>
-                @if (_loading)
-                {
-                    <MudSkeleton Width="3rem" Height="2rem" />
-                }
-                else if (_agentCount is { } agentCount)
-                {
-                    <MudText Typo="Typo.h6">@agentCount</MudText>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body1">Could not check</MudText>
-                }
+            @* Two counts side by side, split by a thin line; each part has the same label and number rows as the other boxes, so the box keeps its size. *@
+            <div class="infographic-split">
+                <div class="infographic-part">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Custom agents</MudText>
+                    @Count(_agentCount)
+                </div>
+                <div class="infographic-part">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Skills</MudText>
+                    @Count(_skillCount)
+                </div>
             </div>
         </MudPaper>
     </div>
@@ -114,14 +110,41 @@
     private bool _loading = true;
     private bool? _hasInstructions;
     private int? _agentCount;
+    private int? _skillCount;
     private IReadOnlyList<WorkItemCounts>? _counts;
     private string? _countsError;
 
     protected override async Task OnInitializedAsync()
     {
         // Each part fails on its own: GitHub being unreachable doesn't hide the counts from the database.
-        await Task.WhenAll(LoadInstructionsAsync(), LoadAgentCountAsync(), LoadCountsAsync());
+        await Task.WhenAll(LoadInstructionsAsync(), LoadAgentCountAsync(), LoadSkillCountAsync(), LoadCountsAsync());
         _loading = false;
+    }
+
+    private RenderFragment Count(int? count)
+    {
+        if (_loading)
+        {
+            return @<MudSkeleton Width="3rem" Height="2rem" />;
+        }
+
+        return count is { } value
+            ? @<MudText Typo="Typo.h6">@value</MudText>
+            : @<MudText Typo="Typo.body1">Could not check</MudText>;
+    }
+
+    // Like the agents, the skills are counted from the directory listing alone: every directory in .github/skills is a skill.
+    private async Task LoadSkillCountAsync()
+    {
+        try
+        {
+            var items = await GitHub.GetDirectoryAsync(RepositoryFullName, Skill.Directory);
+            _skillCount = items.Count(item => item.Type == "dir");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or GitHubApiException)
+        {
+            _skillCount = null;
+        }
     }
 
     private async Task LoadInstructionsAsync()

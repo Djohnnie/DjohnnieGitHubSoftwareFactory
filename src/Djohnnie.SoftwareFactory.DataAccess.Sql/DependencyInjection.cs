@@ -23,6 +23,7 @@ public static class DependencyInjection
             services.TryAddScoped<IAiModelStore, AiModelStore>();
             services.TryAddScoped<IWorkItemStore, WorkItemStore>();
             services.TryAddScoped<IAgentTemplateStore, AgentTemplateStore>();
+            services.TryAddScoped<ISkillStore, SkillStore>();
             services.TryAddScoped<IWorkItemTemplateStore, WorkItemTemplateStore>();
             services.TryAddScoped<IRepositoryStore, RepositoryStore>();
             services.TryAddScoped<IAgentStore, AgentStore>();
