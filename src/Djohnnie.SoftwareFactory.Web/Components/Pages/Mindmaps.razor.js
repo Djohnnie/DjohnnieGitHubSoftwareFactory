@@ -192,6 +192,15 @@ export function attach(stage, world, page) {
     stage.addEventListener("pointercancel", onPointerUp);
     applyPan();
 
+    // Ctrl+K (⌘K on a Mac) opens the quick switcher to jump to another mindmap.
+    const onKeyDown = event => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            page.invokeMethodAsync("OpenSwitcherFromBrowser");
+        }
+    };
+    document.addEventListener("keydown", onKeyDown);
+
     return {
         settle,
         focusEditor(input) {
@@ -214,6 +223,7 @@ export function attach(stage, world, page) {
             stage.removeEventListener("pointermove", onPointerMove);
             stage.removeEventListener("pointerup", onPointerUp);
             stage.removeEventListener("pointercancel", onPointerUp);
+            document.removeEventListener("keydown", onKeyDown);
         }
     };
 }

@@ -130,7 +130,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         var stored = Render<WorkItemEditor>(p => p.Add(e => e.Id, feature.Id));
         var chip = stored.WaitForElement(".mindmap-idea-chip");
         Assert.Contains("Release 2.0 › Passkey login", chip.TextContent);
-        Assert.EndsWith($"/mindmaps?id={map.Id}&idea={passkeys.Id}", (chip.GetAttribute("href") ?? chip.QuerySelector("a")?.GetAttribute("href"))!);
+        Assert.EndsWith($"/mindmaps/{map.Id}?idea={passkeys.Id}", (chip.GetAttribute("href") ?? chip.QuerySelector("a")?.GetAttribute("href"))!);
     }
 
     [Fact]

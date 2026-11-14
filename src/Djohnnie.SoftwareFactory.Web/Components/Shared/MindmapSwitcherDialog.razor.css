@@ -1,0 +1,58 @@
+.switcher-list {
+    max-height: min(55vh, 420px);
+    overflow-y: auto;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.switcher-item {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 8px 12px;
+    border: none;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.switcher-item:last-child {
+    border-bottom: none;
+}
+
+.switcher-item svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+    fill: var(--mud-palette-primary);
+}
+
+.switcher-item-active {
+    background: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+}
+
+.switcher-item-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.switcher-item-current .switcher-item-title {
+    color: var(--mud-palette-text-secondary);
+}
+
+.switcher-item-meta {
+    font-size: .78rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.switcher-item-new .switcher-item-title {
+    color: var(--mud-palette-primary);
+}

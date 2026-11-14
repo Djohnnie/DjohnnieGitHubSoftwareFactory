@@ -1,0 +1,101 @@
+@page "/mindmaps"
+@inject MindmapService MindmapData
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+
+<PageTitle>Mindmaps</PageTitle>
+
+<PageBreadcrumbs Current="Mindmaps" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Mindmaps</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Simple to-do lists of <b>@Repository.Current?.FullName</b> as mindmaps: one central idea with ideas around it, and ideas below those.
+            Mark ideas done as you go.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Href="@MindmapRoutes.NewPath" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New mindmap</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" aria-label="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <div class="mindmap-cards">
+        @foreach (var map in _maps)
+        {
+            var done = map.IdeaCount > 0 && map.DoneCount == map.IdeaCount;
+            <a @key="map.Id" class="@($"mindmap-card {(done ? "mindmap-card-done" : null)}")" href="@MindmapRoutes.MapPath(map.Id)">
+                <span class="mindmap-card-title">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)(done ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Hub))</svg>
+                    <span>@map.Title</span>
+                </span>
+                <MudProgressLinear Value="@Percent(map)" Color="@(done ? Color.Success : Color.Primary)" Rounded="true" Size="Size.Small" />
+                <span class="mindmap-card-meta">
+                    <span>@map.DoneCount of @map.IdeaCount done</span>
+                    <span>Updated <TimeAgo At="map.UpdatedAt" /></span>
+                </span>
+            </a>
+        }
+        <a class="mindmap-card mindmap-card-new" href="@MindmapRoutes.NewPath">
+            <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.Add)</svg>
+            <span>New mindmap</span>
+        </a>
+    </div>
+}
+
+@code {
+    /// <summary>The old address of a map, <c>/mindmaps?id=…</c>, still opens it.</summary>
+    [SupplyParameterFromQuery(Name = "id")] public Guid? Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "idea")] public Guid? IdeaQuery { get; set; }
+
+    private List<MindmapSummary> _maps = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id is { } id)
+        {
+            Navigation.NavigateTo(MindmapRoutes.MapPath(id, IdeaQuery), replace: true);
+            return;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _maps = (await MindmapData.GetAllAsync(Repository.Current!.FullName)).OrderByDescending(map => map.UpdatedAt).ToList();
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the mindmaps: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static double Percent(MindmapSummary map)
+    {
+        return map.IdeaCount == 0 ? 0 : 100.0 * map.DoneCount / map.IdeaCount;
+    }
+}

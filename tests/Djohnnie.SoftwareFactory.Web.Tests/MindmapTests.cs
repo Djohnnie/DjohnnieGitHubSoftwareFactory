@@ -213,7 +213,7 @@ public class MindmapTests : BunitContext
     public async Task Page_StartsWithACentralIdea_AddsMovesAndSavesIdeas()
     {
         await SelectRepositoryAsync();
-        Navigation.NavigateTo("/mindmaps");
+        Navigation.NavigateTo(MindmapRoutes.NewPath);
 
         var cut = Render<Mindmaps>();
 
@@ -262,26 +262,86 @@ public class MindmapTests : BunitContext
 
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save mindmap")).Click());
 
-        cut.WaitForAssertion(() => Assert.Contains("?id=", Navigation.Uri));
+        cut.WaitForAssertion(() => Assert.DoesNotContain(MindmapRoutes.NewPath, Navigation.Uri));
         var saved = Assert.Single(await Mindmaps.GetAllAsync(Repo, _cancellationToken));
         Assert.Equal(("Release 2.0", 2), (saved.Title, saved.IdeaCount));
-        Assert.EndsWith($"/mindmaps?id={saved.Id}", Navigation.Uri);
+        Assert.EndsWith(MindmapRoutes.MapPath(saved.Id), Navigation.Uri);
     }
 
     [Fact]
-    public async Task Page_OpensTheFirstMindmap_AndDroppingAnIdeaOnAnotherMovesItThere()
+    public async Task Overview_ShowsACardPerMindmapWithItsProgress_AndANewCard()
+    {
+        await SelectRepositoryAsync();
+        var launch = Mindmap.Create(Repo, "Launch");
+        MindmapLayout.AddChild(launch, launch.Root!.Id, "Marketing").IsDone = true;
+        var savedLaunch = await Mindmaps.SaveAsync(launch, _cancellationToken);
+        var savedRelease = await Mindmaps.SaveAsync(Mindmap.Create(Repo, "Release"), _cancellationToken);
+        Navigation.NavigateTo(MindmapRoutes.ListPath);
+
+        var cut = Render<MindmapOverview>();
+
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("a.mindmap-card").Count));
+        var card = cut.FindAll("a.mindmap-card").Single(c => c.TextContent.Contains("Launch"));
+        Assert.EndsWith(MindmapRoutes.MapPath(savedLaunch.Id), card.GetAttribute("href"));
+        Assert.Contains("1 of 2 done", card.TextContent);
+        Assert.Contains(cut.FindAll("a.mindmap-card"), c => c.GetAttribute("href")!.EndsWith(MindmapRoutes.MapPath(savedRelease.Id)));
+        Assert.EndsWith(MindmapRoutes.NewPath, cut.Find("a.mindmap-card-new").GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task Overview_WithTheOldMapAddress_OpensTheMap()
+    {
+        await SelectRepositoryAsync();
+        var mapId = Guid.NewGuid();
+        var ideaId = Guid.NewGuid();
+        Navigation.NavigateTo($"/mindmaps?id={mapId}&idea={ideaId}");
+
+        Render<MindmapOverview>();
+
+        Assert.EndsWith(MindmapRoutes.MapPath(mapId, ideaId), Navigation.Uri);
+    }
+
+    [Fact]
+    public async Task Page_QuickSwitcher_FiltersTheMindmapsAndOpensThePickedOne()
+    {
+        await SelectRepositoryAsync();
+        var launch = await Mindmaps.SaveAsync(Mindmap.Create(Repo, "Launch"), _cancellationToken);
+        var release = await Mindmaps.SaveAsync(Mindmap.Create(Repo, "Release"), _cancellationToken);
+        var website = await Mindmaps.SaveAsync(Mindmap.Create(Repo, "Website"), _cancellationToken);
+        Navigation.NavigateTo(MindmapRoutes.MapPath(launch.Id));
+        var dialogs = Render<MudBlazor.MudDialogProvider>();
+
+        var cut = Render<Mindmaps>(parameters => parameters.Add(page => page.Id, launch.Id));
+
+        cut.WaitForAssertion(() => Assert.Equal("Launch", cut.Find(".mindmap-title").TextContent.Trim()));
+        Assert.Empty(cut.FindAll(".mud-select"));
+        await cut.InvokeAsync(() => cut.Find(".mindmap-title").Click());
+        dialogs.WaitForAssertion(() => Assert.Equal(4, dialogs.FindAll(".switcher-item").Count));
+        Assert.Equal("New mindmap", dialogs.FindAll(".switcher-item")[^1].TextContent.Trim());
+
+        await dialogs.InvokeAsync(() => dialogs.Find("input").Input("site"));
+        var matches = dialogs.FindAll(".switcher-item");
+        Assert.Equal(2, matches.Count);
+        Assert.Contains("Website", matches[0].TextContent);
+        Assert.DoesNotContain(release.Title, matches[0].TextContent);
+        await dialogs.InvokeAsync(() => dialogs.Find("input").KeyDown("Enter"));
+
+        cut.WaitForAssertion(() => Assert.EndsWith(MindmapRoutes.MapPath(website.Id), Navigation.Uri));
+    }
+
+    [Fact]
+    public async Task Page_DroppingAnIdeaOnAnotherMovesItThere()
     {
         await SelectRepositoryAsync();
         var map = Mindmap.Create(Repo, "Launch");
         var first = MindmapLayout.AddChild(map, map.Root!.Id, "Marketing");
         var second = MindmapLayout.AddChild(map, map.Root!.Id, "Website");
         var saved = await Mindmaps.SaveAsync(map, _cancellationToken);
-        Navigation.NavigateTo("/mindmaps");
+        Navigation.NavigateTo(MindmapRoutes.MapPath(saved.Id));
 
-        var cut = Render<Mindmaps>();
+        var cut = Render<Mindmaps>(parameters => parameters.Add(page => page.Id, saved.Id));
 
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll(".mindmap-node").Count));
-        Assert.EndsWith($"/mindmaps?id={saved.Id}", Navigation.Uri);
 
         await cut.InvokeAsync(() => cut.Instance.Move(second.Id.ToString(), 5, 5, first.Id.ToString()));
 
@@ -306,10 +366,10 @@ public class MindmapTests : BunitContext
         var gone = MindmapLayout.AddChild(map, map.Root!.Id, "Deleted item");
         gone.WorkItemId = Guid.NewGuid();
         var saved = await Mindmaps.SaveAsync(map, _cancellationToken);
-        Navigation.NavigateTo($"/mindmaps?id={saved.Id}");
+        Navigation.NavigateTo(MindmapRoutes.MapPath(saved.Id));
         var popovers = Render<MudBlazor.MudPopoverProvider>();
 
-        var cut = Render<Mindmaps>();
+        var cut = Render<Mindmaps>(parameters => parameters.Add(page => page.Id, saved.Id));
 
         cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".mindmap-node").Count));
         var badge = cut.Find($"[data-node='{security.Id}'] a.mindmap-link");
@@ -345,9 +405,9 @@ public class MindmapTests : BunitContext
         var idea = MindmapLayout.AddChild(map, map.Root!.Id, "Far away");
         MindmapLayout.Move(map, idea.Id, 600, 300);
         var saved = await Mindmaps.SaveAsync(map, _cancellationToken);
-        Navigation.NavigateTo($"/mindmaps?id={saved.Id}&idea={idea.Id}");
+        Navigation.NavigateTo(MindmapRoutes.MapPath(saved.Id, idea.Id));
 
-        var cut = Render<Mindmaps>();
+        var cut = Render<Mindmaps>(parameters => parameters.Add(page => page.Id, saved.Id));
 
         cut.WaitForAssertion(() => Assert.Contains("mindmap-selected", cut.Find($"[data-node='{idea.Id}']").ClassList));
         var centered = Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "centerOn");

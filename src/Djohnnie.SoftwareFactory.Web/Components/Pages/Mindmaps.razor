@@ -1,4 +1,5 @@
-@page "/mindmaps"
+@page "/mindmaps/new"
+@page "/mindmaps/{Id:guid}"
 @inject MindmapService MindmapData
 @inject WorkItemService WorkItems
 @inject RepositoryContext Repository
@@ -8,19 +9,20 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<PageTitle>Mindmaps</PageTitle>
+<PageTitle>@(_map is null ? "Mindmap" : $"{_map.Title} · Mindmap")</PageTitle>
 
-<PageBreadcrumbs Current="Mindmaps" BackDisabled="_saving" />
+<PageBreadcrumbs Parents="_breadcrumbParents" Current="@(_map?.Title ?? "Mindmap")" BackDisabled="_saving" />
 
 <NavigationLock ConfirmExternalNavigation="_dirty" OnBeforeInternalNavigation="ConfirmNavigationAsync" />
 
 <MudStack Class="mb-3">
+    @* The title opens the quick switcher (also Ctrl+K) to jump to another mindmap. *@
     <div>
-        <MudText Typo="Typo.h4">Mindmaps</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">
-            Simple to-do lists of <b>@Repository.Current?.FullName</b> as mindmaps: one central idea with ideas around it, and ideas below those.
-            Mark ideas done as you go.
-        </MudText>
+        <button type="button" class="mindmap-title" @onclick="OpenSwitcherAsync" disabled="@(_loading || _saving)"
+                title="Switch to another mindmap (Ctrl+K)" aria-haspopup="dialog">
+            <MudText Typo="Typo.h4" Class="mindmap-title-text">@(_map?.Title ?? "Mindmap")@(IsNew ? " (not saved)" : null)</MudText>
+            <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.UnfoldMore)</svg>
+        </button>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
         <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="NewAsync" Disabled="_loading || _saving" StartIcon="@Icons.Material.Filled.Add">
@@ -54,17 +56,6 @@
                 @DoneCount of @_map.Nodes.Count done
             </MudChip>
         }
-        <MudSelect T="Guid" Value="@(_map?.Id ?? Guid.Empty)" ValueChanged="SwitchAsync" Label="Mindmap" Variant="Variant.Outlined" Dense="true"
-                   Margin="Margin.Dense" Style="min-width:200px; max-width:280px" Disabled="_loading || _saving" AnchorOrigin="Origin.BottomCenter">
-            @if (IsNew)
-            {
-                <MudSelectItem Value="Guid.Empty">@(_map!.Title) (not saved)</MudSelectItem>
-            }
-            @foreach (var summary in _maps)
-            {
-                <MudSelectItem Value="summary.Id">@(summary.Id == _map?.Id ? _map.Title : summary.Title)</MudSelectItem>
-            }
-        </MudSelect>
     </MudStack>
 </MudStack>
 
@@ -148,7 +139,10 @@
 </div>
 
 @code {
-    [SupplyParameterFromQuery(Name = "id")] public Guid? Id { get; set; }
+    /// <summary>The stored map to show; none for a new one.</summary>
+    [Parameter] public Guid? Id { get; set; }
+
+    private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumbParents = [new("Mindmaps", MindmapRoutes.ListPath)];
 
     /// <summary>An idea to select and bring into view, e.g. from a work item linked to it.</summary>
     [SupplyParameterFromQuery(Name = "idea")] public Guid? IdeaQuery { get; set; }
@@ -165,6 +159,7 @@
     private ElementReference _editInput;
 
     private List<MindmapSummary> _maps = [];
+    private bool _switcherOpen;
 
     // The work items of the repository, for the ideas linked to them (and the dialog that links an idea).
     private Dictionary<Guid, WorkItem> _workItems = [];
@@ -174,6 +169,9 @@
     private bool _saving;
     private bool _dirty;
     private string? _error;
+
+    // A map that was just loaded starts with its central idea in the middle.
+    private bool _recenter;
 
     // After a move, the browser drops its drag offsets once the moved positions are rendered.
     private bool _settle;
@@ -202,10 +200,6 @@
             FocusIdeaFromUrl();
             return;
         }
-        if (_map is not null && Id is null && !_loading)
-        {
-            return;
-        }
         await LoadAsync(Id);
         FocusIdeaFromUrl();
     }
@@ -230,6 +224,11 @@
                 _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Mindmaps.razor.js");
                 _selfReference = DotNetObjectReference.Create(this);
                 _handle = await _module.InvokeAsync<IJSObjectReference>("attach", _stage, _world, _selfReference);
+            }
+            if (_recenter && _handle is not null)
+            {
+                _recenter = false;
+                await _handle.InvokeVoidAsync("center");
             }
             if (_settle && _handle is not null)
             {
@@ -260,17 +259,13 @@
         {
             _maps = await MindmapData.GetAllAsync(RepositoryName);
             await LoadWorkItemsAsync();
-            var pick = id ?? _maps.FirstOrDefault()?.Id;
-            var map = pick is { } pickId ? await MindmapData.GetAsync(RepositoryName, pickId) : null;
+            var map = id is { } mapId ? await MindmapData.GetAsync(RepositoryName, mapId) : null;
             if (id is not null && map is null)
             {
                 _error = "This mindmap does not exist (anymore).";
             }
             Show(map ?? Mindmap.Create(RepositoryName));
-            if (id is null && map is not null)
-            {
-                Navigate($"/mindmaps?id={map.Id}", replace: true);
-            }
+            _recenter = true;
         }
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
@@ -327,7 +322,49 @@
             return;
         }
         _dirty = false;
-        Navigate(id == Guid.Empty ? "/mindmaps" : $"/mindmaps?id={id}");
+        Navigate(id == Guid.Empty ? MindmapRoutes.NewPath : MindmapRoutes.MapPath(id));
+    }
+
+    /// <summary>The quick switcher: jumps to another mindmap, or starts a new one.</summary>
+    private async Task OpenSwitcherAsync()
+    {
+        if (_map is null || _loading || _saving || _switcherOpen)
+        {
+            return;
+        }
+        _switcherOpen = true;
+        try
+        {
+            var dialog = await Dialogs.ShowAsync<MindmapSwitcherDialog>("Switch mindmap",
+                new DialogParameters<MindmapSwitcherDialog>
+                {
+                    { d => d.Maps, _maps },
+                    { d => d.Current, IsNew ? null : _map.Id }
+                },
+                new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, Position = DialogPosition.TopCenter });
+            if (await dialog.Result is { Canceled: false, Data: Guid id })
+            {
+                if (id == Guid.Empty)
+                {
+                    await NewAsync();
+                }
+                else
+                {
+                    await SwitchAsync(id);
+                }
+            }
+        }
+        finally
+        {
+            _switcherOpen = false;
+        }
+    }
+
+    /// <summary>Ctrl+K (or ⌘K) on the page opens the quick switcher.</summary>
+    [JSInvokable]
+    public async Task OpenSwitcherFromBrowser()
+    {
+        await InvokeAsync(OpenSwitcherAsync);
     }
 
     private async Task NewAsync()
@@ -341,7 +378,7 @@
         await CenterAsync();
         if (Id is not null)
         {
-            Navigate("/mindmaps");
+            Navigate(MindmapRoutes.NewPath);
         }
     }
 
@@ -382,7 +419,7 @@
             Snackbar.Add($"Saved the mindmap '{saved.Title}'.", Severity.Success);
             if (wasNew)
             {
-                Navigate($"/mindmaps?id={saved.Id}", replace: true);
+                Navigate(MindmapRoutes.MapPath(saved.Id), replace: true);
             }
             return true;
         }
@@ -449,12 +486,7 @@
                 Snackbar.Add($"Deleted the mindmap '{_map.Title}'.", Severity.Success);
             }
             _dirty = false;
-            _map = null;
-            await LoadAsync(null);
-            if (Id is not null && IsNew)
-            {
-                Navigate("/mindmaps", replace: true);
-            }
+            Navigate(MindmapRoutes.ListPath, replace: true);
         }
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {
@@ -568,7 +600,7 @@
             <ActivatorContent Context="menu">
                 <button type="button" class="@($"mindmap-action {(node.WorkItemId is null ? null : "mindmap-action-linked")}")" title="Work item"
                         aria-label="Work item" aria-haspopup="menu" @onclick="menu.ToggleAsync">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)(node.WorkItemId is null ? Icons.Material.Filled.AddTask : Icons.Material.Filled.Link))</svg>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)(node.WorkItemId is null ? Icons.Material.Filled.AddLink : Icons.Material.Filled.Link))</svg>
                 </button>
             </ActivatorContent>
             <ChildContent>

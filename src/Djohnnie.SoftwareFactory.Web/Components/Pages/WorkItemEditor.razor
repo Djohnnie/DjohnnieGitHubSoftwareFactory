@@ -34,7 +34,7 @@
     {
         @* The mindmap ideas this item is linked to; each opens the map with the idea selected. *@
         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@(link.IsDone ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.BubbleChart)"
-                 Href="@($"/mindmaps?id={link.MindmapId}&idea={link.IdeaId}")" Class="mindmap-idea-chip"
+                 Href="@MindmapRoutes.MapPath(link.MindmapId, link.IdeaId)" Class="mindmap-idea-chip"
                  title="@($"Linked to the idea '{link.IdeaText}' of the mindmap '{link.MindmapTitle}'{(link.IsDone ? ", done" : null)}")">
             @link.MindmapTitle › @link.IdeaText
         </MudChip>
@@ -116,7 +116,7 @@ else if (_item is not null)
                         <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Icon="@Icons.Material.Filled.BubbleChart" Class="mindmap-origin">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
                                 <span>
-                                    For the idea <b>@_idea.Text</b> of the mindmap <MudLink Href="@($"/mindmaps?id={_mindmap!.Id}")">@_mindmap.Title</MudLink>.
+                                    For the idea <b>@_idea.Text</b> of the mindmap <MudLink Href="@MindmapRoutes.MapPath(_mindmap!.Id)">@_mindmap.Title</MudLink>.
                                     @(_writing ? $"The Mindmap Work Item Writer is writing the {Name} from the whole mindmap…" : $"Saving links this {Name} to the idea; closing it marks the idea done.")
                                 </span>
                                 @if (_writerActive && !_writing)
@@ -514,7 +514,7 @@ else if (_item is not null)
     }
 
     private string BackPath => IsNew && _mindmap is not null
-        ? $"/mindmaps?id={_mindmap.Id}"
+        ? MindmapRoutes.MapPath(_mindmap.Id)
         : _item?.Parent is { } parent && !IsNew
         ? WorkItemRoutes.ItemPath(parent.Type, parent.Id)
         : SelectedParent is { } selected ? WorkItemRoutes.ItemPath(selected.Type, selected.Id) : WorkItemRoutes.ListPath(_type);

@@ -1,0 +1,78 @@
+@* Jumps to another mindmap: type to filter, arrow keys to pick, Enter to open. Closes with the map's id, or Guid.Empty for a new map. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Search mindmaps"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" AutoFocus="true"
+                      OnKeyDown="OnKeyDown" TextChanged="_ => _active = 0" />
+        <div class="switcher-list mt-2" role="listbox" aria-label="Mindmaps">
+            @for (var index = 0; index < Matches.Count; index++)
+            {
+                var map = Matches[index];
+                var position = index;
+                <button type="button" role="option" aria-selected="@(position == _active ? "true" : "false")"
+                        class="@($"switcher-item {(position == _active ? "switcher-item-active" : null)} {(map.Id == Current ? "switcher-item-current" : null)}")"
+                        @onclick="() => Close(map.Id)" @onmouseenter="() => _active = position">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.Hub)</svg>
+                    <span class="switcher-item-title">@map.Title</span>
+                    <span class="switcher-item-meta">@(map.Id == Current ? "open now · " : null)@map.DoneCount of @map.IdeaCount done</span>
+                </button>
+            }
+            <button type="button" role="option" aria-selected="@(_active == Matches.Count ? "true" : "false")"
+                    class="@($"switcher-item switcher-item-new {(_active == Matches.Count ? "switcher-item-active" : null)}")"
+                    @onclick="() => Close(Guid.Empty)" @onmouseenter="() => _active = Matches.Count">
+                <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.Add)</svg>
+                <span class="switcher-item-title">New mindmap</span>
+            </button>
+        </div>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">↑ ↓ to pick · Enter to open · Esc to close · Ctrl+K opens this anywhere on a mindmap</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<MindmapSummary> Maps { get; set; } = [];
+
+    /// <summary>The map that is open now.</summary>
+    [Parameter] public Guid? Current { get; set; }
+
+    private string? _search;
+
+    // The highlighted row; Matches.Count is the "New mindmap" row.
+    private int _active;
+
+    private List<MindmapSummary> Matches
+    {
+        get
+        {
+            return Maps
+                .Where(map => string.IsNullOrWhiteSpace(_search) || map.Title.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase))
+                .OrderBy(map => map.Id == Current)
+                .ThenByDescending(map => map.UpdatedAt)
+                .ToList();
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        var matches = Matches;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _active = Math.Min(_active + 1, matches.Count);
+                break;
+            case "ArrowUp":
+                _active = Math.Max(_active - 1, 0);
+                break;
+            case "Enter":
+                Close(_active < matches.Count ? matches[_active].Id : Guid.Empty);
+                break;
+        }
+    }
+
+    private void Close(Guid id)
+    {
+        MudDialog.Close(DialogResult.Ok(id));
+    }
+}
