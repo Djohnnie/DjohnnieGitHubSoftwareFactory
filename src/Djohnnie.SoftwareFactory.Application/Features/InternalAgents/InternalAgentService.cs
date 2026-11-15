@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 
-/// <summary>Manages DGHSF's own Copilots and background agents: their system prompts, models and whether they are enabled.</summary>
+/// <summary>Manages DGHSF's own chat agents and background agents: their system prompts, models and whether they are enabled.</summary>
 public sealed class InternalAgentService(ISender mediator)
 {
     public async Task<List<InternalAgent>> GetAllAsync(CancellationToken cancellationToken = default)

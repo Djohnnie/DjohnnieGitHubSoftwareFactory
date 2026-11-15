@@ -40,7 +40,7 @@ public sealed record InternalAgent
     /// <summary>The label of the model of <see cref="ModelId"/> (read only); empty when the agent has none.</summary>
     public string ModelLabel { get; set; } = string.Empty;
 
-    /// <summary>Disabled Copilots are hidden; disabled background agents don't run.</summary>
+    /// <summary>Disabled chat agents are hidden; disabled background agents don't run.</summary>
     public bool IsEnabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }

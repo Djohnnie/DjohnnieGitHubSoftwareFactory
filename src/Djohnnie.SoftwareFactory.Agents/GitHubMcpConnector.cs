@@ -12,7 +12,7 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// </summary>
 public sealed class GitHubMcpConnector(IOptions<GitHubMcpOptions> options, ILoggerFactory loggerFactory)
 {
-    /// <summary>Tools that are left out: the Copilots have their own file tools, and these don't belong to one repository.</summary>
+    /// <summary>Tools that are left out: the chat agents have their own file tools, and these don't belong to one repository.</summary>
     public static readonly IReadOnlySet<string> ExcludedTools = new HashSet<string>(StringComparer.Ordinal)
     {
         "get_file_contents", "search_repositories", "search_users", "search_orgs"

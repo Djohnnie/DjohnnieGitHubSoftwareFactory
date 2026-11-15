@@ -44,6 +44,10 @@ else if (_skill is not null)
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudStack Spacing="4">
+                    @* Not stored with the skill: the conversation lasts as long as the page is open. *@
+                    <AssistantChat CopilotKey="@InternalAgentKeys.CopilotSkillsAgent" Tools="_assistantTools" Placeholder="Describe the task the skill should cover"
+                                   Subtitle="@(IsNew ? "Describe the task Copilot should learn; I'll ask what I need to know and fill in the form." : "Ask me to improve or extend this skill; I'll update the form.")"
+                                   Suggestions="@(IsNew ? SkillSuggestions : [])" />
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                         <MudText Typo="Typo.h6" GutterBottom="true">Skill</MudText>
                         <MudTextField T="string" Variant="Variant.Outlined" Value="_skill.Name" ValueChanged="OnNameChanged" Label="Name" Required="true"
@@ -108,6 +112,14 @@ else if (_skill is not null)
 @code {
     [Parameter] public Guid? Id { get; set; }
 
+    private static readonly string[] SkillSuggestions =
+    [
+        "A skill to debug failing GitHub Actions workflows",
+        "A skill to write EF Core migrations the way we do",
+        "A code review skill that checks for security issues"
+    ];
+
+    private AssistantTools? _assistantTools;
     private MudForm? _form;
     private Skill? _skill;
     private string? _title;
@@ -122,6 +134,7 @@ else if (_skill is not null)
 
     protected override async Task OnInitializedAsync()
     {
+        _assistantTools = AssistantForms.ForSkill(() => _skill!, IsNew, change => InvokeAsync(() => { change(); StateHasChanged(); }));
         try
         {
             if (IsNew)

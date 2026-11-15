@@ -15,7 +15,7 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// <param name="loggerFactory">Creates the loggers of the agents.</param>
 /// <param name="modelClientFactory">Creates a client for another model on the same endpoint.</param>
 /// <param name="defaultModel">The name of the configured model.</param>
-/// <param name="webPageFetcher">Gives every Copilot conversation the <c>fetch_url</c> tool; <c>null</c> leaves it out.</param>
+/// <param name="webPageFetcher">Gives every agent chat the <c>fetch_url</c> tool; <c>null</c> leaves it out.</param>
 public sealed class AssistantAgentFactory(
     IChatClient? chatClient,
     ILoggerFactory loggerFactory,
@@ -23,7 +23,7 @@ public sealed class AssistantAgentFactory(
     string? defaultModel = null,
     WebPageFetcher? webPageFetcher = null)
 {
-    public const string AgentName = "DGHSF Copilot";
+    public const string AgentName = "DGHSF Agent";
 
     /// <summary><c>false</c> when the OpenAI model or key is missing.</summary>
     public bool IsConfigured => chatClient is not null;
@@ -77,7 +77,7 @@ public sealed class AssistantAgentFactory(
         if (chatClient is null)
         {
             throw new InvalidOperationException(
-                $"DGHSF Copilot is not configured. Set {OpenAIOptions.SectionName}:Model and {OpenAIOptions.SectionName}:ApiKey (and optionally {OpenAIOptions.SectionName}:Endpoint).");
+                $"DGHSF Agent is not configured. Set {OpenAIOptions.SectionName}:Model and {OpenAIOptions.SectionName}:ApiKey (and optionally {OpenAIOptions.SectionName}:Endpoint).");
         }
 
         return string.IsNullOrWhiteSpace(model) || modelClientFactory is null ? chatClient : modelClientFactory(model.Trim());

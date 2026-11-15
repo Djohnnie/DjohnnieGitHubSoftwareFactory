@@ -68,18 +68,18 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             Truncate(output.Reason?.Trim() ?? string.Empty, 300));
     }
 
-    /// <summary>Writes example prompts for a Copilot; empty when the agent returns nothing usable.</summary>
+    /// <summary>Writes example prompts for a chat agent; empty when the agent returns nothing usable.</summary>
     /// <param name="agent">The Chat Suggestions agent.</param>
-    /// <param name="copilot">The Copilot the suggestions are for.</param>
+    /// <param name="copilot">The chat agent the suggestions are for.</param>
     /// <param name="context">Extra page context, e.g. the selected repository.</param>
-    /// <param name="tools">The Copilot's tools; their form snapshot is sent along.</param>
+    /// <param name="tools">The chat agent's tools; their form snapshot is sent along.</param>
     public async Task<IReadOnlyList<string>> SuggestPromptsAsync(InternalAgent agent, InternalAgent copilot, string? context, AssistantTools? tools,
         CancellationToken cancellationToken = default)
     {
         var form = tools?.Snapshot is { } snapshot ? await snapshot() : null;
         var formJson = form is null ? "null" : Truncate(JsonSerializer.Serialize(form, form.GetType(), JsonOptions), MaxFormLength);
         var message = $"""
-            Copilot: {copilot.Name}
+            Agent: {copilot.Name}
             Purpose: {copilot.Description}
             Context: {(string.IsNullOrWhiteSpace(context) ? "(none)" : context.Trim())}
 
@@ -268,7 +268,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         [property: Description("The title; no placeholders.")] string? Title,
         [property: Description("The description as Markdown.")] string? Description);
 
-    [Description("Suggestion chips for a Copilot chat.")]
+    [Description("Suggestion chips for an agent chat.")]
     internal sealed record SuggestionsOutput(
-        [property: Description("Exactly 3 messages the user could send to the Copilot.")] List<string>? Suggestions);
+        [property: Description("Exactly 3 messages the user could send to the chat agent.")] List<string>? Suggestions);
 }

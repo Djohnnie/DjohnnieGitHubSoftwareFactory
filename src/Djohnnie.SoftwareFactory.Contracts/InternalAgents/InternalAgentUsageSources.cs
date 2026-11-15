@@ -20,10 +20,11 @@ public static class InternalAgentUsageSources
         [InternalAgentKeys.ForWorkItemTemplate(WorkItemType.Task)] = InternalAgentUsageSource.TaskTemplateCopilotChat,
         [InternalAgentKeys.AgentCopilot] = InternalAgentUsageSource.AgentCopilotChat,
         [InternalAgentKeys.AgentTemplateCopilot] = InternalAgentUsageSource.AgentTemplateCopilotChat,
-        [InternalAgentKeys.CopilotInstructionsCopilot] = InternalAgentUsageSource.CopilotInstructionsCopilotChat
+        [InternalAgentKeys.CopilotInstructionsCopilot] = InternalAgentUsageSource.CopilotInstructionsCopilotChat,
+        [InternalAgentKeys.CopilotSkillsAgent] = InternalAgentUsageSource.CopilotSkillsAgentChat
     };
 
-    /// <summary>The source of a chat with the Copilot with this key.</summary>
+    /// <summary>The source of a chat with the chat agent with this key.</summary>
     public static InternalAgentUsageSource ForCopilot(string key)
     {
         return CopilotChats.GetValueOrDefault(key, InternalAgentUsageSource.Unknown);

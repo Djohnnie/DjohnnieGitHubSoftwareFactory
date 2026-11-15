@@ -1,11 +1,11 @@
 namespace Djohnnie.SoftwareFactory.Agents;
 
-/// <summary>Settings for the GitHub MCP server that gives the Copilots read-only access to the selected repository.</summary>
+/// <summary>Settings for the GitHub MCP server that gives the chat agents read-only access to the selected repository.</summary>
 public sealed class GitHubMcpOptions
 {
     public const string SectionName = "GitHubMcp";
 
-    /// <summary><c>false</c> turns the GitHub MCP tools off; the Copilots then only have their own tools.</summary>
+    /// <summary><c>false</c> turns the GitHub MCP tools off; the chat agents then only have their own tools.</summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>The remote GitHub MCP server (Streamable HTTP).</summary>

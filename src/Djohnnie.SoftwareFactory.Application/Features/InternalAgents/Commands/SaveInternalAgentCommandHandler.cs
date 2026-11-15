@@ -12,7 +12,7 @@ public sealed class SaveInternalAgentCommandHandler(InternalAgentRegistry regist
     public async Task<Response<InternalAgent>> Handle(SaveInternalAgentCommand request, CancellationToken cancellationToken)
     {
         await registry.EnsureSeededAsync(cancellationToken);
-        // A Copilot that never had a model may still be toggled from the overview; one that has a model keeps one.
+        // A chat agent that never had a model may still be toggled from the overview; one that has a model keeps one.
         var current = await registry.GetAsync(request.Dto.Agent.Key, cancellationToken);
         if (current.Kind == InternalAgentKind.Copilot && current.ModelId is not null && request.Dto.Agent.ModelId is null)
         {

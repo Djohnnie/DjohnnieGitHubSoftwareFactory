@@ -79,7 +79,7 @@
                 Markdown with build and test commands, the architecture and the conventions Copilot should follow.
             </MudText>
             <MarkdownEditor @bind-Value="_content" RawMarkdown="true" Height="600px"
-                            Placeholder="Write the instructions in Markdown, or ask the Copilot above to write them." />
+                            Placeholder="Write the instructions in Markdown, or ask the agent above to write them." />
             <MudText Typo="Typo.caption" Align="Align.End" Class="d-block mt-1"
                      Color="@(Length > CopilotInstructionsFile.CodeReviewLimit ? Color.Warning : Color.Secondary)">
                 @Length characters@(Length > CopilotInstructionsFile.CodeReviewLimit ? $" (Copilot code review only reads the first {CopilotInstructionsFile.CodeReviewLimit})" : string.Empty)
@@ -146,7 +146,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Connect to the GitHub MCP server while the file loads; without it the Copilot only has its own tools.
+        // Connect to the GitHub MCP server while the file loads; without it the agent only has its own tools.
         var gitHubTools = ConnectGitHubAsync();
         await LoadAsync();
         _gitHubTools = await gitHubTools;
@@ -201,7 +201,7 @@
         }
     }
 
-    /// <summary>Loads the file again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    /// <summary>Loads the file again and discards unsaved changes; the agent conversation is kept.</summary>
     private async Task ReloadAsync()
     {
         await LoadAsync();

@@ -202,7 +202,7 @@ else if (_agent is not null)
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not load the managed models for DGHSF Copilot: {ex.Message}", Severity.Warning);
+            Snackbar.Add($"Could not load the managed models for DGHSF Agent: {ex.Message}", Severity.Warning);
         }
 
         _assistantTools = AssistantForms.ForAgent(
@@ -213,7 +213,7 @@ else if (_agent is not null)
             change => InvokeAsync(() => { change(); StateHasChanged(); }));
     }
 
-    /// <summary>Loads the committed file again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    /// <summary>Loads the committed file again and discards unsaved changes; the agent conversation is kept.</summary>
     private async Task ResetAsync()
     {
         var repo = Repository.Current!.FullName;

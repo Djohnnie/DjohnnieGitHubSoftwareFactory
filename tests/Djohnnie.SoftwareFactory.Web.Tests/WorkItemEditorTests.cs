@@ -226,7 +226,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Navigation.NavigateTo("/epics/new");
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>();
-        Assert.Contains("DGHSF Copilot is not configured yet", cut.Markup);
+        Assert.Contains("DGHSF Agent is not configured yet", cut.Markup);
         Assert.Empty(cut.FindComponents<AgentPicker>());
         Assert.Empty(cut.FindComponents<MudSelect<Guid?>>());
         Assert.Contains("Accept &amp; create issue", cut.Markup);

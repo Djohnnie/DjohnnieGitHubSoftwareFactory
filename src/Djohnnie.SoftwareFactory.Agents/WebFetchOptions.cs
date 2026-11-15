@@ -1,6 +1,6 @@
 namespace Djohnnie.SoftwareFactory.Agents;
 
-/// <summary>Settings for the <c>fetch_url</c> tool that lets the Copilots read web pages the user links to.</summary>
+/// <summary>Settings for the <c>fetch_url</c> tool that lets the chat agents read web pages the user links to.</summary>
 public sealed class WebFetchOptions
 {
     public const string SectionName = "WebFetch";

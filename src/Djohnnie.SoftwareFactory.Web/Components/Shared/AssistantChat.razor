@@ -7,7 +7,7 @@
 @inject ILogger<AssistantChat> Logger
 
 @*
-    A chat with one of DGHSF's internal Copilots. The Copilot (system prompt, name, enabled state) is managed on the
+    A chat with one of DGHSF's internal chat agents. The agent (system prompt, name, enabled state) is managed on the
     internal agents page; the page supplies the tools that read and fill its form. With an Owner the conversation is stored
     with it and shown again when the page is reopened; a page without an Owner yet calls AttachAsync once it has one. Before the conversation starts, the Chat Suggestions agent writes suggestion chips in the
     background; the static suggestions are the fallback.
@@ -36,7 +36,7 @@ else
         @if (!Assistant.IsConfigured)
         {
             <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Dense="true" Class="mt-3">
-                DGHSF Copilot is not configured yet. Set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
+                DGHSF Agent is not configured yet. Set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
                 <code>OpenAI:ApiKey</code> (for example with <code>dotnet user-secrets</code>) and restart the app.
             </MudAlert>
         }
@@ -63,7 +63,7 @@ else
                                 }
                                 else
                                 {
-                                    @* Copilot replies are Markdown; ChatMarkdown escapes raw HTML and keeps only safe links. *@
+                                    @* Agent replies are Markdown; ChatMarkdown escapes raw HTML and keeps only safe links. *@
                                     <div class="chat-markdown">@((MarkupString)ChatMarkdown.ToHtml(message.Text))</div>
                                 }
                             </div>
@@ -110,13 +110,13 @@ else
         public bool IsError { get; set; }
     }
 
-    /// <summary>The internal Copilot, see <see cref="InternalAgentKeys"/>.</summary>
+    /// <summary>The internal chat agent, see <see cref="InternalAgentKeys"/>.</summary>
     [Parameter, EditorRequired] public string CopilotKey { get; set; } = string.Empty;
 
-    /// <summary>Overrides the Copilot's name as the title.</summary>
+    /// <summary>Overrides the agent's name as the title.</summary>
     [Parameter] public string? Title { get; set; }
     [Parameter] public string? Subtitle { get; set; }
-    [Parameter] public string Placeholder { get; set; } = "Ask DGHSF Copilot";
+    [Parameter] public string Placeholder { get; set; } = "Ask DGHSF Agent";
 
     [Parameter] public AssistantTools? Tools { get; set; }
 
@@ -170,7 +170,7 @@ else
             }
             catch (Exception ex)
             {
-                _loadError = $"Could not load the Copilot: {ex.Message}";
+                _loadError = $"Could not load the agent: {ex.Message}";
             }
         }
 
@@ -316,7 +316,7 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Saved, but the Copilot conversation could not be stored: {ex.Message}", Severity.Warning);
+            Snackbar.Add($"Saved, but the agent conversation could not be stored: {ex.Message}", Severity.Warning);
         }
     }
 

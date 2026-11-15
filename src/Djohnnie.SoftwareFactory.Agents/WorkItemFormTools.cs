@@ -11,7 +11,7 @@ using Microsoft.Extensions.AI;
 namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>
-/// Tools that let DGHSF Copilot read and prefill a work item form (epic, feature, user story, bug or task).
+/// Tools that let DGHSF Agent read and prefill a work item form (epic, feature, user story, bug or task).
 /// The form is only changed in the UI; the user still saves or accepts the item. The assignment tools are only
 /// offered for types that are assigned to the Copilot cloud agent.
 /// </summary>

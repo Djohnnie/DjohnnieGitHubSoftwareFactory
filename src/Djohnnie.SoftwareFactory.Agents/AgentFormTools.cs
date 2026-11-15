@@ -7,7 +7,7 @@ using Microsoft.Extensions.AI;
 namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>
-/// Tools that let DGHSF Copilot read and prefill the custom agent form. The form is only changed in the UI;
+/// Tools that let DGHSF Agent read and prefill the custom agent form. The form is only changed in the UI;
 /// the user still saves and commits it.
 /// </summary>
 /// <param name="getAgent">The agent being edited.</param>

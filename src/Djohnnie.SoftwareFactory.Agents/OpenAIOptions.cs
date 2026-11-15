@@ -1,7 +1,7 @@
 namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>
-/// The OpenAI-compatible endpoint DGHSF Copilot talks to. Works with OpenAI, Azure OpenAI / Microsoft Foundry
+/// The OpenAI-compatible endpoint DGHSF Agent talks to. Works with OpenAI, Azure OpenAI / Microsoft Foundry
 /// (Azure resource-root URLs automatically use <c>/openai/v1/</c>) and other compatible services.
 /// </summary>
 public sealed class OpenAIOptions

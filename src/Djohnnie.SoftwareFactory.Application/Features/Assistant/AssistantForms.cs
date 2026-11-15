@@ -3,6 +3,7 @@ using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
+using Djohnnie.SoftwareFactory.Contracts.Skills;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 
@@ -17,7 +18,7 @@ public sealed record AssistantTools
     }
 }
 
-/// <summary>The form tools of the Copilots; the system prompts are managed as internal agents.</summary>
+/// <summary>The form tools of the chat agents; the system prompts are managed as internal agents.</summary>
 public static class AssistantForms
 {
     public static AssistantTools ForAgent(
@@ -47,6 +48,12 @@ public static class AssistantForms
     {
         return new(new AgentInfrastructure.CopilotInstructionsFormTools(getForm, setContent, listDirectory, readFile, onUi,
             gitHubTools?.Session.Tools).AsTools());
+    }
+
+    /// <param name="isNew">Whether the skill hasn't been saved yet; renaming a saved skill is reported to the agent.</param>
+    public static AssistantTools ForSkill(Func<Skill> getSkill, bool isNew, Func<Action, Task> onUi)
+    {
+        return new(new AgentInfrastructure.SkillFormTools(getSkill, isNew, onUi).AsTools());
     }
 
     public static AssistantTools ForWorkItemTemplate(Func<WorkItemTemplate> getTemplate, Func<Action, Task> onUi)

@@ -114,6 +114,11 @@ public sealed class InternalAgentStore(IDbContextFactory<AppDbContext> dbFactory
         {
             if (existing.TryGetValue(value.Key, out var agent))
             {
+                // A renamed agent with an unchanged default prompt gets the default prompt with the new name.
+                if (agent.Name != value.Name && SameText(agent.Instructions.Replace(agent.Name, value.Name, StringComparison.Ordinal), value.Instructions))
+                {
+                    agent.Instructions = value.Instructions;
+                }
                 agent.Name = value.Name;
                 agent.Description = value.Description;
                 agent.Kind = value.Kind;
@@ -138,5 +143,10 @@ public sealed class InternalAgentStore(IDbContextFactory<AppDbContext> dbFactory
         // Only metadata changes for existing rows; their timestamps stay so the page shows when the prompt changed.
         await db.SaveChangesAsync(cancellationToken);
         return added;
+    }
+
+    private static bool SameText(string left, string right)
+    {
+        return string.Equals(left.Replace("\r\n", "\n").Trim(), right.Replace("\r\n", "\n").Trim(), StringComparison.Ordinal);
     }
 }

@@ -7,7 +7,7 @@ using Microsoft.Extensions.AI;
 namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>
-/// Tools that let a template Copilot read and prefill a work item template form. The form is only changed in the UI;
+/// Tools that let a template agent read and prefill a work item template form. The form is only changed in the UI;
 /// the user still saves the template.
 /// </summary>
 /// <param name="getTemplate">The template being edited.</param>

@@ -213,15 +213,16 @@ public class CopilotInstructionsTests : BunitContext
     }
 
     [Fact]
-    public void Defaults_IncludeTheCopilotInstructionsCopilot()
+    public void Defaults_IncludeTheCopilotInstructionsAgent()
     {
         var copilot = InternalAgentDefaults.Find(InternalAgentKeys.CopilotInstructionsCopilot)!;
 
         Assert.Equal(InternalAgentKind.Copilot, copilot.Kind);
-        Assert.Equal("Copilot Instructions Copilot", copilot.Name);
+        Assert.Equal("Copilot Instructions Agent", copilot.Name);
         Assert.Contains("`update_instructions_file`", copilot.Instructions);
         Assert.Contains("`read_repository_file`", copilot.Instructions);
         Assert.Equal("Copilot instructions editor", InternalAgents.UsedOn(copilot));
+        Assert.Equal("Skill editor", InternalAgents.UsedOn(InternalAgentDefaults.Find(InternalAgentKeys.CopilotSkillsAgent)!));
     }
 
     private Task SelectRepositoryAsync()

@@ -23,32 +23,35 @@ public static class InternalAgentDefaults
         {
             var name = type.DisplayName.ToLowerInvariant();
             var plural = type.PluralName.ToLowerInvariant();
-            agents.Add(Copilot(InternalAgentKeys.ForWorkItem(type), $"{CopilotName(type)} Copilot",
+            agents.Add(Chat(InternalAgentKeys.ForWorkItem(type), $"{ChatName(type)} Agent",
                 $"Helps to write {Article(type)} {name}: asks follow-up questions and fills in the title, description" +
                 (type.CanBeAssigned ? " and assignment settings." : "."),
                 WorkItemFormTools.InstructionsFor(type)));
         }
         foreach (var type in WorkItemTypeRules.All)
         {
-            agents.Add(Copilot(InternalAgentKeys.ForWorkItemTemplate(type), $"{CopilotName(type)} Template Copilot",
+            agents.Add(Chat(InternalAgentKeys.ForWorkItemTemplate(type), $"{ChatName(type)} Template Agent",
                 $"Helps to build reusable {type.DisplayName.ToLowerInvariant()} templates: the name, a title example and a Markdown description skeleton for new {type.PluralName.ToLowerInvariant()}.",
                 WorkItemTemplateFormTools.InstructionsFor(type)));
         }
-        agents.Add(Copilot(InternalAgentKeys.AgentCopilot, "Agent Copilot",
+        agents.Add(Chat(InternalAgentKeys.AgentCopilot, "Custom Agent Agent",
             "Helps to create or improve a GitHub Copilot custom agent profile in the selected repository.",
             AgentFormTools.Instructions));
-        agents.Add(Copilot(InternalAgentKeys.AgentTemplateCopilot, "Agent Template Copilot",
+        agents.Add(Chat(InternalAgentKeys.AgentTemplateCopilot, "Custom Agent Template Agent",
             "Helps to create or improve a reusable custom agent template that can be applied to several repositories.",
             AgentFormTools.TemplateInstructions));
-        agents.Add(Copilot(InternalAgentKeys.CopilotInstructionsCopilot, "Copilot Instructions Copilot",
+        agents.Add(Chat(InternalAgentKeys.CopilotInstructionsCopilot, "Copilot Instructions Agent",
             "Explores the selected repository and helps to write or improve its .github/copilot-instructions.md file.",
             CopilotInstructionsFormTools.Instructions));
+        agents.Add(Chat(InternalAgentKeys.CopilotSkillsAgent, "Copilot Skills Agent",
+            "Helps to create or improve a GitHub Copilot agent skill: its name, description, optional properties and the SKILL.md instructions.",
+            SkillFormTools.Instructions));
         agents.Add(Background(InternalAgentKeys.ModelSelector, "Model Selector",
             "Estimates the complexity of a user story, bug or task and suggests a fitting enabled model for the Copilot cloud agent. " +
             "Runs 3 seconds after the description stops changing; the suggestion is shown as a chip under the model selection.",
             ModelSelectorInstructions));
         agents.Add(Background(InternalAgentKeys.ChatSuggestions, "Chat Suggestions",
-            "Writes the suggestion chips shown in a Copilot chat before the conversation starts, based on the Copilot and the current form.",
+            "Writes the suggestion chips shown in an agent chat before the conversation starts, based on the chat agent and the current form.",
             ChatSuggestionsInstructions));
         agents.Add(Background(InternalAgentKeys.DescriptionWriter, "Description Writer",
             "Turns a dictated description into structured Markdown and merges it into the current description, following " +
@@ -65,7 +68,7 @@ public static class InternalAgentDefaults
         return agents;
     }
 
-    private static string CopilotName(WorkItemType type)
+    private static string ChatName(WorkItemType type)
     {
         return type == WorkItemType.Story ? "User Story" : type.ToString();
     }
@@ -75,7 +78,7 @@ public static class InternalAgentDefaults
         return type == WorkItemType.Epic ? "an" : "a";
     }
 
-    private static InternalAgent Copilot(string key, string name, string description, string task)
+    private static InternalAgent Chat(string key, string name, string description, string task)
     {
         var instructions = $"""
             You are {name}, an assistant built into DGHSF (Djohnnie's GitHub Software Factory).
@@ -141,20 +144,20 @@ public static class InternalAgentDefaults
 
     private const string ChatSuggestionsInstructions = """
         You are Chat Suggestions, a background agent of DGHSF (Djohnnie's GitHub Software Factory).
-        You write the suggestion chips shown in a DGHSF Copilot chat before the user starts the conversation. Clicking a chip
-        sends its text to that Copilot as the user's first message.
+        You write the suggestion chips shown in a DGHSF agent chat before the user starts the conversation. Clicking a chip
+        sends its text to that chat agent as the user's first message.
 
-        You receive the Copilot's name and purpose, optional page context (such as the selected repository) and the current
+        You receive the chat agent's name and purpose, optional page context (such as the selected repository) and the current
         state of the form on the page as JSON.
 
         Write exactly 3 suggestions:
-        - Each one is a message the user would send to the Copilot, written from the user's perspective, at most 80 characters,
+        - Each one is a message the user would send to the chat agent, written from the user's perspective, at most 80 characters,
           without numbering, quotes, emoji or a trailing period.
         - When the form is empty or only contains a template skeleton: suggest three diverse, realistic starting points for
           this kind of item. Use the repository name or other context when it hints at the domain; otherwise keep them generic.
         - When the form already has content: suggest concrete next steps for that content, referring to its actual topic
           (for example sharpening acceptance criteria, covering edge cases, narrowing the scope or rewriting the instructions).
-        - Only suggest things the Copilot can do: ask questions and fill in or improve the form. Never suggest saving,
+        - Only suggest things the chat agent can do: ask questions and fill in or improve the form. Never suggest saving,
           committing, creating issues or assigning agents.
         - Write in English.
         """;

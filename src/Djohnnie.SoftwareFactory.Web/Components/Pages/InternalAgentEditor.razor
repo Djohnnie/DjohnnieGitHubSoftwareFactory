@@ -24,7 +24,7 @@ else if (_agent is not null)
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
         <MudText Typo="Typo.h4">@_agent.Name</MudText>
-        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(_agent.Kind == InternalAgentKind.Copilot ? "Copilot" : "Background agent")</MudChip>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(_agent.Kind == InternalAgentKind.Copilot ? "Chat agent" : "Background agent")</MudChip>
         @if (_agent.IsCustomized)
         {
             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">Customized</MudChip>
@@ -192,17 +192,17 @@ else if (_agent is not null)
     private bool CanSave => !_saving && !_testing && (ModelIsVerified || (_agent!.Kind == InternalAgentKind.Background && _agent.ModelId is null));
 
     private string PromptHelp => _agent!.Kind == InternalAgentKind.Copilot
-        ? "Markdown instructions for the chat. Keep the tool names (in backticks) as they are: the Copilot uses those tools to read and fill in the form."
+        ? "Markdown instructions for the chat. Keep the tool names (in backticks) as they are: the agent uses those tools to read and fill in the form."
         : "Instructions for the agent. It receives its input from DGHSF as JSON; DGHSF enforces the output format, so the prompt only needs to describe how to decide.";
 
     private string EnabledHelp => _agent!.Kind == InternalAgentKind.Copilot
-        ? "A disabled Copilot is hidden from its page."
+        ? "A disabled chat agent is hidden from its page."
         : _agent.Key switch
         {
             InternalAgentKeys.ModelSelector => "When disabled, the assignment settings show no model suggestion.",
             InternalAgentKeys.DescriptionWriter => "When disabled, a dictated description is added as it was recognized, at the end of the description.",
             InternalAgentKeys.WorkItemBreakdown => "When disabled, epics, features and user stories don't offer to generate their child items.",
-            _ => "When disabled, Copilot chats show their built-in example suggestions."
+            _ => "When disabled, agent chats show their built-in example suggestions."
         };
 
     protected override async Task OnParametersSetAsync()
@@ -237,7 +237,7 @@ else if (_agent is not null)
     }
 
     /// <summary>
-    /// An editable copy. A Copilot without a model starts from the default model, or else the configured model when that
+    /// An editable copy. A chat agent without a model starts from the default model, or else the configured model when that
     /// is in the catalog. A background agent may stay on the configured model, so it only gets the default until its first save.
     /// </summary>
     private InternalAgent Editable(InternalAgent stored)

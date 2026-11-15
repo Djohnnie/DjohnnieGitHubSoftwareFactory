@@ -19,7 +19,7 @@
   <rect x="210" y="245" width="260" height="50" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
   <text x="340" y="275" text-anchor="middle">GitHub API client (user token)</text>
   <rect x="210" y="310" width="260" height="60" rx="6" fill="#fff4e0" stroke="#c98a1b"/>
-  <text x="340" y="335" text-anchor="middle">DGHSF Copilot</text>
+  <text x="340" y="335" text-anchor="middle">DGHSF Agents</text>
   <text x="340" y="355" text-anchor="middle" font-size="12">Microsoft Agent Framework + tools</text>
   <rect x="210" y="385" width="260" height="55" rx="6" fill="#e8f0fe" stroke="#4a6fa5"/>
   <text x="340" y="410" text-anchor="middle">EF Core data access</text>

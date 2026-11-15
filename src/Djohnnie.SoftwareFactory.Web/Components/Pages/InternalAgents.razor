@@ -12,7 +12,7 @@
     <div>
         <MudText Typo="Typo.h4">Internal agents</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            DGHSF's own agents, built on the Microsoft Agent Framework and shared across repositories. Copilots help you fill in
+            DGHSF's own agents, built on the Microsoft Agent Framework and shared across repositories. Chat agents help you fill in
             a form in a chat; background agents work without a chat. Tune an agent by changing its system prompt and choosing its model, or reset the prompt to DGHSF's default.
         </MudText>
     </div>
@@ -28,7 +28,7 @@
 {
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
         The agents don't run until the model is configured: set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
-        <code>OpenAI:ApiKey</code> and restart the app. You can already change the prompts of the background agents; a Copilot needs a tested model first.
+        <code>OpenAI:ApiKey</code> and restart the app. You can already change the prompts of the background agents; a chat agent needs a tested model first.
     </MudAlert>
 }
 
@@ -39,9 +39,9 @@
 
 @foreach (var kind in Enum.GetValues<InternalAgentKind>())
 {
-    <MudText Typo="Typo.h6" Class="mt-4 mb-2">@(kind == InternalAgentKind.Copilot ? "Copilots" : "Background agents")</MudText>
+    <MudText Typo="Typo.h6" Class="mt-4 mb-2">@(kind == InternalAgentKind.Copilot ? "Chat agents" : "Background agents")</MudText>
     <MudTable Outlined="true" Striped="true" T="InternalAgent" Items="@_agents.Where(a => a.Kind == kind)" Loading="_loading"
-              LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" Class="mb-4" aria-label="@(kind == InternalAgentKind.Copilot ? "Copilots" : "Background agents")">
+              LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" Class="mb-4" aria-label="@(kind == InternalAgentKind.Copilot ? "Chat agents" : "Background agents")">
         <HeaderContent>
             <MudTh>Agent</MudTh>
             <MudTh>@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")</MudTh>
@@ -168,8 +168,9 @@
             InternalAgentKeys.AgentCopilot => "Agent editor",
             InternalAgentKeys.AgentTemplateCopilot => "Agent template editor",
             InternalAgentKeys.CopilotInstructionsCopilot => "Copilot instructions editor",
+            InternalAgentKeys.CopilotSkillsAgent => "Skill editor",
             InternalAgentKeys.ModelSelector => "After description edits (debounced)",
-            InternalAgentKeys.ChatSuggestions => "When a Copilot chat opens",
+            InternalAgentKeys.ChatSuggestions => "When an agent chat opens",
             InternalAgentKeys.DescriptionWriter => "After dictating a description",
             InternalAgentKeys.WorkItemBreakdown => "When generating child items",
             _ => string.Empty

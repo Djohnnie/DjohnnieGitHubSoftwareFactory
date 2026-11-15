@@ -7,7 +7,7 @@ using Markdig.Syntax.Inlines;
 namespace Djohnnie.SoftwareFactory.Web.Components.Shared;
 
 /// <summary>
-/// Renders the Markdown of Copilot replies and GitHub comments as safe HTML. Model output can be steered by prompt injection
+/// Renders the Markdown of agent replies and GitHub comments as safe HTML. Model output can be steered by prompt injection
 /// (e.g. from a repository file) and anyone who can comment writes GitHub comments, so both are treated as untrusted: raw HTML is escaped, only http(s) and mailto links are kept, links
 /// open in a new tab without a referrer, and images become links, so a reply can't make the browser load a URL.
 /// </summary>

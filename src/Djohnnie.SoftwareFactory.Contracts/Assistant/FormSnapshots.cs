@@ -63,3 +63,13 @@ public sealed record CopilotInstructionsFormSnapshot(
 public sealed record RepositoryEntry(
     [property: JsonPropertyName("path")] string Path,
     [property: JsonPropertyName("type")] string Type);
+
+/// <remarks>The optional properties are <c>null</c> when they are left out of the frontmatter.</remarks>
+public sealed record SkillFormSnapshot(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("instructions")] string Instructions,
+    [property: JsonPropertyName("license")] string? License,
+    [property: JsonPropertyName("compatibility")] string? Compatibility,
+    [property: JsonPropertyName("allowedTools")] string? AllowedTools);

@@ -20,7 +20,7 @@
     <polyline points="314,300 350,334 314,368"/>
   </g>
 
-  <!-- AI sparkle (DGHSF Copilot) -->
+  <!-- AI sparkle (DGHSF Agents) -->
   <path d="M384 48 Q389 79 420 84 Q389 89 384 120 Q379 89 348 84 Q379 79 384 48 Z" fill="#FFE066"/>
   <path d="M318 140 Q320 154 334 156 Q320 158 318 172 Q316 158 302 156 Q316 154 318 140 Z" fill="#fff" opacity="0.85"/>
 </svg>

@@ -855,7 +855,7 @@ else if (_item is not null)
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Could not load the managed models for DGHSF Copilot: {ex.Message}", Severity.Warning);
+                Snackbar.Add($"Could not load the managed models for DGHSF Agent: {ex.Message}", Severity.Warning);
             }
         }
 
@@ -868,7 +868,7 @@ else if (_item is not null)
             change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }));
     }
 
-    /// <summary>The Copilot's suggestion chips follow the title and description, once a changed field loses focus.</summary>
+    /// <summary>The agent's suggestion chips follow the title and description, once a changed field loses focus.</summary>
     private void OnFieldBlur()
     {
         if (_item is null)
@@ -1071,7 +1071,7 @@ else if (_item is not null)
         }
     }
 
-    /// <summary>Loads the stored item again and discards unsaved changes; the Copilot conversation is kept.</summary>
+    /// <summary>Loads the stored item again and discards unsaved changes; the agent conversation is kept.</summary>
     private async Task ResetAsync()
     {
         if (await Dialogs.ShowMessageBoxAsync("Reset changes", $"Discard your changes and load the saved {Name} again?",

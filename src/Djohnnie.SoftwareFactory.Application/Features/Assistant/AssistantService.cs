@@ -8,7 +8,7 @@ using AgentInfrastructure = Djohnnie.SoftwareFactory.Agents;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.Assistant;
 
-/// <summary>Runs the internal Copilots of the pages and the Chat Suggestions agent that writes their suggestion chips.</summary>
+/// <summary>Runs the internal chat agents of the pages and the Chat Suggestions agent that writes their suggestion chips.</summary>
 public sealed class AssistantService(
     AgentInfrastructure.AssistantAgentFactory factory,
     AgentInfrastructure.BackgroundAgents backgroundAgents,
@@ -22,13 +22,13 @@ public sealed class AssistantService(
     /// <summary>The configured model, used by agents without a model of their own.</summary>
     public string? DefaultModel => factory.DefaultModel;
 
-    /// <summary>The Copilot with its current system prompt, model and enabled state.</summary>
+    /// <summary>The chat agent with its current system prompt, model and enabled state.</summary>
     public async Task<InternalAgent> GetCopilotAsync(string key, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetInternalAgentQuery(new(key)), cancellationToken)).Dto;
     }
 
-    /// <param name="copilot">The Copilot to talk to.</param>
+    /// <param name="copilot">The chat agent to talk to.</param>
     /// <param name="tools">The tools of the page.</param>
     /// <param name="owner">What the conversation is stored with; <c>null</c> until that exists, see <see cref="AssistantConversation.AttachAsync"/>.</param>
     public AssistantConversation CreateConversation(InternalAgent copilot, AssistantTools? tools = null, ChatOwner? owner = null)
@@ -50,7 +50,7 @@ public sealed class AssistantService(
     }
 
     /// <summary>
-    /// Lets the Chat Suggestions agent write example prompts for the Copilot, based on the current form.
+    /// Lets the Chat Suggestions agent write example prompts for the chat agent, based on the current form.
     /// Empty when the agent is disabled, not configured or fails.
     /// </summary>
     /// <param name="context">Extra page context, e.g. the selected repository.</param>
@@ -71,13 +71,13 @@ public sealed class AssistantService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Chat Suggestions could not write suggestions for {Copilot}.", copilot.Key);
+            logger.LogWarning(ex, "Chat Suggestions could not write suggestions for {Agent}.", copilot.Key);
             return [];
         }
     }
 }
 
-/// <summary>A conversation with a Copilot that continues the owner's stored conversation and adds to it.</summary>
+/// <summary>A conversation with a chat agent that continues the owner's stored conversation and adds to it.</summary>
 public sealed class AssistantConversation
 {
     private readonly AgentInfrastructure.AssistantConversation _conversation;

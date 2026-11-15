@@ -136,7 +136,7 @@
         }
     }
 
-    // The value was changed from outside the editor (e.g. by DGHSF Copilot): push it into the editor.
+    // The value was changed from outside the editor (e.g. by DGHSF Agent): push it into the editor.
     protected override async Task OnParametersSetAsync()
     {
         if (_editor is not null && Value != _markdown)
