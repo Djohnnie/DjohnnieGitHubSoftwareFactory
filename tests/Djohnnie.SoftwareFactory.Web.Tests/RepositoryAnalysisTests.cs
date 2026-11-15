@@ -188,6 +188,11 @@ public class RepositoryAnalysisTests
         var discarded = await todo.DiscardDraftsAsync(Repo, root.Id, _cancellationToken);
         Assert.Equal((5, 0), (discarded.Deleted, discarded.Kept));
         Assert.Equal(["Existing epic", "Existing feature"], (await items.GetAllAsync(Repo, cancellationToken: _cancellationToken)).Select(i => i.Title).Order());
+
+        // OpenAI's strict structured output refuses a $ref that doesn't point to a top-level definition.
+        var schemas = chat.Options.Select(o => o?.ResponseFormat).OfType<ChatResponseFormatJson>().Select(f => f.Schema?.GetRawText()).ToList();
+        Assert.Equal(chat.Requests.Count, schemas.Count);
+        Assert.All(schemas, schema => Assert.DoesNotContain("#/properties", schema));
     }
 
     [Fact]

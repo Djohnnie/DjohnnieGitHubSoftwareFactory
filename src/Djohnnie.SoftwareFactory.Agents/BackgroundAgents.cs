@@ -301,9 +301,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryWorkItemWriter, tools.AsTools())
             .RunAsync<WrittenFeatureOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var titles = new HashSet<string>(input.ExistingChildTitles.Select(t => t.Trim()), StringComparer.OrdinalIgnoreCase);
-        List<GeneratedWorkItem> NewItems(List<ChildOutput>? items)
+        List<GeneratedWorkItem> NewItems(IEnumerable<(string? Title, string? Description)> items)
         {
-            return (items ?? [])
+            return items
                 .Select(item => new GeneratedWorkItem(
                     Truncate(item.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength),
                     Truncate(item.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength)))
@@ -313,8 +313,10 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         }
 
         var output = response.Result;
-        var stories = NewItems(output?.Stories);
-        var bugs = input.Mode == RepositoryAnalysisMode.Improvements ? NewItems(output?.Bugs) : [];
+        var stories = NewItems((output?.Stories ?? []).Select(story => (story.Title, story.Description)));
+        var bugs = input.Mode == RepositoryAnalysisMode.Improvements
+            ? NewItems((output?.Bugs ?? []).Select(bug => (bug.Title, bug.Description)))
+            : [];
         return new WrittenFeature(Truncate(output?.FeatureDescription?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength), stories, bugs);
     }
 
@@ -412,11 +414,25 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         [property: Description("A few sentences on what the feature covers, as plain text.")] string? Summary,
         [property: Description("The files and folders the feature is about, relative to the repository root.")] List<string>? Paths);
 
+    /// <remarks>
+    /// Stories and bugs have their own types on purpose: a type used twice is written as a <c>$ref</c> to the first
+    /// property, which OpenAI's strict structured output refuses (references may only point to top-level definitions).
+    /// </remarks>
     [Description("The feature's description and its work items.")]
     internal sealed record WrittenFeatureOutput(
         [property: Description("The complete description of the feature as Markdown.")] string? FeatureDescription,
-        [property: Description("The user stories of the feature, in a sensible order.")] List<ChildOutput>? Stories,
-        [property: Description("Concrete defects found in the code (improvements mode only); otherwise empty.")] List<ChildOutput>? Bugs);
+        [property: Description("The user stories of the feature, in a sensible order.")] List<StoryOutput>? Stories,
+        [property: Description("Concrete defects found in the code (improvements mode only); otherwise empty.")] List<BugOutput>? Bugs);
+
+    [Description("One user story.")]
+    internal sealed record StoryOutput(
+        [property: Description("The title; no placeholders.")] string? Title,
+        [property: Description("The description as Markdown, with acceptance criteria.")] string? Description);
+
+    [Description("One bug: a concrete defect found in the code.")]
+    internal sealed record BugOutput(
+        [property: Description("The title; no placeholders.")] string? Title,
+        [property: Description("The description as Markdown: what goes wrong, where, and what is expected.")] string? Description);
 
     [Description("Suggestion chips for an agent chat.")]
     internal sealed record SuggestionsOutput(
