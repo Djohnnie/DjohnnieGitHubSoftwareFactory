@@ -83,7 +83,7 @@ public class WorkItem : Entity
     public string? PullRequestBranch { get; set; }
 
     /// <summary>
-    /// The run (root TODO task) that generated the item from its repository, or <c>null</c>. Not a foreign key, so
+    /// The run (root background task) that generated the item from its repository, or <c>null</c>. Not a foreign key, so
     /// finished tasks can be cleaned up without touching the work items.
     /// </summary>
     public Guid? GeneratedByTaskId { get; set; }

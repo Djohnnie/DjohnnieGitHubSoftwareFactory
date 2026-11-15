@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace Djohnnie.SoftwareFactory.Contracts.TodoTasks;
 
-/// <summary>What a TODO task does; every kind has one handler in the Tasks function app. Stored by name.</summary>
+/// <summary>What a background task does; every kind has one handler in the Tasks function app. Stored by name.</summary>
 public enum TodoTaskKind
 {
     /// <summary>Reads a repository and plans its epics and features (the first task of a run).</summary>

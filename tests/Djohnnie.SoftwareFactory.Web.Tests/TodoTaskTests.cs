@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace Djohnnie.SoftwareFactory.Web.Tests;
 
 /// <summary>
-/// The TODO task life cycle against a real SQL Server: the store's conditional updates (claims, leases, fan-in) are
+/// The background task life cycle against a real SQL Server: the store's conditional updates (claims, leases, fan-in) are
 /// what keeps duplicate Service Bus messages and crashed executors harmless.
 /// </summary>
 public class TodoTaskTests

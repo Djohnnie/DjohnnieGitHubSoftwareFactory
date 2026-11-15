@@ -1,4 +1,4 @@
-@page "/todo-tasks"
+@page "/background-tasks"
 @implements IDisposable
 @using Djohnnie.SoftwareFactory.Application.Features.TodoTasks
 @using Djohnnie.SoftwareFactory.Contracts.TodoTasks
@@ -7,13 +7,13 @@
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 
-<PageTitle>TODO tasks</PageTitle>
+<PageTitle>Background tasks</PageTitle>
 
-<PageBreadcrumbs Current="TODO tasks" />
+<PageBreadcrumbs Current="Background tasks" />
 
 <MudStack Class="mb-4">
     <div>
-        <MudText Typo="Typo.h4">TODO tasks</MudText>
+        <MudText Typo="Typo.h4">Background tasks</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             Background runs of <b>@Repository.Current?.FullName</b>, newest first. The Tasks function app executes them: every run starts
             with one task that creates sub-tasks, and it ends when all of them have ended. Failed tasks are retried a few times.

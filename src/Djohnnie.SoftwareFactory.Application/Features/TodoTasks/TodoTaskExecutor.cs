@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 
 /// <summary>
-/// Executes one queued TODO task (the Tasks function app calls it for every Service Bus message). Retries go through
+/// Executes one queued background task (the Tasks function app calls it for every Service Bus message). Retries go through
 /// the database, never through message redelivery: a message for a task that isn't queued (a duplicate, or a task that
 /// was cancelled) is ignored.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class TodoTaskExecutor(
         var task = await store.TryStartAsync(id, settings.Lease, cancellationToken);
         if (task is null)
         {
-            logger.LogInformation("TODO task {Id} is not queued (a duplicate message, or cancelled); ignored.", id);
+            logger.LogInformation("Background task {Id} is not queued (a duplicate message, or cancelled); ignored.", id);
             return null;
         }
 
@@ -35,18 +35,18 @@ public sealed class TodoTaskExecutor(
             return await store.FailAsync(id, $"There is no handler for {task.Kind} tasks.", null, CancellationToken.None);
         }
 
-        logger.LogInformation("Starting TODO task {Id} ({Kind}, attempt {Attempt} of {MaxAttempts}) for {Repository}.",
+        logger.LogInformation("Starting background task {Id} ({Kind}, attempt {Attempt} of {MaxAttempts}) for {Repository}.",
             id, task.Kind, task.Attempts, task.MaxAttempts, task.RepositoryFullName);
         try
         {
             var outcome = await handler.ExecuteAsync(task, cancellationToken);
             if (await store.CompleteAsync(id, outcome.Result, outcome.SubTasks, CancellationToken.None))
             {
-                logger.LogInformation("TODO task {Id} done with {SubTasks} sub-tasks: {Result}", id, outcome.SubTasks.Count, outcome.Result);
+                logger.LogInformation("Background task {Id} done with {SubTasks} sub-tasks: {Result}", id, outcome.SubTasks.Count, outcome.Result);
                 return outcome.SubTasks.Count > 0 ? TodoTaskStatus.Waiting : TodoTaskStatus.Succeeded;
             }
 
-            logger.LogInformation("TODO task {Id} was cancelled or taken back while it ran; its result is discarded.", id);
+            logger.LogInformation("Background task {Id} was cancelled or taken back while it ran; its result is discarded.", id);
             return await store.GetStatusAsync(id, CancellationToken.None);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -57,13 +57,13 @@ public sealed class TodoTaskExecutor(
         }
         catch (DomainRuleException ex)
         {
-            logger.LogWarning("TODO task {Id} failed: {Message}", id, ex.Message);
+            logger.LogWarning("Background task {Id} failed: {Message}", id, ex.Message);
             return await store.FailAsync(id, ex.Message, null, CancellationToken.None);
         }
         catch (Exception ex)
         {
             var retryAt = timeProvider.GetUtcNow() + RetryDelay(settings, task.Attempts);
-            logger.LogWarning(ex, "TODO task {Id} failed (attempt {Attempt} of {MaxAttempts}).", id, task.Attempts, task.MaxAttempts);
+            logger.LogWarning(ex, "Background task {Id} failed (attempt {Attempt} of {MaxAttempts}).", id, task.Attempts, task.MaxAttempts);
             return await store.FailAsync(id, ex.Message, retryAt, CancellationToken.None);
         }
     }

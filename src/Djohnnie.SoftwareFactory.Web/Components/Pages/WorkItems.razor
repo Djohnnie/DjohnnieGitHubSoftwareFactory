@@ -201,7 +201,7 @@
         }
     }
 
-    /// <summary>Starts a run in the Tasks function app and shows its progress on the TODO tasks page.</summary>
+    /// <summary>Starts a run in the Tasks function app and shows its progress on the Background tasks page.</summary>
     private async Task GenerateFromRepositoryAsync()
     {
         var dialog = await Dialogs.ShowAsync<RepositoryAnalysisDialog>("Generate work items from the repository",
@@ -210,7 +210,7 @@
         var result = await dialog.Result;
         if (result is { Canceled: false })
         {
-            Navigation.NavigateTo("/todo-tasks");
+            Navigation.NavigateTo("/background-tasks");
         }
     }
 

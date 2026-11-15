@@ -1,6 +1,6 @@
 namespace Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 
-/// <summary>How the Tasks function app schedules and retries TODO tasks (section <c>TodoTasks</c>).</summary>
+/// <summary>How the Tasks function app schedules and retries background tasks (section <c>TodoTasks</c>).</summary>
 public sealed class TodoTaskOptions
 {
     public const string SectionName = "TodoTasks";

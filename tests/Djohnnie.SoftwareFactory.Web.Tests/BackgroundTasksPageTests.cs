@@ -14,11 +14,11 @@ using MudBlazor.Services;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
 
-public class TodoTasksPageTests : BunitContext
+public class BackgroundTasksPageTests : BunitContext
 {
     private readonly CancellationToken _cancellationToken = Xunit.TestContext.Current.CancellationToken;
 
-    public TodoTasksPageTests()
+    public BackgroundTasksPageTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
@@ -42,7 +42,7 @@ public class TodoTasksPageTests : BunitContext
         await store.CreateRunAsync("owner/repo", new NewTodoTask(TodoTaskKind.AnalyzeRepository, "Analyze the repository (improvements)", "{}"), "octocat", 3, _cancellationToken);
 
         Render<MudPopoverProvider>();
-        var cut = Render<TodoTasks>();
+        var cut = Render<BackgroundTasks>();
 
         cut.WaitForAssertion(() => Assert.Contains("Analyze the repository (improvements)", cut.Markup));
         Assert.DoesNotContain("Other repository", cut.Markup);
@@ -59,7 +59,7 @@ public class TodoTasksPageTests : BunitContext
             1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo", null, false, false, false, null, "main", null));
 
         Render<MudPopoverProvider>();
-        var cut = Render<TodoTasks>();
+        var cut = Render<BackgroundTasks>();
 
         cut.WaitForAssertion(() => Assert.Contains("No runs yet.", cut.Markup));
         Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Generate from repository"));

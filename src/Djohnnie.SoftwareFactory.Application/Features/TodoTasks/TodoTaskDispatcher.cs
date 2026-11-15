@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 
 /// <summary>
-/// The outbox side of the TODO tasks: takes back stuck tasks and claims the due pending ones. The Tasks function app
+/// The outbox side of the background tasks: takes back stuck tasks and claims the due pending ones. The Tasks function app
 /// sends the returned ids to the Service Bus queue; a send that gets lost is recovered after
 /// <see cref="TodoTaskOptions.QueuedTimeout"/>.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed class TodoTaskDispatcher(ITodoTaskStore store, IOptions<TodoTaskOp
         var claimed = await store.ClaimDueAsync(settings.DispatchBatchSize, cancellationToken);
         if (recovered > 0 || claimed.Count > 0)
         {
-            logger.LogInformation("Dispatched {Claimed} TODO tasks; {Recovered} stuck tasks were taken back or ended.", claimed.Count, recovered);
+            logger.LogInformation("Dispatched {Claimed} background tasks; {Recovered} stuck tasks were taken back or ended.", claimed.Count, recovered);
         }
         return claimed;
     }

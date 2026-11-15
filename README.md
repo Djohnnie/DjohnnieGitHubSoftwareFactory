@@ -10,7 +10,7 @@ DGHSF is a personal software factory for GitHub: a single-user web app to plan w
 - **Accept** an item to create a labelled GitHub issue, linked to its parent and children as sub-issues. Stories, bugs and tasks are then assigned to the Copilot cloud agent, optionally with a custom agent, model, base branch and extra instructions.
 - **Manage custom agents** (`.github/agents/*.agent.md`) and the repository's `.github/copilot-instructions.md`, and share agent templates across repositories.
 - **DGHSF Agent** chats on every editor (including the Copilot Skills Agent on the skill editor) help fill in the form. Background agents suggest a model per item and write suggestion chips. Their prompts are editable on the internal agents page.
-- **Generate work items from a repository**: background agents read the code and write fully described epics, features, user stories and (for improvements) bugs as drafts. A run either proposes improvements or describes what already exists. It runs as TODO tasks in the Tasks function app, and its progress shows on the TODO tasks page.
+- **Generate work items from a repository**: background agents read the code and write fully described epics, features, user stories and (for improvements) bugs as drafts. A run either proposes improvements or describes what already exists. It runs as background tasks in the Tasks function app, and its progress shows on the Background tasks page.
 - **Manage the AI models** Copilot can use, including importing GitHub's model pricing.
 - **Track token spend** of the internal agents: a catalog of Microsoft Foundry models with their prices, a cost per request, and a running cost per agent that later price changes don't affect.
 
@@ -24,7 +24,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 | --- | --- |
 | `Djohnnie.SoftwareFactory.Web` | Blazor UI, GitHub sign-in, the selected repository |
 | `Djohnnie.SoftwareFactory.Sync` | Azure Function that refreshes accepted work items from GitHub on a CRON schedule |
-| `Djohnnie.SoftwareFactory.Tasks` | Azure Function that runs the TODO tasks in SQL: a timer dispatcher queues them on Azure Service Bus, a queue-triggered executor runs them |
+| `Djohnnie.SoftwareFactory.Tasks` | Azure Function that runs the background tasks in SQL: a timer dispatcher queues them on Azure Service Bus, a queue-triggered executor runs them |
 | `Djohnnie.SoftwareFactory.Application` | MediatR commands and queries per feature, validation, GitHub API client, workflows |
 | `Djohnnie.SoftwareFactory.DataAccess.Sql` | EF Core entities, stores, migrations |
 | `Djohnnie.SoftwareFactory.Agents` | DGHSF's internal agents and their form tools |
@@ -97,7 +97,7 @@ Then run `func start` in that directory. The function doesn't apply migrations, 
 
 ### The tasks function
 
-`Djohnnie.SoftwareFactory.Tasks` runs the "Generate from repository" runs (and later other background work). The web app only stores TODO tasks in SQL. In the function app, a timer moves the tasks that are due to an Azure Service Bus queue, and a queue trigger executes them. It needs the same tools as the sync function, plus a Service Bus namespace with a queue (for example `todo-tasks`). Create `src/Djohnnie.SoftwareFactory.Tasks/local.settings.json`, which is gitignored:
+`Djohnnie.SoftwareFactory.Tasks` runs the "Generate from repository" runs (and later other background work). The web app only stores background tasks in SQL. In the function app, a timer moves the tasks that are due to an Azure Service Bus queue, and a queue trigger executes them. It needs the same tools as the sync function, plus a Service Bus namespace with a queue (for example `todo-tasks`). Create `src/Djohnnie.SoftwareFactory.Tasks/local.settings.json`, which is gitignored:
 
 ```json
 {

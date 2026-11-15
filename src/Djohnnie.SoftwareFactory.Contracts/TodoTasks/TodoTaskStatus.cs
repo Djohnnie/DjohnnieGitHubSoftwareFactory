@@ -1,6 +1,6 @@
 namespace Djohnnie.SoftwareFactory.Contracts.TodoTasks;
 
-/// <summary>Where a TODO task is in its life cycle; stored by name.</summary>
+/// <summary>Where a background task is in its life cycle; stored by name.</summary>
 public enum TodoTaskStatus
 {
     /// <summary>Waits for the dispatcher to put it on the queue (from <see cref="TodoTask.NotBefore"/>, when set).</summary>

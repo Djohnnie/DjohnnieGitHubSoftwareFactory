@@ -5,7 +5,7 @@ using Djohnnie.SoftwareFactory.Contracts.TodoTasks;
 namespace Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 
 /// <summary>
-/// Executes the TODO tasks of one <see cref="TodoTaskKind"/> in the Tasks function app. A handler can run more than
+/// Executes the background tasks of one <see cref="TodoTaskKind"/> in the Tasks function app. A handler can run more than
 /// once for the same task (a retry after an error or a crash), so it must not duplicate what an earlier attempt did.
 /// Throw a <see cref="Contracts.DomainRuleException"/> for a problem a retry won't fix; other exceptions are retried.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed record TodoTaskOutcome(string? Result, IReadOnlyList<NewTodoTask> 
     }
 }
 
-/// <summary>Reads and writes the JSON payloads of TODO tasks.</summary>
+/// <summary>Reads and writes the JSON payloads of background tasks.</summary>
 public static class TodoTaskPayloads
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)

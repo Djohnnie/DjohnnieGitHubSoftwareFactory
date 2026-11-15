@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Djohnnie.SoftwareFactory.Tasks;
 
 /// <summary>
-/// Runs the TODO tasks stored in SQL. The dispatcher (timer) moves due tasks to the Service Bus queue and takes back
+/// Runs the background tasks stored in SQL. The dispatcher (timer) moves due tasks to the Service Bus queue and takes back
 /// stuck ones; the executor (queue trigger) runs one task per message. The database is the source of truth: a message
 /// only carries a task id, and retries are scheduled in the database instead of through message redelivery.
 /// </summary>
@@ -26,11 +26,11 @@ public sealed class TodoTaskFunctions(TodoTaskDispatcher dispatcher, TodoTaskExe
     {
         if (!Guid.TryParse(message.Trim().Trim('"'), out var id))
         {
-            logger.LogWarning("Ignored a message that is not a TODO task id: {Message}", message);
+            logger.LogWarning("Ignored a message that is not a background task id: {Message}", message);
             return;
         }
 
         var status = await executor.ExecuteAsync(id, cancellationToken);
-        logger.LogInformation("TODO task {Id} is now {Status}.", id, status?.ToString() ?? "unchanged");
+        logger.LogInformation("Background task {Id} is now {Status}.", id, status?.ToString() ?? "unchanged");
     }
 }

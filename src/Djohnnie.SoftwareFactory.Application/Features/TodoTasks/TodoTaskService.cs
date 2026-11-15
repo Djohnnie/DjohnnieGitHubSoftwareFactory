@@ -5,7 +5,7 @@ using MediatR;
 namespace Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 
 /// <summary>
-/// Starts and follows TODO task runs from the web app. The web app only writes to the database; the Tasks function app
+/// Starts and follows background task runs from the web app. The web app only writes to the database; the Tasks function app
 /// dispatches and executes the tasks.
 /// </summary>
 public sealed class TodoTaskService(IMediator mediator)

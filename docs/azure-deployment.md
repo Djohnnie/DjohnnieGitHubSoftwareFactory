@@ -88,12 +88,12 @@ Everything the sync does is also written to the `SyncLogEvents` table in the dat
 
 ## Tasks function app
 
-`Djohnnie.SoftwareFactory.Tasks` executes the **TODO tasks** that the web app stores in the `TodoTasks` table, such as the runs started with **Generate from repository** on the Epics or TODO tasks page. The web app never talks to Service Bus. The function app has two functions:
+`Djohnnie.SoftwareFactory.Tasks` executes the **background tasks** that the web app stores in the `TodoTasks` table, such as the runs started with **Generate from repository** on the Epics or Background tasks page. The web app never talks to Service Bus. The function app has two functions:
 
 - **TodoTaskDispatch** (timer) takes back stuck tasks, marks the due pending tasks as queued, and sends their ids to the Service Bus queue. A task that stays queued for longer than 15 minutes (a lost message) is queued again. A task whose executor stopped (its 35-minute lease ended) is retried, or fails when it has no attempts left.
 - **TodoTaskExecute** (Service Bus trigger) starts the task in the message, runs it, and stores the result and the sub-tasks it created. A message for a task that isn't queued, such as a duplicate or a cancelled run, is ignored. Errors are retried from the database with a growing delay (1, 2, 4 minutes; 3 attempts by default). A problem a retry can't fix, such as a disabled agent or a repository without readable files, fails the task right away. A run ends when all its sub-tasks have ended.
 
-A "Generate from repository" run works like this. The **Repository Analyst** reads the repository's file tree with one request (binaries, dependencies, build output, lock files and generated code are left out) and up to 40 files. It saves epics and features as drafts. Then a **Repository Work Item Writer** task per feature reads up to 30 files, writes the feature's description and its user stories (and bugs, for improvements), and saves them as drafts. Every draft remembers its run, so **Discard drafts** on the TODO tasks page can remove a run's drafts at once. Both agents are internal agents: their prompts and models can be changed on the internal agents page, and their token spend is tracked there.
+A "Generate from repository" run works like this. The **Repository Analyst** reads the repository's file tree with one request (binaries, dependencies, build output, lock files and generated code are left out) and up to 40 files. It saves epics and features as drafts. Then a **Repository Work Item Writer** task per feature reads up to 30 files, writes the feature's description and its user stories (and bugs, for improvements), and saves them as drafts. Every draft remembers its run, so **Discard drafts** on the Background tasks page can remove a run's drafts at once. Both agents are internal agents: their prompts and models can be changed on the internal agents page, and their token spend is tracked there.
 
 Configure these app settings on the Function App:
 
@@ -102,7 +102,7 @@ Configure these app settings on the Function App:
 | `TodoTaskDispatchSchedule` | CRON expression with six fields (seconds first), in UTC, e.g. `*/15 * * * * *` for every 15 seconds. The function fails to start without it |
 | `TodoTaskQueueName` | The Service Bus queue, e.g. `todo-tasks` |
 | `ServiceBus` | The Service Bus connection string. With a managed identity instead, set `ServiceBus__fullyQualifiedNamespace` to `<namespace>.servicebus.windows.net` and give the identity **Azure Service Bus Data Sender** and **Data Receiver** on the queue |
-| `ConnectionStrings__Database` | The same database as the Web App. The function reads and writes TODO tasks and work items but doesn't migrate |
+| `ConnectionStrings__Database` | The same database as the Web App. The function reads and writes background tasks and work items but doesn't migrate |
 | `GitHub__TasksToken` | GitHub token that can read the contents of every repository that is analyzed: a classic token with `repo`, or a fine-grained token with read access to contents. The function fails to start without it |
 | `OpenAI__Endpoint`, `OpenAI__Model`, `OpenAI__ApiKey` | The same model settings as the Web App; without them every run fails because the agents aren't configured |
 | `TodoTasks__MaxAttempts`, `TodoTasks__RetryDelay`, `TodoTasks__Lease`, `TodoTasks__QueuedTimeout` | Optional; default 3, `00:01:00`, `00:35:00` and `00:15:00`. Keep the lease longer than the `functionTimeout` in `host.json` (30 minutes) |

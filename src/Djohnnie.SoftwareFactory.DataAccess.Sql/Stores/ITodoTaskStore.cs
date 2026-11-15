@@ -3,7 +3,7 @@ using Djohnnie.SoftwareFactory.Contracts.TodoTasks;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 /// <summary>
-/// The TODO tasks the Tasks function app executes. Every status change is a conditional update on the expected status,
+/// The background tasks the Tasks function app executes. Every status change is a conditional update on the expected status,
 /// so a task is claimed by one dispatcher and started by one executor, also when messages are delivered twice.
 /// </summary>
 public interface ITodoTaskStore
