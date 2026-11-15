@@ -195,7 +195,7 @@ public class TodoTaskTests
         var manual = await items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Story, ParentId = features[1].Id, Title = "Written by hand" }, _cancellationToken);
         await items.AddGeneratedAsync(Repo, null, WorkItemType.Epic, [new("Other run", "")], Guid.NewGuid(), _cancellationToken);
 
-        Assert.Equal(runId, epic.GeneratedByTaskId);
+        Assert.Equal((runId, WorkItemStatus.Generated), (epic.GeneratedByTaskId, epic.Status));
         var discarded = await items.DeleteGeneratedDraftsAsync(Repo, runId, _cancellationToken);
 
         Assert.Equal((2, 2), (discarded.Deleted, discarded.Kept));

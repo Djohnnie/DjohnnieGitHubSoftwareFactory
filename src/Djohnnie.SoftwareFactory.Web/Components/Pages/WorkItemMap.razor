@@ -338,7 +338,7 @@
         };
         var status = node.Item.Status switch
         {
-            WorkItemStatus.Draft => "status-draft",
+            WorkItemStatus.Draft or WorkItemStatus.Generated => "status-draft",
             WorkItemStatus.InProgress => "status-inprogress",
             WorkItemStatus.Done => "status-done",
             _ => "status-accepted"

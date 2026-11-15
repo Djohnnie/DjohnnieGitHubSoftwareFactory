@@ -85,13 +85,23 @@ public sealed record WorkItem
     /// <summary>The run (root background task) that generated the item from its repository, or <c>null</c>.</summary>
     public Guid? GeneratedByTaskId { get; set; }
 
-    public bool IsDraft => Status == WorkItemStatus.Draft;
+    /// <summary>A draft, also one the background agents generated (<see cref="WorkItemStatus.Generated"/>).</summary>
+    public bool IsDraft => Status.IsDraft;
+
+    /// <summary>A draft the background agents generated from the repository that hasn't been accepted yet.</summary>
+    public bool IsGenerated
+    {
+        get
+        {
+            return Status == WorkItemStatus.Generated;
+        }
+    }
 
     /// <summary>Whether the item was accepted and has a GitHub issue it can be refreshed from.</summary>
     public bool HasIssue => IssueNumber is not null;
 
     /// <summary>Whether the assignment settings can still be changed (only for types that are assigned to an agent).</summary>
-    public bool CanEditAssignment => Type.CanBeAssigned && Status is WorkItemStatus.Draft or WorkItemStatus.Accepted;
+    public bool CanEditAssignment => Type.CanBeAssigned && Status is WorkItemStatus.Draft or WorkItemStatus.Generated or WorkItemStatus.Accepted;
 
     public WorkItem Copy()
     {

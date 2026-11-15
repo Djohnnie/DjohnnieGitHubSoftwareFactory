@@ -44,7 +44,7 @@
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
         <MudSpacer />
         <MudSelect Variant="Variant.Outlined" T="WorkItemStatus?" @bind-Value="_status" Label="Status" Dense="true" Clearable="true" Style="max-width:200px">
-            @foreach (var status in Enum.GetValues<WorkItemStatus>())
+            @foreach (var status in WorkItemStatusChip.Ordered)
             {
                 <MudSelectItem T="WorkItemStatus?" Value="status">@WorkItemStatusChip.LabelOf(status)</MudSelectItem>
             }

@@ -20,7 +20,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         {
             query = query.Where(e => e.ParentId == parentId);
         }
-        var entities = await query.OrderBy(e => e.Status).ThenByDescending(e => e.UpdatedAt).ToListAsync(cancellationToken);
+        var entities = await query.OrderBy(e => e.Status == WorkItemStatus.Generated ? WorkItemStatus.Draft : e.Status).ThenByDescending(e => e.UpdatedAt).ToListAsync(cancellationToken);
         return entities.Select(e => e.ToContract()).ToList();
     }
 
@@ -41,7 +41,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .GroupBy(e => e.Type)
             .Select(g => new WorkItemCounts(
                 g.Key,
-                g.Count(e => e.Status == WorkItemStatus.Draft),
+                g.Count(e => e.Status == WorkItemStatus.Draft || e.Status == WorkItemStatus.Generated),
                 g.Count(e => e.Status == WorkItemStatus.Accepted || e.Status == WorkItemStatus.InProgress),
                 g.Count(e => e.Status == WorkItemStatus.Done)))
             .ToDictionaryAsync(c => c.Type, cancellationToken);
@@ -61,7 +61,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             }
             : await FindAsync(db, item.RepositoryFullName, item.Id, cancellationToken);
 
-        if (entity.Status == WorkItemStatus.Draft)
+        if (entity.Status.IsDraft)
         {
             entity.Title = item.Title.Trim();
             entity.Description = item.Description ?? string.Empty;
@@ -131,6 +131,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             Title = item.Title.Trim(),
             Description = item.Description,
             GeneratedByTaskId = generatedByTaskId,
+            Status = WorkItemStatus.Generated,
             CreatedAt = now,
             UpdatedAt = now
         }).ToList();
@@ -145,7 +146,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var generated = await Query(db.WorkItems, repositoryFullName)
             .Where(e => e.GeneratedByTaskId == generatedByTaskId)
             .ToListAsync(cancellationToken);
-        var deletable = generated.Where(e => e.Status == WorkItemStatus.Draft).Select(e => e.Id).ToHashSet();
+        var deletable = generated.Where(e => e.Status.IsDraft).Select(e => e.Id).ToHashSet();
 
         // A draft can only go when all its children go too; drop the ones that would be left with children until none is.
         var ids = generated.Select(e => e.Id).ToList();
@@ -190,7 +191,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
-        if (entity.Status != WorkItemStatus.Draft)
+        if (!entity.Status.IsDraft)
         {
             throw new DomainRuleException($"Only a draft {Name(entity.Type)} can be accepted.");
         }
@@ -225,7 +226,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
-        if (entity.Status != WorkItemStatus.Draft || entity.AcceptStartedAt is not { } started)
+        if (!entity.Status.IsDraft || entity.AcceptStartedAt is not { } started)
         {
             return;
         }
@@ -243,7 +244,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
-        if (entity.Status != WorkItemStatus.Draft)
+        if (!entity.Status.IsDraft)
         {
             throw new DomainRuleException($"This {Name(entity.Type)} was already accepted.");
         }

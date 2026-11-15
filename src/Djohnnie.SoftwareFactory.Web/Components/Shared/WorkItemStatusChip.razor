@@ -1,14 +1,27 @@
-<MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined"
-         Icon="@IconOf(Status)">@LabelOf(Status)</MudChip>
+@if (Status == WorkItemStatus.Generated)
+{
+    <MudTooltip Text="A draft the background agents generated from the repository. Review it like any draft before accepting it." Inline="true">
+        <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status)">@LabelOf(Status)</MudChip>
+    </MudTooltip>
+}
+else
+{
+    <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status)">@LabelOf(Status)</MudChip>
+}
 
 @code {
     [Parameter] public WorkItemStatus Status { get; set; }
+
+    /// <summary>The statuses in the order of a work item's life, for filters.</summary>
+    public static IReadOnlyList<WorkItemStatus> Ordered { get; } =
+        [WorkItemStatus.Generated, WorkItemStatus.Draft, WorkItemStatus.Accepted, WorkItemStatus.InProgress, WorkItemStatus.Done];
 
     public static string LabelOf(WorkItemStatus status)
     {
         return status switch
         {
             WorkItemStatus.Draft => "Draft",
+            WorkItemStatus.Generated => "Generated draft",
             WorkItemStatus.Accepted => "Accepted",
             WorkItemStatus.InProgress => "In progress",
             WorkItemStatus.Done => "Closed",
@@ -20,6 +33,7 @@
     {
         return status switch
         {
+            WorkItemStatus.Generated => Color.Secondary,
             WorkItemStatus.Accepted => Color.Info,
             WorkItemStatus.InProgress => Color.Warning,
             WorkItemStatus.Done => Color.Success,
@@ -31,6 +45,7 @@
     {
         return status switch
         {
+            WorkItemStatus.Generated => Icons.Material.Filled.AutoAwesome,
             WorkItemStatus.Accepted => Icons.Material.Filled.TaskAlt,
             WorkItemStatus.InProgress => Icons.Material.Filled.SmartToy,
             WorkItemStatus.Done => Icons.Material.Filled.Done,

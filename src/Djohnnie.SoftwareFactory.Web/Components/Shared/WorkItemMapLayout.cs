@@ -177,6 +177,7 @@ public sealed class WorkItemMapLayout
                 switch (child.Status)
                 {
                     case WorkItemStatus.Draft:
+                    case WorkItemStatus.Generated:
                         draft++;
                         break;
                     case WorkItemStatus.Done:

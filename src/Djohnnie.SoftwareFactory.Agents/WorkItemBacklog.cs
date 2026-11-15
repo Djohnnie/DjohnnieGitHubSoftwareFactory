@@ -60,6 +60,7 @@ public static class WorkItemBacklog
         return status switch
         {
             WorkItemStatus.Draft => "draft",
+            WorkItemStatus.Generated => "generated draft",
             WorkItemStatus.Accepted => "accepted",
             WorkItemStatus.InProgress => "in progress",
             _ => "done"

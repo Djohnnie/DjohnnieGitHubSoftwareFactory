@@ -21,7 +21,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     {
         var item = await FindAsync(repositoryFullName, id, cancellationToken);
         var name = item.Type.DisplayName.ToLowerInvariant();
-        if (item.Status != WorkItemStatus.Draft)
+        if (!item.Status.IsDraft)
         {
             throw new DomainRuleException($"Only a draft {name} can be accepted.");
         }

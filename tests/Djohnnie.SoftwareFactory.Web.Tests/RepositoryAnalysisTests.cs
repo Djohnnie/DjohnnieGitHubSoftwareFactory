@@ -185,8 +185,8 @@ public class RepositoryAnalysisTests
 
         var epics = await items.GetAllAsync(Repo, [WorkItemType.Epic], cancellationToken: _cancellationToken);
         var reliability = Assert.Single(epics, e => e.Title == "Reliability");
-        Assert.Equal((root.Id, "## Goal\nFewer crashes."), (reliability.GeneratedByTaskId!.Value, reliability.Description));
-        Assert.Equal("Keep me.", epics.Single(e => e.Id == existingEpic.Id).Description);
+        Assert.Equal((root.Id, "## Goal\nFewer crashes.", WorkItemStatus.Generated), (reliability.GeneratedByTaskId!.Value, reliability.Description, reliability.Status));
+        Assert.Equal(("Keep me.", WorkItemStatus.Draft), (epics.Single(e => e.Id == existingEpic.Id).Description, epics.Single(e => e.Id == existingEpic.Id).Status));
         var features = await items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken);
         var errorHandling = Assert.Single(features, f => f.Title == "Error handling");
         Assert.Equal(reliability.Id, errorHandling.ParentId);
@@ -212,7 +212,7 @@ public class RepositoryAnalysisTests
         Assert.Contains("You are the Repository Work Item Writer", InternalAgentTests.SystemPrompt(chat, 2));
         var writerInput = string.Join("\n", chat.Requests[2].Where(m => m.Role == ChatRole.User).Select(m => m.Text));
         Assert.Contains("Docs", writerInput);
-        Assert.Contains($"\n  - Feature [draft] Error handling (id: {errorHandling.Id})", writerInput.ReplaceLineEndings("\n"));
+        Assert.Contains($"\n  - Feature [generated draft] Error handling (id: {errorHandling.Id})", writerInput.ReplaceLineEndings("\n"));
         var epicResult = chat.Requests[3].SelectMany(m => m.Contents).OfType<FunctionResultContent>().Single().Result?.ToString();
         Assert.Contains($"Epic [draft] Existing epic (id: {existingEpic.Id})", epicResult);
         Assert.EndsWith("Keep me.", epicResult);
@@ -221,7 +221,8 @@ public class RepositoryAnalysisTests
         var children = await items.GetAllAsync(Repo, parentId: errorHandling.Id, cancellationToken: _cancellationToken);
         Assert.Equal([(WorkItemType.Bug, "Null reference on empty body"), (WorkItemType.Story, "Return problem details")],
             children.Select(c => (c.Type, c.Title)).OrderBy(c => c.Title));
-        Assert.All(children, c => Assert.Equal((WorkItemStatus.Draft, root.Id), (c.Status, c.GeneratedByTaskId!.Value)));
+        Assert.All(children, c => Assert.Equal((WorkItemStatus.Generated, root.Id), (c.Status, c.GeneratedByTaskId!.Value)));
+        Assert.True(described.IsGenerated && described.IsDraft);
 
         // The writer of the second feature returns nothing; the run then ends.
         chat.Enqueue(Json(new { featureDescription = "", stories = Array.Empty<object>(), bugs = Array.Empty<object>() }));
