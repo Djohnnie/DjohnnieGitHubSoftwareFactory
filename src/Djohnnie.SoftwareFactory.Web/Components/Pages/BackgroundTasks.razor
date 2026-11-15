@@ -61,6 +61,10 @@ else if (_runs.Count == 0)
                                StartIcon="@Icons.Material.Filled.ListAlt">Review drafts</MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteSweep"
                                OnClick="() => DiscardAsync(run)" Disabled="_busy">Discard drafts</MudButton>
+                    <MudTooltip Text="Delete this run">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteAsync(run)"
+                                       Disabled="_busy" aria-label="Delete run" />
+                    </MudTooltip>
                 }
             </MudStack>
             <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -207,6 +211,22 @@ else if (_runs.Count == 0)
             Snackbar.Add(discarded.Kept == 0
                 ? $"Deleted {discarded.Deleted} drafts."
                 : $"Deleted {discarded.Deleted} drafts; kept {discarded.Kept} items that were accepted or have other children.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteAsync(TodoTaskRun run)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete run",
+                $"Delete '{run.Root.Title}' and its {run.Total} sub-tasks? The work items it created are kept, but they can no longer be discarded together. Use \"Discard drafts\" first if you don't want them.",
+                yesText: "Delete run", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await TodoTaskService.DeleteRunAsync(Repository.Current!.FullName, run.Root.Id);
+            Snackbar.Add("The run is deleted.", Severity.Success);
         });
     }
 

@@ -215,6 +215,22 @@ public sealed class TodoTaskStore(IDbContextFactory<AppDbContext> dbFactory, Tim
                 .SetProperty(t => t.CompletedAt, now), cancellationToken);
     }
 
+    public async Task<bool> DeleteRunAsync(string repositoryFullName, Guid rootId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var normalized = Entities.Repository.Normalize(repositoryFullName);
+        // Every task of the run must have ended. Ended tasks never change again, so nothing can start between this check
+        // and the delete.
+        var tasks = db.TodoTasks.Where(t => t.RootId == rootId && t.RepositoryFullName == normalized);
+        if (!await tasks.AnyAsync(t => t.Id == rootId, cancellationToken) || await tasks.Where(NotFinal).AnyAsync(cancellationToken))
+        {
+            return false;
+        }
+
+        await tasks.ExecuteDeleteAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<List<TodoTaskRun>> GetRunsAsync(string repositoryFullName, int max, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

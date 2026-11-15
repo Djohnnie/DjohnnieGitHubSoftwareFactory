@@ -31,6 +31,12 @@ public sealed class TodoTaskService(IMediator mediator)
         await mediator.Send(new CancelTodoTaskRunCommand(new(repositoryFullName, rootId)), cancellationToken);
     }
 
+    /// <summary>Deletes a run that has ended, with its sub-tasks; the work items it generated are kept.</summary>
+    public async Task DeleteRunAsync(string repositoryFullName, Guid rootId, CancellationToken cancellationToken = default)
+    {
+        await mediator.Send(new DeleteTodoTaskRunCommand(new(repositoryFullName, rootId)), cancellationToken);
+    }
+
     /// <summary>Deletes the drafts a run generated; the run must have ended.</summary>
     public async Task<DiscardedGeneratedDrafts> DiscardDraftsAsync(string repositoryFullName, Guid rootId, CancellationToken cancellationToken = default)
     {

@@ -45,6 +45,15 @@ public sealed class CancelTodoTaskRunValidator : AbstractValidator<CancelTodoTas
     }
 }
 
+public sealed class DeleteTodoTaskRunValidator : AbstractValidator<DeleteTodoTaskRunCommand>
+{
+    public DeleteTodoTaskRunValidator()
+    {
+        RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
+        RuleFor(request => request.Dto.Id).NotEmpty();
+    }
+}
+
 public sealed class DiscardGeneratedDraftsValidator : AbstractValidator<DiscardGeneratedDraftsCommand>
 {
     public DiscardGeneratedDraftsValidator()

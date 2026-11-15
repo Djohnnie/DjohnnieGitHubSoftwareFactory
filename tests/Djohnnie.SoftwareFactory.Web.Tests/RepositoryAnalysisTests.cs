@@ -256,6 +256,14 @@ public class RepositoryAnalysisTests
         Assert.Equal(("The repository has no files that can be analyzed.", 1), (run.Root.Error, run.Root.Attempts));
         Assert.Empty(chat.Requests);
         await Assert.ThrowsAsync<DomainRuleException>(() => todo.DiscardDraftsAsync(Repo, Guid.NewGuid(), _cancellationToken));
+
+        // A failed run can be deleted; a run that is still active can't.
+        var active = await todo.StartRepositoryAnalysisAsync(new("owner/other", RepositoryAnalysisMode.Improvements, null, 5, null), _cancellationToken);
+        Assert.Contains("Cancel it first", (await Assert.ThrowsAsync<DomainRuleException>(() => todo.DeleteRunAsync("owner/other", active.Id, _cancellationToken))).Message);
+        Assert.Equal("The run no longer exists.", (await Assert.ThrowsAsync<DomainRuleException>(() => todo.DeleteRunAsync(Repo, Guid.NewGuid(), _cancellationToken))).Message);
+        await todo.DeleteRunAsync(Repo, root.Id, _cancellationToken);
+        Assert.Empty(await todo.GetRunsAsync(Repo, _cancellationToken));
+        Assert.Single(await todo.GetRunsAsync("owner/other", _cancellationToken));
     }
 
     [Fact]

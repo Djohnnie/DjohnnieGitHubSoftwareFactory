@@ -42,6 +42,12 @@ public interface ITodoTaskStore
     /// <summary>Cancels every task of the run that hasn't ended; a task that is running finishes, but its result is discarded.</summary>
     Task<int> CancelRunAsync(string repositoryFullName, Guid rootId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Deletes a run that has ended (its root task succeeded, failed or was cancelled) with all its sub-tasks. Returns
+    /// <c>false</c> when the run doesn't exist or hasn't ended. The work items it generated are kept.
+    /// </summary>
+    Task<bool> DeleteRunAsync(string repositoryFullName, Guid rootId, CancellationToken cancellationToken = default);
+
     /// <summary>The newest runs of a repository, newest first, with their sub-tasks.</summary>
     Task<List<TodoTaskRun>> GetRunsAsync(string repositoryFullName, int max, CancellationToken cancellationToken = default);
 

@@ -142,6 +142,30 @@ public class TodoTaskTests
     }
 
     [Fact]
+    public async Task DeleteRun_OnlyDeletesARunThatHasEnded_WithAllItsSubTasks()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new TodoTaskStore(database.Factory, TimeProvider.System);
+        var root = await StartedRunAsync(store);
+        await store.CompleteAsync(root.Id, null, [NewTask("A")], _cancellationToken);
+        var other = await store.CreateRunAsync(Repo, NewTask("Other"), null, 3, _cancellationToken);
+
+        Assert.False(await store.DeleteRunAsync(Repo, root.Id, _cancellationToken));
+        var sub = Assert.Single(await store.ClaimDueAsync(10, _cancellationToken), id => id != other.Id);
+        await store.TryStartAsync(sub, Lease, _cancellationToken);
+        await store.CompleteAsync(sub, "Done.", [], _cancellationToken);
+        Assert.Equal(TodoTaskStatus.Succeeded, await store.GetStatusAsync(root.Id, _cancellationToken));
+
+        Assert.False(await store.DeleteRunAsync("owner/other", root.Id, _cancellationToken));
+        Assert.True(await store.DeleteRunAsync(Repo, root.Id, _cancellationToken));
+
+        Assert.Null(await store.GetRunAsync(Repo, root.Id, _cancellationToken));
+        Assert.Null(await store.GetStatusAsync(sub, _cancellationToken));
+        Assert.Equal([other.Id], (await store.GetRunsAsync(Repo, 10, _cancellationToken)).Select(run => run.Root.Id));
+        Assert.False(await store.DeleteRunAsync(Repo, root.Id, _cancellationToken));
+    }
+
+    [Fact]
     public async Task Executor_RunsTheHandler_RetriesErrors_FailsDomainRuleRefusals_AndIgnoresDuplicateMessages()
     {
         await using var database = await SqlServerDatabase.CreateAsync();
