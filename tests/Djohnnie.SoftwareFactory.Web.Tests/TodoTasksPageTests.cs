@@ -53,10 +53,10 @@ public class TodoTasksPageTests : BunitContext
     }
 
     [Fact]
-    public void Page_WithoutRuns_ExplainsHowToStartOne()
+    public async Task Page_WithoutRuns_ExplainsHowToStartOne()
     {
-        Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
-            1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo", null, false, false, false, null, "main", null)).GetAwaiter().GetResult();
+        await Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
+            1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo", null, false, false, false, null, "main", null));
 
         Render<MudPopoverProvider>();
         var cut = Render<TodoTasks>();
