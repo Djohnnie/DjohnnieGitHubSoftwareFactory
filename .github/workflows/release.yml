@@ -16,6 +16,8 @@ env:
   WEB_PROJECT: src/Djohnnie.SoftwareFactory.Web/Djohnnie.SoftwareFactory.Web.csproj
   SYNC_PROJECT: src/Djohnnie.SoftwareFactory.Sync/Djohnnie.SoftwareFactory.Sync.csproj
   SYNC_FUNCTION_APP: softwarefactory-sync
+  TASKS_PROJECT: src/Djohnnie.SoftwareFactory.Tasks/Djohnnie.SoftwareFactory.Tasks.csproj
+  TASKS_FUNCTION_APP: softwarefactory-tasks
   DATA_PROJECT: src/Djohnnie.SoftwareFactory.DataAccess.Sql
   TEST_PROJECT: tests/Djohnnie.SoftwareFactory.Web.Tests/Djohnnie.SoftwareFactory.Web.Tests.csproj
   # The EF design-time factory requires a connection string; build-time EF commands never connect to it.
@@ -72,6 +74,9 @@ jobs:
       - name: Publish sync function app
         run: dotnet publish ${{ env.SYNC_PROJECT }} --configuration Release --no-build --output ${{ runner.temp }}/sync
 
+      - name: Publish tasks function app
+        run: dotnet publish ${{ env.TASKS_PROJECT }} --configuration Release --no-build --output ${{ runner.temp }}/tasks
+
       - name: Create migrations bundle
         env:
           ConnectionStrings__Database: ${{ env.PLACEHOLDER_CONNECTION }}
@@ -97,6 +102,13 @@ jobs:
           path: ${{ runner.temp }}/sync
           if-no-files-found: error
           # The Functions worker needs the .azurefunctions folder, which is left out by default.
+          include-hidden-files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasks
+          path: ${{ runner.temp }}/tasks
+          if-no-files-found: error
           include-hidden-files: true
 
       - uses: actions/upload-artifact@v4
@@ -136,6 +148,11 @@ jobs:
         with:
           name: sync
           path: sync
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tasks
+          path: tasks
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -183,4 +200,11 @@ jobs:
         with:
           app-name: ${{ env.SYNC_FUNCTION_APP }}
           package: sync
+          sku: flexconsumption
+
+      - name: Deploy tasks function app
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.TASKS_FUNCTION_APP }}
+          package: tasks
           sku: flexconsumption

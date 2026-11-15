@@ -1,6 +1,6 @@
 # Azure deployment
 
-The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web` and `Djohnnie.SoftwareFactory.Sync` on every push and pull request to `main`. On every **push to `main`** (or a manual run on `main`), the `deploy` job:
+The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests and publishes `Djohnnie.SoftwareFactory.Web`, `Djohnnie.SoftwareFactory.Sync` and `Djohnnie.SoftwareFactory.Tasks` on every push and pull request to `main`. On every **push to `main`** (or a manual run on `main`), the `deploy` job:
 
 1. Logs in to Azure with OpenID Connect (no Azure secret stored in GitHub).
 2. Opens a temporary Azure SQL firewall rule for the runner's IP.
@@ -8,6 +8,7 @@ The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests
 4. Removes the firewall rule (always, even on failure).
 5. Deploys the published web app to Azure App Service.
 6. Deploys the sync function app to the Function App `softwarefactory-sync`.
+7. Deploys the tasks function app to the Function App `softwarefactory-tasks`.
 
 The deployment is skipped when migrations fail.
 
@@ -16,6 +17,8 @@ The deployment is skipped when migrations fail.
 - A resource group containing:
   - An App Service (Web App) with the **.NET 10** runtime stack (Linux or Windows).
   - A Function App named `softwarefactory-sync` on a **Flex Consumption** plan with the **.NET 10 isolated** runtime. Another name or plan needs a matching change to `SYNC_FUNCTION_APP` and the `sku` of the deploy step in the workflow.
+  - A Function App named `softwarefactory-tasks`, also on **Flex Consumption** with **.NET 10 isolated**. Another name needs a matching change to `TASKS_FUNCTION_APP` in the workflow and `-TasksFunctionAppName` of the setup script.
+  - An Azure Service Bus namespace (the **Basic** tier is enough) with a queue, for example `todo-tasks`. Keep the default lock duration and max delivery count; DGHSF schedules retries in the database itself.
   - An Azure SQL logical server and database.
 - A SQL login/user that can change the schema (for example `db_owner`) for migrations. The app can use the same or a less-privileged user at runtime.
 
@@ -82,6 +85,30 @@ The token's permissions aren't checked when the function starts, and missing one
 Each run makes, per accepted work item, one REST request for the issue and, for user stories, bugs and tasks, one GraphQL request for the linked pull requests plus one REST request for Copilot's agent run while that pull request is open. REST and GraphQL each have their own limit of 5,000 per hour, so at 15-minute intervals a token handles about 625 items that all have an open pull request, and up to about 1,250 without. A GitHub server error, network error, timeout or database error is retried twice per work item (after 2 and 10 seconds); retries count towards the request budget. Any other problem with one work item or repository, such as a deleted issue or a repository the token can't read, is logged and the run continues with the others. An invalid token or a reached rate limit stops the run, which then shows as failed.
 
 Everything the sync does is also written to the `SyncLogEvents` table in the database and shown in DGHSF on the **Sync log** page (`/sync-log`), newest first: every work item that changed, every problem, and a summary per run. Runs without changes, and runs without any accepted work item, are collapsed into one line that counts them, so a short interval doesn't flood the log. The events are kept forever.
+
+## Tasks function app
+
+`Djohnnie.SoftwareFactory.Tasks` executes the **TODO tasks** that the web app stores in the `TodoTasks` table, such as the runs started with **Generate from repository** on the Epics or TODO tasks page. The web app never talks to Service Bus. The function app has two functions:
+
+- **TodoTaskDispatch** (timer) takes back stuck tasks, marks the due pending tasks as queued, and sends their ids to the Service Bus queue. A task that stays queued for longer than 15 minutes (a lost message) is queued again. A task whose executor stopped (its 35-minute lease ended) is retried, or fails when it has no attempts left.
+- **TodoTaskExecute** (Service Bus trigger) starts the task in the message, runs it, and stores the result and the sub-tasks it created. A message for a task that isn't queued, such as a duplicate or a cancelled run, is ignored. Errors are retried from the database with a growing delay (1, 2, 4 minutes; 3 attempts by default). A problem a retry can't fix, such as a disabled agent or a repository without readable files, fails the task right away. A run ends when all its sub-tasks have ended.
+
+A "Generate from repository" run works like this. The **Repository Analyst** reads the repository's file tree with one request (binaries, dependencies, build output, lock files and generated code are left out) and up to 40 files. It saves epics and features as drafts. Then a **Repository Work Item Writer** task per feature reads up to 30 files, writes the feature's description and its user stories (and bugs, for improvements), and saves them as drafts. Every draft remembers its run, so **Discard drafts** on the TODO tasks page can remove a run's drafts at once. Both agents are internal agents: their prompts and models can be changed on the internal agents page, and their token spend is tracked there.
+
+Configure these app settings on the Function App:
+
+| Setting | Notes |
+| --- | --- |
+| `TodoTaskDispatchSchedule` | CRON expression with six fields (seconds first), in UTC, e.g. `*/15 * * * * *` for every 15 seconds. The function fails to start without it |
+| `TodoTaskQueueName` | The Service Bus queue, e.g. `todo-tasks` |
+| `ServiceBus` | The Service Bus connection string. With a managed identity instead, set `ServiceBus__fullyQualifiedNamespace` to `<namespace>.servicebus.windows.net` and give the identity **Azure Service Bus Data Sender** and **Data Receiver** on the queue |
+| `ConnectionStrings__Database` | The same database as the Web App. The function reads and writes TODO tasks and work items but doesn't migrate |
+| `GitHub__TasksToken` | GitHub token that can read the contents of every repository that is analyzed: a classic token with `repo`, or a fine-grained token with read access to contents. The function fails to start without it |
+| `OpenAI__Endpoint`, `OpenAI__Model`, `OpenAI__ApiKey` | The same model settings as the Web App; without them every run fails because the agents aren't configured |
+| `TodoTasks__MaxAttempts`, `TodoTasks__RetryDelay`, `TodoTasks__Lease`, `TodoTasks__QueuedTimeout` | Optional; default 3, `00:01:00`, `00:35:00` and `00:15:00`. Keep the lease longer than the `functionTimeout` in `host.json` (30 minutes) |
+| `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
+
+`host.json` runs at most 4 tasks at a time per instance (`maxConcurrentCalls`), which keeps a run within the model's and GitHub's rate limits. Each feature of a run costs a few model calls with the repository outline and the files the agent reads, so a run's token spend grows with the number of features. Limit it with the folder and the maximum number of features when you start the run.
 
 ## Image uploads
 

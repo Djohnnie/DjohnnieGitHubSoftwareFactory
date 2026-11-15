@@ -1,0 +1,264 @@
+@page "/todo-tasks"
+@implements IDisposable
+@using Djohnnie.SoftwareFactory.Application.Features.TodoTasks
+@using Djohnnie.SoftwareFactory.Contracts.TodoTasks
+@inject TodoTaskService TodoTaskService
+@inject RepositoryContext Repository
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>TODO tasks</PageTitle>
+
+<PageBreadcrumbs Current="TODO tasks" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">TODO tasks</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Background runs of <b>@Repository.Current?.FullName</b>, newest first. The Tasks function app executes them: every run starts
+            with one task that creates sub-tasks, and it ends when all of them have ended. Failed tasks are retried a few times.
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="StartAsync">Generate from repository</MudButton>
+        <MudSpacer />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" aria-label="Reload" />
+    </MudStack>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading && _runs.Count == 0)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_runs.Count == 0)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info">
+        No runs yet. Use "Generate from repository" to let the agents write work items from the code of this repository.
+    </MudAlert>
+}
+
+<MudStack Spacing="3">
+    @foreach (var run in _runs)
+    {
+        <MudPaper Outlined="true" Class="pa-4" @key="run.Root.Id">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                @StatusChip(run.Root.Status)
+                <MudText Typo="Typo.h6">@run.Root.Title</MudText>
+                <MudSpacer />
+                @if (run.IsActive)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Stop"
+                               OnClick="() => CancelAsync(run)" Disabled="_busy">Cancel</MudButton>
+                }
+                else
+                {
+                    <MudButton Href="@WorkItemRoutes.ListPath(WorkItemType.Epic)" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.ListAlt">Review drafts</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteSweep"
+                               OnClick="() => DiscardAsync(run)" Disabled="_busy">Discard drafts</MudButton>
+                }
+            </MudStack>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Started <TimeAgo At="run.Root.CreatedAt" />@(run.Root.CreatedBy is null ? "" : $" by {run.Root.CreatedBy}")
+                @if (run.Root.CompletedAt is { } completed)
+                {
+                    <span>, ended <TimeAgo At="completed" /></span>
+                }
+            </MudText>
+            @if (run.Total > 0)
+            {
+                <MudProgressLinear Value="@Progress(run)" Color="@(run.Failed > 0 ? Color.Warning : Color.Primary)" Class="my-2" Rounded="true" Size="Size.Medium" />
+                <MudText Typo="Typo.body2">@(run.Succeeded + run.Failed) of @run.Total sub-tasks ended (@run.Succeeded succeeded, @run.Failed failed).</MudText>
+            }
+            @if (run.Root.Result is { } result)
+            {
+                <MudText Typo="Typo.body2" Class="mt-1">@result</MudText>
+            }
+            @if (run.Root.Error is { } error)
+            {
+                <MudAlert Variant="Variant.Outlined" Severity="@(run.Root.Status == TodoTaskStatus.Failed ? Severity.Error : Severity.Warning)" Dense="true" Class="mt-2">@error</MudAlert>
+            }
+            @if (run.SubTasks.Count > 0)
+            {
+                <MudTable T="TodoTask" Items="run.SubTasks" Dense="true" Hover="true" Elevation="0" Class="mt-3" aria-label="Sub-tasks">
+                    <HeaderContent>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Task</MudTh>
+                        <MudTh>Attempts</MudTh>
+                        <MudTh>Outcome</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Status">@StatusChip(context.Status)</MudTd>
+                        <MudTd DataLabel="Task">@context.Title</MudTd>
+                        <MudTd DataLabel="Attempts">@context.Attempts / @context.MaxAttempts</MudTd>
+                        <MudTd DataLabel="Outcome">
+                            @if (context.Result is { } taskResult)
+                            {
+                                <span>@taskResult</span>
+                            }
+                            @if (context.Error is { } taskError)
+                            {
+                                <MudText Typo="Typo.body2" Color="@(context.Status == TodoTaskStatus.Failed ? Color.Error : Color.Warning)">@taskError</MudText>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    /// <summary>How often the page reloads while a run is active.</summary>
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
+
+    private IReadOnlyList<TodoTaskRun> _runs = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _runs = await TodoTaskService.GetRunsAsync(Repository.Current!.FullName);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the runs: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+        ScheduleRefresh();
+    }
+
+    /// <summary>Reloads once after <see cref="RefreshInterval"/> while a run is active; each reload schedules the next.</summary>
+    private void ScheduleRefresh()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        if (_runs.Any(run => run.IsActive))
+        {
+            _timer = new Timer(_ =>
+            {
+                _ = InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+            }, null, RefreshInterval, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        var dialog = await Dialogs.ShowAsync<RepositoryAnalysisDialog>("Generate work items from the repository",
+            new DialogParameters<RepositoryAnalysisDialog> { { d => d.RepositoryFullName, Repository.Current!.FullName } },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add("The run is queued; the Tasks function app picks it up shortly.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task CancelAsync(TodoTaskRun run)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Cancel run", $"Cancel '{run.Root.Title}'? Tasks that are running finish, but their results are discarded. Drafts that were already saved are kept.",
+                yesText: "Cancel run", cancelText: "Keep running") != true)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await TodoTaskService.CancelRunAsync(Repository.Current!.FullName, run.Root.Id);
+            Snackbar.Add("The run is cancelled.", Severity.Info);
+        });
+    }
+
+    private async Task DiscardAsync(TodoTaskRun run)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Discard drafts", $"Delete the drafts that '{run.Root.Title}' created? Items that were accepted meanwhile are kept.",
+                yesText: "Delete drafts", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var discarded = await TodoTaskService.DiscardDraftsAsync(Repository.Current!.FullName, run.Root.Id);
+            Snackbar.Add(discarded.Kept == 0
+                ? $"Deleted {discarded.Deleted} drafts."
+                : $"Deleted {discarded.Deleted} drafts; kept {discarded.Kept} items that were accepted or have other children.", Severity.Success);
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private static double Progress(TodoTaskRun run)
+    {
+        return run.Total == 0 ? 0 : 100d * (run.Succeeded + run.Failed + run.SubTasks.Count(t => t.Status == TodoTaskStatus.Cancelled)) / run.Total;
+    }
+
+    private static RenderFragment StatusChip(TodoTaskStatus status)
+    {
+        var (color, icon) = status switch
+        {
+            TodoTaskStatus.Pending => (Color.Default, Icons.Material.Filled.Schedule),
+            TodoTaskStatus.Queued => (Color.Default, Icons.Material.Filled.HourglassTop),
+            TodoTaskStatus.Running => (Color.Info, Icons.Material.Filled.Autorenew),
+            TodoTaskStatus.Waiting => (Color.Info, Icons.Material.Filled.AccountTree),
+            TodoTaskStatus.Succeeded => (Color.Success, Icons.Material.Filled.CheckCircle),
+            TodoTaskStatus.Failed => (Color.Error, Icons.Material.Filled.Error),
+            _ => (Color.Default, Icons.Material.Filled.Cancel)
+        };
+        return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@color" Icon="@icon">@LabelOf(status)</MudChip>;
+    }
+
+    public static string LabelOf(TodoTaskStatus status)
+    {
+        return status switch
+        {
+            TodoTaskStatus.Waiting => "Waiting for sub-tasks",
+            _ => status.ToString()
+        };
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

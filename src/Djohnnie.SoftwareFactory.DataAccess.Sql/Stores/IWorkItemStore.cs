@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
@@ -17,6 +18,18 @@ public interface IWorkItemStore
 
     /// <summary>Creates drafts of the type the parent is split into, all or none.</summary>
     Task<List<WorkItem>> AddGeneratedChildrenAsync(string repositoryFullName, Guid parentId, IReadOnlyList<GeneratedWorkItem> items, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates drafts of <paramref name="type"/> under <paramref name="parentId"/> (or without a parent, when the type
+    /// allows it), all or none, tagged with the run that generated them from the repository.
+    /// </summary>
+    Task<List<WorkItem>> AddGeneratedAsync(string repositoryFullName, Guid? parentId, WorkItemType type, IReadOnlyList<GeneratedWorkItem> items, Guid generatedByTaskId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the drafts a run generated. Items that were accepted meanwhile are kept, and so are the drafts above
+    /// anything that is kept or doesn't belong to the run.
+    /// </summary>
+    Task<DiscardedGeneratedDrafts> DeleteGeneratedDraftsAsync(string repositoryFullName, Guid generatedByTaskId, CancellationToken cancellationToken = default);
 
     /// <summary>Deletes an item that has no children.</summary>
     Task DeleteAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default);

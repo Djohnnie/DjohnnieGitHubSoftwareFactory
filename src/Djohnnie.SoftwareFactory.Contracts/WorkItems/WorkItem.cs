@@ -82,6 +82,9 @@ public sealed record WorkItem
     [MaxLength(250)]
     public string? PullRequestBranch { get; set; }
 
+    /// <summary>The run (root TODO task) that generated the item from its repository, or <c>null</c>.</summary>
+    public Guid? GeneratedByTaskId { get; set; }
+
     public bool IsDraft => Status == WorkItemStatus.Draft;
 
     /// <summary>Whether the item was accepted and has a GitHub issue it can be refreshed from.</summary>

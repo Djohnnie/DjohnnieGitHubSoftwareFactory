@@ -23,6 +23,10 @@
     <MudStack Row="true" Wrap="Wrap.Wrap">
         <MudButton Href="@WorkItemRoutes.NewPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New @Name</MudButton>
         <MudButton Href="@WorkItemRoutes.TemplatesPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.LibraryBooks">Templates</MudButton>
+        @if (_type == WorkItemType.Epic)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="GenerateFromRepositoryAsync">Generate from repository</MudButton>
+        }
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
@@ -194,6 +198,19 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    /// <summary>Starts a run in the Tasks function app and shows its progress on the TODO tasks page.</summary>
+    private async Task GenerateFromRepositoryAsync()
+    {
+        var dialog = await Dialogs.ShowAsync<RepositoryAnalysisDialog>("Generate work items from the repository",
+            new DialogParameters<RepositoryAnalysisDialog> { { d => d.RepositoryFullName, Repository.Current!.FullName } },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            Navigation.NavigateTo("/todo-tasks");
         }
     }
 

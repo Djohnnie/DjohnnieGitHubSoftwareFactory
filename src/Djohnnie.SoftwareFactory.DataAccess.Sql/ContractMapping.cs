@@ -2,6 +2,34 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql;
 
 internal static class ContractMapping
 {
+    extension(Entities.TodoTask value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.TodoTasks.TodoTask ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                RootId = value.RootId,
+                ParentId = value.ParentId,
+                Kind = value.Kind,
+                Status = value.Status,
+                RepositoryFullName = value.RepositoryFullName,
+                Title = value.Title,
+                Payload = value.Payload,
+                Result = value.Result,
+                Error = value.Error,
+                Attempts = value.Attempts,
+                MaxAttempts = value.MaxAttempts,
+                NotBefore = value.NotBefore,
+                CreatedBy = value.CreatedBy,
+                CreatedAt = value.CreatedAt,
+                QueuedAt = value.QueuedAt,
+                StartedAt = value.StartedAt,
+                CompletedAt = value.CompletedAt
+            };
+        }
+    }
+
     extension(Entities.SyncLogEvent value)
     {
         public Djohnnie.SoftwareFactory.Contracts.SyncLog.SyncLogEvent ToContract()
@@ -121,7 +149,8 @@ internal static class ContractMapping
                 PullRequestUrl = value.PullRequestUrl,
                 PullRequestChecks = value.PullRequestChecks,
                 AgentRunUrl = value.AgentRunUrl,
-                PullRequestBranch = value.PullRequestBranch
+                PullRequestBranch = value.PullRequestBranch,
+                GeneratedByTaskId = value.GeneratedByTaskId
             };
         }
 

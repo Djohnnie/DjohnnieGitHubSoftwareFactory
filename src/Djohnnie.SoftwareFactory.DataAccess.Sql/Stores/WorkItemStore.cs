@@ -1,4 +1,5 @@
 using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -110,6 +111,60 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         db.WorkItems.AddRange(children);
         await db.SaveChangesAsync(cancellationToken);
         return children.Select(child => child.ToContract()).ToList();
+    }
+
+    public async Task<List<WorkItem>> AddGeneratedAsync(string repositoryFullName, Guid? parentId, WorkItemType type, IReadOnlyList<GeneratedWorkItem> items,
+        Guid generatedByTaskId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var repository = await db.GetOrAddRepositoryAsync(repositoryFullName, cancellationToken);
+        var template = new Entities.WorkItem { Type = type };
+        await SetParentAsync(db, template, repositoryFullName, parentId, cancellationToken);
+
+        var now = timeProvider.GetUtcNow();
+        var created = items.Select(item => new Entities.WorkItem
+        {
+            Repository = repository,
+            Parent = template.Parent,
+            ParentId = template.ParentId,
+            Type = type,
+            Title = item.Title.Trim(),
+            Description = item.Description,
+            GeneratedByTaskId = generatedByTaskId,
+            CreatedAt = now,
+            UpdatedAt = now
+        }).ToList();
+        db.WorkItems.AddRange(created);
+        await db.SaveChangesAsync(cancellationToken);
+        return created.Select(item => item.ToContract()).ToList();
+    }
+
+    public async Task<DiscardedGeneratedDrafts> DeleteGeneratedDraftsAsync(string repositoryFullName, Guid generatedByTaskId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var generated = await Query(db.WorkItems, repositoryFullName)
+            .Where(e => e.GeneratedByTaskId == generatedByTaskId)
+            .ToListAsync(cancellationToken);
+        var deletable = generated.Where(e => e.Status == WorkItemStatus.Draft).Select(e => e.Id).ToHashSet();
+
+        // A draft can only go when all its children go too; drop the ones that would be left with children until none is.
+        var ids = generated.Select(e => e.Id).ToList();
+        var children = await db.WorkItems.AsNoTracking()
+            .Where(e => e.ParentId != null && ids.Contains(e.ParentId.Value))
+            .Select(e => new { e.Id, ParentId = e.ParentId!.Value })
+            .ToListAsync(cancellationToken);
+        bool removed;
+        do
+        {
+            var blocked = children.Where(c => deletable.Contains(c.ParentId) && !deletable.Contains(c.Id)).Select(c => c.ParentId).ToHashSet();
+            removed = deletable.RemoveWhere(blocked.Contains) > 0;
+        }
+        while (removed);
+
+        // Tracked together, so EF deletes the children before their parents.
+        db.WorkItems.RemoveRange(generated.Where(e => deletable.Contains(e.Id)));
+        await db.SaveChangesAsync(cancellationToken);
+        return new DiscardedGeneratedDrafts(deletable.Count, generated.Count - deletable.Count);
     }
 
     public async Task DeleteAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)

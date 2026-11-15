@@ -139,3 +139,13 @@ public sealed record CreateReviewRequest(
     [property: JsonPropertyName("comments")] IReadOnlyList<GitHubReviewLineComment> Comments);
 
 public sealed record HtmlUrlResponse([property: JsonPropertyName("html_url")] string HtmlUrl);
+
+public sealed record TreeResponse(
+    [property: JsonPropertyName("sha")] string Sha,
+    [property: JsonPropertyName("truncated")] bool Truncated,
+    [property: JsonPropertyName("tree")] List<TreeEntryResponse>? Tree);
+
+public sealed record TreeEntryResponse(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("size")] long? Size);

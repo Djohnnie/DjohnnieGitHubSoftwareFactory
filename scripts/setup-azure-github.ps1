@@ -8,7 +8,7 @@
       1. Creates (or reuses) a Microsoft Entra app registration + service principal for GitHub Actions.
       2. Adds a federated credential so the repository's "production" environment can log in with OIDC
          (no Azure client secret is stored in GitHub).
-      3. Grants the service principal "Website Contributor" on the Web App and Function App and
+      3. Grants the service principal "Website Contributor" on the Web App and both Function Apps (sync and tasks) and
          "SQL Server Contributor" on the SQL server (needed to open a temporary firewall rule).
       4. Creates the GitHub environment and sets its variables and the SQL connection string secret.
       5. Optionally stores the same connection string on the Web App as ConnectionStrings:Database.
@@ -27,6 +27,7 @@ param(
     [Parameter(Mandatory)] [string] $SqlServerName,
     [Parameter(Mandatory)] [string] $SqlDatabaseName,
     [string] $FunctionAppName = 'softwarefactory-sync',
+    [string] $TasksFunctionAppName = 'softwarefactory-tasks',
     [string] $Repository = 'Djohnnie/DjohnnieGitHubSoftwareFactory',
     [string] $Environment = 'production',
     [string] $AppRegistrationName = 'github-DjohnnieGitHubSoftwareFactory',
@@ -44,6 +45,7 @@ $tenantId = Invoke-Az account show --query tenantId -o tsv
 
 $webAppId = Invoke-Az webapp show -g $ResourceGroup -n $WebAppName --query id -o tsv
 $functionAppId = Invoke-Az functionapp show -g $ResourceGroup -n $FunctionAppName --query id -o tsv
+$tasksFunctionAppId = Invoke-Az functionapp show -g $ResourceGroup -n $TasksFunctionAppName --query id -o tsv
 $sqlServerId = Invoke-Az sql server show -g $ResourceGroup -n $SqlServerName --query id -o tsv
 $sqlServerFqdn = Invoke-Az sql server show -g $ResourceGroup -n $SqlServerName --query fullyQualifiedDomainName -o tsv
 Invoke-Az sql db show -g $ResourceGroup -s $SqlServerName -n $SqlDatabaseName --query id -o tsv | Out-Null
@@ -91,6 +93,7 @@ Write-Host 'Assigning roles'
 foreach ($assignment in @(
         @{ Role = 'Website Contributor'; Scope = $webAppId },
         @{ Role = 'Website Contributor'; Scope = $functionAppId },
+        @{ Role = 'Website Contributor'; Scope = $tasksFunctionAppId },
         @{ Role = 'SQL Server Contributor'; Scope = $sqlServerId })) {
     $exists = Invoke-Az role assignment list --assignee $principalId --role $assignment.Role --scope $assignment.Scope --query '[0].id' -o tsv
     if (-not $exists) {

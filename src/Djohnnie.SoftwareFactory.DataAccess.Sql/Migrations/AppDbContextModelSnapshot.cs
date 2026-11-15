@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261113152336_AddMindmaps";
+    public override string LastMigrationId => "20261115101415_AddTodoTasks";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -805,6 +805,103 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("SyncLogEvents");
             });
 
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.TodoTask", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<int>("Attempts")
+                    .HasColumnType("int");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("CreatedBy")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
+
+                b.Property<string>("Error")
+                    .HasMaxLength(4000)
+                    .HasColumnType("nvarchar(4000)");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
+
+                b.Property<DateTimeOffset?>("LeaseUntil")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<int>("MaxAttempts")
+                    .HasColumnType("int");
+
+                b.Property<DateTimeOffset?>("NotBefore")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<Guid?>("ParentId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<string>("Payload")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
+
+                b.Property<DateTimeOffset?>("QueuedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("RepositoryFullName")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
+
+                b.Property<string>("Result")
+                    .HasMaxLength(4000)
+                    .HasColumnType("nvarchar(4000)");
+
+                b.Property<Guid>("RootId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<DateTimeOffset?>("StartedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasColumnType("nvarchar(20)");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasMaxLength(300)
+                    .HasColumnType("nvarchar(300)");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("ParentId");
+
+                b.HasIndex("RootId");
+
+                b.HasIndex("RepositoryFullName", "CreatedAt");
+
+                b.HasIndex("Status", "NotBefore");
+
+                b.ToTable("TodoTasks");
+            });
+
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>
             {
                 b.Property<Guid>("Id")
@@ -847,6 +944,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasMaxLength(60000)
                     .HasColumnType("nvarchar(max)");
+
+                b.Property<Guid?>("GeneratedByTaskId")
+                    .HasColumnType("uniqueidentifier");
 
                 b.Property<long?>("IssueId")
                     .HasColumnType("bigint");
@@ -913,6 +1013,8 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 var key0 = b.HasAlternateKey("SysId");
 
                 SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("GeneratedByTaskId");
 
                 b.HasIndex("ParentId");
 

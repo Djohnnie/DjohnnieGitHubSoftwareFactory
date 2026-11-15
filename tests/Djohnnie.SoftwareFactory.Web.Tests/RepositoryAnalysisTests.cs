@@ -1,0 +1,273 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Djohnnie.SoftwareFactory.Agents;
+using Djohnnie.SoftwareFactory.Application;
+using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.RepositoryAnalysis;
+using Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis;
+using Djohnnie.SoftwareFactory.Contracts.TodoTasks;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.DataAccess.Sql;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Djohnnie.SoftwareFactory.Web.Tests;
+
+public class RepositoryAnalysisTests
+{
+    private const string Repo = "owner/repo";
+    private readonly CancellationToken _cancellationToken = TestContext.Current.CancellationToken;
+
+    [Fact]
+    public void TreeFilter_LeavesOutBinariesDependenciesBuildOutputLockFilesGeneratedAndLargeFiles()
+    {
+        var entries = Tree(
+            ("README.md", 100), ("src/App/Program.cs", 2_000), ("src/App/bin/Debug/App.dll", 5_000), ("src/App/obj/project.assets.json", 9_000),
+            ("web/node_modules/left-pad/index.js", 10), ("package-lock.json", 50_000), ("docs/logo.png", 3_000),
+            ("src/Data/Migrations/20260101_Init.Designer.cs", 4_000), ("src/Data/Migrations/AppDbContextModelSnapshot.cs", 4_000),
+            ("wwwroot/site.min.js", 1_000), ("data/huge.json", RepositoryTreeFilter.MaxFileSize + 1));
+        entries.Add(new GitHubTreeEntry("src", "tree", null));
+        entries.Add(new GitHubTreeEntry("external/lib", "commit", null));
+
+        Assert.Equal(["README.md", "src/App/Program.cs"], RepositoryTreeFilter.Filter(entries, null).Select(e => e.Path));
+        Assert.Equal(["src/App/Program.cs"], RepositoryTreeFilter.Filter(entries, "/src/App/").Select(e => e.Path));
+        Assert.Empty(RepositoryTreeFilter.Filter(entries, "src/Ap"));
+    }
+
+    [Fact]
+    public void TreeFilter_NormalizesFolders_AndRefusesParentSegments()
+    {
+        Assert.Null(RepositoryTreeFilter.NormalizePrefix(" / "));
+        Assert.Equal("src/Api", RepositoryTreeFilter.NormalizePrefix(@".\src\Api\"));
+        Assert.True(RepositoryTreeFilter.IsValidPrefix("src/Api"));
+        Assert.True(RepositoryTreeFilter.IsValidPrefix(null));
+        Assert.False(RepositoryTreeFilter.IsValidPrefix("src/../../other"));
+    }
+
+    [Fact]
+    public void Outline_ListsFilesWithSizes_OrFoldersWhenThereAreTooMany()
+    {
+        var files = RepositoryTreeFilter.Filter(Tree(("README.md", 100), ("src/A.cs", 2_048), ("src/Deep/B.cs", 3 * 1024 * 1024 / 20)), null);
+
+        Assert.Equal("README.md  (100 B)\nsrc/A.cs  (2 KB)\nsrc/Deep/B.cs  (153.6 KB)", RepositoryTreeFilter.Outline(files, 10_000).ReplaceLineEndings("\n"));
+
+        var folders = RepositoryTreeFilter.Outline(files, 20).ReplaceLineEndings("\n").Split('\n');
+        Assert.StartsWith("[3 files;", folders[0]);
+        Assert.Equal(["src/  (2 files, 155.6 KB)", "src/Deep/  (1 files, 153.6 KB)", "README.md  (100 B)"], folders[1..]);
+    }
+
+    [Fact]
+    public async Task ExplorerTools_ListFromTheTree_ReadOnlyKnownFiles_AndStopAtTheReadLimit()
+    {
+        var reads = new List<string>();
+        var tools = new RepositoryExplorerTools(["README.md", "src/App/Program.cs", "src/App/Startup.cs"], (path, _) =>
+        {
+            reads.Add(path);
+            return Task.FromResult<string?>($"content of {path}");
+        }, maxReads: 2);
+
+        Assert.Equal("src/\nREADME.md", tools.ListFiles(null));
+        Assert.Equal("src/App/Program.cs\nsrc/App/Startup.cs", tools.ListFiles("src/App"));
+        Assert.Contains("can't contain '..'", tools.ListFiles("../other"));
+        Assert.Contains("can't be read", await tools.ReadFileAsync("src/App/bin/App.dll", _cancellationToken));
+        Assert.Equal("content of README.md", await tools.ReadFileAsync("./README.md", _cancellationToken));
+        Assert.Equal("content of src/App/Program.cs", await tools.ReadFileAsync("src/App/Program.cs", _cancellationToken));
+        Assert.Contains("limit of 2 files", await tools.ReadFileAsync("src/App/Startup.cs", _cancellationToken));
+        Assert.Equal(["README.md", "src/App/Program.cs"], reads);
+    }
+
+    [Fact]
+    public async Task StartRun_IsRefused_WhileTheRepositoryIsBeingAnalyzed_AndForInvalidInput()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var services = Services(database, new ScriptedChatClient(), new FakeGitHub());
+        var todo = services.GetRequiredService<TodoTaskService>();
+
+        var task = await todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.Improvements, "/src/", 5, "octocat"), _cancellationToken);
+
+        Assert.Equal((TodoTaskKind.AnalyzeRepository, TodoTaskStatus.Pending, "octocat"), (task.Kind, task.Status, task.CreatedBy));
+        Assert.Equal("Analyze 'src' (improvements)", task.Title);
+        await Assert.ThrowsAsync<DomainRuleException>(() => todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.DescribeExisting, null, 5, null), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => todo.StartRepositoryAnalysisAsync(new("owner/other", RepositoryAnalysisMode.Improvements, "../x", 5, null), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => todo.StartRepositoryAnalysisAsync(new("owner/other", RepositoryAnalysisMode.Improvements, null, 0, null), _cancellationToken));
+        await InternalAgentTests.DisableAsync(services, InternalAgentKeys.RepositoryWorkItemWriter);
+        await Assert.ThrowsAsync<DomainRuleException>(() => todo.StartRepositoryAnalysisAsync(new("owner/other", RepositoryAnalysisMode.Improvements, null, 5, null), _cancellationToken));
+    }
+
+    [Fact]
+    public async Task ARun_PlansEpicsAndFeatures_ThenWritesEachFeature_AllAsTaggedDrafts()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var gitHub = new FakeGitHub();
+        var chat = new ScriptedChatClient(
+            ScriptedChatClient.ToolCall("read_repository_file", new Dictionary<string, object?> { ["path"] = "README.md" }),
+            Json(new
+            {
+                epics = new object[]
+                {
+                    new
+                    {
+                        title = "Reliability", description = "## Goal\nFewer crashes.",
+                        features = new[]
+                        {
+                            new { title = "Error handling", summary = "Handle failures in the API.", paths = new[] { "src/App/Program.cs" } },
+                            new { title = "Existing feature", summary = "Already planned.", paths = Array.Empty<string>() }
+                        }
+                    },
+                    new { title = "existing epic", description = "Ignored.", features = new[] { new { title = "Docs", summary = "Write docs.", paths = new[] { "README.md" } } } }
+                }
+            }));
+        await using var services = Services(database, chat, gitHub);
+        var items = services.GetRequiredService<WorkItemService>();
+        var existingEpic = await items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Existing epic", Description = "Keep me." }, _cancellationToken);
+        await items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Feature, ParentId = existingEpic.Id, Title = "Existing feature" }, _cancellationToken);
+        var todo = services.GetRequiredService<TodoTaskService>();
+        var root = await todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.Improvements, null, 5, "octocat"), _cancellationToken);
+
+        Assert.Equal(TodoTaskStatus.Waiting, await DispatchAndExecuteAsync(services, root.Id));
+
+        var input = string.Join("\n", chat.Requests[0].Where(m => m.Role == ChatRole.User).Select(m => m.Text));
+        Assert.Contains("\"mode\": \"improvements\"", input);
+        Assert.Contains("src/App/Program.cs  (2 KB)", input);
+        Assert.DoesNotContain("App.dll", input);
+        Assert.Contains("Existing feature", input);
+        Assert.Contains("You are the Repository Analyst", InternalAgentTests.SystemPrompt(chat, 0));
+        Assert.Contains(gitHub.Requests, path => path.EndsWith("/contents/README.md", StringComparison.Ordinal));
+
+        var epics = await items.GetAllAsync(Repo, [WorkItemType.Epic], cancellationToken: _cancellationToken);
+        var reliability = Assert.Single(epics, e => e.Title == "Reliability");
+        Assert.Equal((root.Id, "## Goal\nFewer crashes."), (reliability.GeneratedByTaskId!.Value, reliability.Description));
+        Assert.Equal("Keep me.", epics.Single(e => e.Id == existingEpic.Id).Description);
+        var features = await items.GetAllAsync(Repo, [WorkItemType.Feature], cancellationToken: _cancellationToken);
+        var errorHandling = Assert.Single(features, f => f.Title == "Error handling");
+        Assert.Equal(reliability.Id, errorHandling.ParentId);
+        Assert.Contains("- `src/App/Program.cs`", errorHandling.Description);
+        Assert.Equal(existingEpic.Id, features.Single(f => f.Title == "Docs").ParentId);
+        Assert.Single(features, f => f.Title == "Existing feature");
+
+        var run = await todo.GetRunAsync(Repo, root.Id, _cancellationToken);
+        Assert.Equal(2, run.Total);
+        Assert.Equal("Planned 2 features in 1 new and 1 existing epics (2 readable files; the analyst read 1).", run.Root.Result);
+
+        // The writer of the first feature: describes it and adds a user story and a bug.
+        chat.Enqueue(Json(new
+        {
+            featureDescription = "## Current situation\nExceptions escape `Program.cs`.",
+            stories = new[] { new { title = "Return problem details", description = "## Acceptance criteria\n- 500s are JSON." } },
+            bugs = new[] { new { title = "Null reference on empty body", description = "Crashes." } }
+        }));
+        var first = run.SubTasks.Single(t => t.Title.Contains("Error handling"));
+        Assert.Equal(TodoTaskStatus.Succeeded, await DispatchAndExecuteAsync(services, first.Id));
+
+        Assert.Contains("You are the Repository Work Item Writer", InternalAgentTests.SystemPrompt(chat, 2));
+        var writerInput = string.Join("\n", chat.Requests[2].Where(m => m.Role == ChatRole.User).Select(m => m.Text));
+        Assert.Contains("Docs", writerInput);
+        var described = await items.GetAsync(Repo, errorHandling.Id, _cancellationToken);
+        Assert.Equal("## Current situation\nExceptions escape `Program.cs`.", described!.Description);
+        var children = await items.GetAllAsync(Repo, parentId: errorHandling.Id, cancellationToken: _cancellationToken);
+        Assert.Equal([(WorkItemType.Bug, "Null reference on empty body"), (WorkItemType.Story, "Return problem details")],
+            children.Select(c => (c.Type, c.Title)).OrderBy(c => c.Title));
+        Assert.All(children, c => Assert.Equal((WorkItemStatus.Draft, root.Id), (c.Status, c.GeneratedByTaskId!.Value)));
+
+        // The writer of the second feature returns nothing; the run then ends.
+        chat.Enqueue(Json(new { featureDescription = "", stories = Array.Empty<object>(), bugs = Array.Empty<object>() }));
+        Assert.Equal(TodoTaskStatus.Succeeded, await DispatchAndExecuteAsync(services, run.SubTasks.Single(t => t.Title.Contains("Docs")).Id));
+        run = await todo.GetRunAsync(Repo, root.Id, _cancellationToken);
+        Assert.Equal(TodoTaskStatus.Succeeded, run.Root.Status);
+        Assert.Contains("Kept the feature's description and wrote 0 user stories and 0 bugs", run.SubTasks.Single(t => t.Title.Contains("Docs")).Result);
+
+        var discarded = await todo.DiscardDraftsAsync(Repo, root.Id, _cancellationToken);
+        Assert.Equal((5, 0), (discarded.Deleted, discarded.Kept));
+        Assert.Equal(["Existing epic", "Existing feature"], (await items.GetAllAsync(Repo, cancellationToken: _cancellationToken)).Select(i => i.Title).Order());
+    }
+
+    [Fact]
+    public async Task ARun_FailsWithoutRetries_WhenTheRepositoryHasNoReadableFiles()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var chat = new ScriptedChatClient();
+        await using var services = Services(database, chat, new FakeGitHub(("docs/logo.png", 100)));
+        var todo = services.GetRequiredService<TodoTaskService>();
+        var root = await todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.DescribeExisting, null, 5, null), _cancellationToken);
+
+        Assert.Equal(TodoTaskStatus.Failed, await DispatchAndExecuteAsync(services, root.Id));
+
+        var run = await todo.GetRunAsync(Repo, root.Id, _cancellationToken);
+        Assert.Equal(("The repository has no files that can be analyzed.", 1), (run.Root.Error, run.Root.Attempts));
+        Assert.Empty(chat.Requests);
+        await Assert.ThrowsAsync<DomainRuleException>(() => todo.DiscardDraftsAsync(Repo, Guid.NewGuid(), _cancellationToken));
+    }
+
+    private async Task<TodoTaskStatus?> DispatchAndExecuteAsync(IServiceProvider services, Guid id)
+    {
+        // One dispatch queues every due task, so a sub-task may already have been queued by an earlier one.
+        await using var scope = services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<TodoTaskDispatcher>().DispatchAsync(_cancellationToken);
+        Assert.Equal(TodoTaskStatus.Queued, await scope.ServiceProvider.GetRequiredService<ITodoTaskStore>().GetStatusAsync(id, _cancellationToken));
+        return await scope.ServiceProvider.GetRequiredService<TodoTaskExecutor>().ExecuteAsync(id, _cancellationToken);
+    }
+
+    private static ServiceProvider Services(SqlServerDatabase database, ScriptedChatClient chat, FakeGitHub gitHub)
+    {
+        var client = new GitHubApiClient(new HttpClient(gitHub) { BaseAddress = new Uri("https://api.github.com/") }, new ConfiguredGitHubTokenProvider("token"));
+        return new ServiceCollection().AddLogging().AddApplication()
+            .AddSingleton(database.Factory)
+            .AddSingleton(new AssistantAgentFactory(chat, NullLoggerFactory.Instance))
+            .AddSingleton(client)
+            .BuildServiceProvider();
+    }
+
+    private static ChatResponse Json(object value)
+    {
+        return ScriptedChatClient.Text(JsonSerializer.Serialize(value));
+    }
+
+    private static List<GitHubTreeEntry> Tree(params (string Path, long Size)[] files)
+    {
+        return files.Select(f => new GitHubTreeEntry(f.Path, "blob", f.Size)).ToList();
+    }
+
+    /// <summary>Serves the tree of <c>owner/repo</c> and the contents of its files.</summary>
+    private sealed class FakeGitHub(params (string Path, long Size)[] files) : HttpMessageHandler
+    {
+        private readonly (string Path, long Size)[] _files = files.Length > 0
+            ? files
+            : [("README.md", 100), ("src/App/Program.cs", 2_048), ("src/App/bin/Debug/App.dll", 5_000)];
+
+        public List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Requests.Add(path);
+            if (path == $"/repos/{Repo}/git/trees/HEAD")
+            {
+                var tree = new { sha = "abc", truncated = false, tree = _files.Select(f => new { path = f.Path, type = "blob", size = f.Size }) };
+                return Task.FromResult(Respond(HttpStatusCode.OK, JsonSerializer.Serialize(tree)));
+            }
+
+            var prefix = $"/repos/{Repo}/contents/";
+            if (path.StartsWith(prefix, StringComparison.Ordinal) && _files.Any(f => f.Path == Uri.UnescapeDataString(path[prefix.Length..])))
+            {
+                var file = Uri.UnescapeDataString(path[prefix.Length..]);
+                var body = new { path = file, sha = "sha", type = "file", encoding = "base64", content = Convert.ToBase64String(Encoding.UTF8.GetBytes($"# {file}")) };
+                return Task.FromResult(Respond(HttpStatusCode.OK, JsonSerializer.Serialize(body)));
+            }
+            return Task.FromResult(Respond(HttpStatusCode.NotFound, "{\"message\":\"Not Found\"}"));
+        }
+
+        private static HttpResponseMessage Respond(HttpStatusCode status, string json)
+        {
+            return new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        }
+    }
+}

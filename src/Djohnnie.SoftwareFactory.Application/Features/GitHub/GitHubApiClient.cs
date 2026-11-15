@@ -95,6 +95,20 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return new GitHubFile(file.Path, file.Sha, content, file.HtmlUrl);
     }
 
+    /// <summary>
+    /// The whole file tree of the default branch with one request (Git Trees API, recursive). When GitHub truncates a
+    /// very large tree, the entries it returned are kept and <see cref="GitHubTree.Truncated"/> is set.
+    /// </summary>
+    public async Task<GitHubTree> GetTreeAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        // HEAD resolves to the default branch, also when its name contains slashes.
+        using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/git/trees/HEAD?recursive=1", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var tree = await response.Content.ReadFromJsonAsync<Api.TreeResponse>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+        return new GitHubTree(tree.Sha, tree.Truncated, (tree.Tree ?? []).Select(e => new GitHubTreeEntry(e.Path, e.Type, e.Size)).ToList());
+    }
+
     private async Task<string> GetRawContentAsync(string url, CancellationToken cancellationToken)
     {
         using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken, RawMediaType);

@@ -1,0 +1,80 @@
+@using Djohnnie.SoftwareFactory.Application.Features.TodoTasks
+@using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis
+@using Djohnnie.SoftwareFactory.Contracts.TodoTasks
+@using Djohnnie.SoftwareFactory.Web.Components.Pages
+@inject TodoTaskService TodoTasks
+
+@* Starts a "Generate from repository" run. The web app only stores the run; the Tasks function app executes it. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            The Repository Analyst reads <b>@RepositoryFullName</b> and plans epics and features; then a Repository Work Item Writer
+            describes every feature and writes its user stories. Everything is saved as drafts, which you review before accepting.
+            The run takes a few minutes and continues when you leave this page.
+        </MudText>
+        <MudRadioGroup T="RepositoryAnalysisMode" @bind-Value="_mode">
+            <MudRadio Value="RepositoryAnalysisMode.Improvements" Color="Color.Primary">
+                <b>Improvements</b>: a backlog of gaps, technical debt, missing tests or docs, risks and bugs
+            </MudRadio>
+            <MudRadio Value="RepositoryAnalysisMode.DescribeExisting" Color="Color.Primary">
+                <b>Describe what exists</b>: the current functionality as epics, features and user stories
+            </MudRadio>
+        </MudRadioGroup>
+        <MudGrid Spacing="2" Class="mt-2">
+            <MudItem xs="12" sm="8">
+                <MudTextField Variant="Variant.Outlined" @bind-Value="_pathPrefix" Label="Folder (optional)" Placeholder="e.g. src/Api" Class="mono"
+                              MaxLength="StartRepositoryAnalysisRequest.MaxPathPrefixLength" Clearable="true"
+                              HelperText="Only analyze this folder; empty for the whole repository." />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int" Variant="Variant.Outlined" @bind-Value="_maxFeatures" Label="Max. features"
+                                 Min="1" Max="StartRepositoryAnalysisRequest.MaxMaxFeatures"
+                                 HelperText="Each one is a sub-task with its own model calls." />
+            </MudItem>
+        </MudGrid>
+        @if (_error is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="() => MudDialog.Cancel()" Disabled="_starting">Cancel</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="StartAsync" Disabled="_starting" StartIcon="@Icons.Material.Filled.PlayArrow">Start</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [Parameter, EditorRequired] public string RepositoryFullName { get; set; } = string.Empty;
+
+    private RepositoryAnalysisMode _mode = RepositoryAnalysisMode.Improvements;
+    private string? _pathPrefix;
+    private int _maxFeatures = StartRepositoryAnalysisRequest.DefaultMaxFeatures;
+    private bool _starting;
+    private string? _error;
+
+    private async Task StartAsync()
+    {
+        _starting = true;
+        _error = null;
+        try
+        {
+            var user = AuthenticationState is null ? null : (await AuthenticationState).User.Identity?.Name;
+            var request = new StartRepositoryAnalysisRequest(RepositoryFullName, _mode, string.IsNullOrWhiteSpace(_pathPrefix) ? null : _pathPrefix.Trim(),
+                _maxFeatures, user);
+            MudDialog.Close(DialogResult.Ok(await TodoTasks.StartRepositoryAnalysisAsync(request)));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+}

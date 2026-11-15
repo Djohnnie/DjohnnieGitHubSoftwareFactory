@@ -4,10 +4,12 @@ using System.Text.Json.Serialization;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
+using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Contracts.Speech;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace Djohnnie.SoftwareFactory.Agents;
 
@@ -21,6 +23,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     private const int MaxDescriptionLength = 20_000;
     private const int MaxFormLength = 12_000;
     private const int MaxSuggestionLength = 100;
+    private const int MaxOutlineLength = 40_000;
+    private const int MaxSummaryLength = 2_000;
+    private const int MaxPathsPerFeature = 40;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -200,6 +205,129 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             : new GeneratedWorkItem(title, Truncate(response.Result?.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength));
     }
 
+    /// <summary>Plans the epics and features of a repository; empty when the agent returns nothing usable.</summary>
+    /// <param name="agent">The Repository Analyst agent.</param>
+    /// <param name="tools">Lets the agent read the repository's files.</param>
+    public async Task<IReadOnlyList<PlannedEpic>> AnalyzeRepositoryAsync(InternalAgent agent, RepositoryAnalysisInput input, RepositoryExplorerTools tools,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new
+        {
+            Repository = input.RepositoryFullName,
+            Mode = ModeName(input.Mode),
+            Folder = string.IsNullOrWhiteSpace(input.PathPrefix) ? null : input.PathPrefix,
+            input.MaxFeatures,
+            EpicTemplate = Template(input.EpicTemplate),
+            ExistingEpics = input.ExistingEpics.Select(epic => new { epic.Title, Description = Truncate(epic.Description, 1_000) }).ToList(),
+            ExistingFeatures = input.ExistingFeatures.Select(feature => new { feature.Title, Epic = feature.Parent?.Title }).ToList()
+        };
+        var message = $"""
+            Plan the epics and features for this repository.
+
+            ```json
+            {JsonSerializer.Serialize(request, JsonOptions)}
+            ```
+
+            The readable files of the repository, with their sizes:
+            ```text
+            {Truncate(input.Outline, MaxOutlineLength)}
+            ```
+            """;
+
+        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryAnalyst, tools.AsTools())
+            .RunAsync<RepositoryPlanOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var epicTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var featureTitles = new HashSet<string>(input.ExistingFeatures.Select(f => f.Title.Trim()), StringComparer.OrdinalIgnoreCase);
+        var remaining = input.MaxFeatures;
+        var epics = new List<PlannedEpic>();
+        foreach (var epic in response.Result?.Epics ?? [])
+        {
+            var title = Truncate(epic.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength);
+            if (title.Length == 0 || remaining <= 0 || !epicTitles.Add(title))
+            {
+                continue;
+            }
+
+            var features = (epic.Features ?? [])
+                .Select(feature => new PlannedFeature(
+                    Truncate(feature.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength),
+                    Truncate(feature.Summary?.Trim() ?? string.Empty, MaxSummaryLength),
+                    (feature.Paths ?? []).Select(p => p.Trim()).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).Take(MaxPathsPerFeature).ToList()))
+                .Where(feature => feature.Title.Length > 0 && featureTitles.Add(feature.Title))
+                .Take(remaining)
+                .ToList();
+            if (features.Count == 0)
+            {
+                continue;
+            }
+
+            remaining -= features.Count;
+            epics.Add(new PlannedEpic(title, Truncate(epic.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength), features));
+        }
+        return epics;
+    }
+
+    /// <summary>Describes one planned feature and writes its user stories (and, for improvements, bugs).</summary>
+    /// <param name="agent">The Repository Work Item Writer agent.</param>
+    /// <param name="tools">Lets the agent read the repository's files.</param>
+    public async Task<WrittenFeature> WriteFeatureWorkItemsAsync(InternalAgent agent, FeatureWritingInput input, RepositoryExplorerTools tools,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new
+        {
+            Repository = input.RepositoryFullName,
+            Mode = ModeName(input.Mode),
+            Epic = new { Title = input.EpicTitle, Description = Truncate(input.EpicDescription, MaxDescriptionLength) },
+            Feature = new { input.Feature.Title, input.Feature.Summary, input.Feature.Paths },
+            OtherFeatures = input.OtherFeatures,
+            ExistingChildren = input.ExistingChildTitles,
+            FeatureTemplate = Template(input.FeatureTemplate),
+            UserStoryTemplate = Template(input.StoryTemplate),
+            BugTemplate = input.Mode == RepositoryAnalysisMode.Improvements ? Template(input.BugTemplate) : null
+        };
+        var message = $"""
+            Describe this feature and write its {(input.Mode == RepositoryAnalysisMode.Improvements ? "user stories and bugs" : "user stories")}.
+
+            ```json
+            {JsonSerializer.Serialize(request, JsonOptions)}
+            ```
+
+            The readable files of the repository, with their sizes:
+            ```text
+            {Truncate(input.Outline, MaxOutlineLength)}
+            ```
+            """;
+
+        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryWorkItemWriter, tools.AsTools())
+            .RunAsync<WrittenFeatureOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var titles = new HashSet<string>(input.ExistingChildTitles.Select(t => t.Trim()), StringComparer.OrdinalIgnoreCase);
+        List<GeneratedWorkItem> NewItems(List<ChildOutput>? items)
+        {
+            return (items ?? [])
+                .Select(item => new GeneratedWorkItem(
+                    Truncate(item.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength),
+                    Truncate(item.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength)))
+                .Where(item => item.Title.Length > 0 && titles.Add(item.Title))
+                .Take(GeneratedWorkItem.MaxPerRun)
+                .ToList();
+        }
+
+        var output = response.Result;
+        var stories = NewItems(output?.Stories);
+        var bugs = input.Mode == RepositoryAnalysisMode.Improvements ? NewItems(output?.Bugs) : [];
+        return new WrittenFeature(Truncate(output?.FeatureDescription?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength), stories, bugs);
+    }
+
+    private static string ModeName(RepositoryAnalysisMode mode)
+    {
+        return mode == RepositoryAnalysisMode.Improvements ? "improvements" : "describe-existing";
+    }
+
+    private static object? Template(WorkItemTemplate? template)
+    {
+        return template is null ? null : new { TitleExample = template.TitleTemplate, DescriptionSkeleton = Truncate(template.Description, MaxDescriptionLength) };
+    }
+
     /// <summary>The mindmap as an indented outline, with the chosen idea marked and the done and linked ideas annotated.</summary>
     public static string MindmapOutline(Mindmap mindmap, Guid ideaId, IReadOnlyDictionary<Guid, WorkItem> linkedItems)
     {
@@ -233,9 +361,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         return Truncate(builder.ToString().TrimEnd(), MaxDescriptionLength);
     }
 
-    private AIAgent CreateAgent(InternalAgent agent, InternalAgentUsageSource source)
+    private AIAgent CreateAgent(InternalAgent agent, InternalAgentUsageSource source, IList<AITool>? tools = null)
     {
-        return factory.CreateAgent(agent.Name, agent.Instructions, model: agent.Model, onUsage: usage => usageRecorder.RecordAsync(agent, usage, source));
+        return factory.CreateAgent(agent.Name, agent.Instructions, tools, agent.Model, usage => usageRecorder.RecordAsync(agent, usage, source));
     }
 
     private static string Clean(string? suggestion)
@@ -267,6 +395,28 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     internal sealed record ChildOutput(
         [property: Description("The title; no placeholders.")] string? Title,
         [property: Description("The description as Markdown.")] string? Description);
+
+    [Description("The planned epics with their features.")]
+    internal sealed record RepositoryPlanOutput(
+        [property: Description("The epics, most important first.")] List<EpicOutput>? Epics);
+
+    [Description("One planned epic.")]
+    internal sealed record EpicOutput(
+        [property: Description("The title; the exact title of an existing epic to add features to it.")] string? Title,
+        [property: Description("The epic's description as Markdown; ignored for an existing epic.")] string? Description,
+        [property: Description("The new features of the epic.")] List<FeatureOutput>? Features);
+
+    [Description("One planned feature.")]
+    internal sealed record FeatureOutput(
+        [property: Description("The title; no placeholders.")] string? Title,
+        [property: Description("A few sentences on what the feature covers, as plain text.")] string? Summary,
+        [property: Description("The files and folders the feature is about, relative to the repository root.")] List<string>? Paths);
+
+    [Description("The feature's description and its work items.")]
+    internal sealed record WrittenFeatureOutput(
+        [property: Description("The complete description of the feature as Markdown.")] string? FeatureDescription,
+        [property: Description("The user stories of the feature, in a sensible order.")] List<ChildOutput>? Stories,
+        [property: Description("Concrete defects found in the code (improvements mode only); otherwise empty.")] List<ChildOutput>? Bugs);
 
     [Description("Suggestion chips for an agent chat.")]
     internal sealed record SuggestionsOutput(

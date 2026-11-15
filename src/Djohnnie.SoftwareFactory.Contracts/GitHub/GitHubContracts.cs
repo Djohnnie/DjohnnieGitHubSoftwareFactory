@@ -273,3 +273,20 @@ public sealed record CopilotSession(long RunId, string Url, bool IsQueued, DateT
 /// <summary>A workflow with its most recent run.</summary>
 /// <param name="LatestRun"><c>null</c> when the workflow never ran.</param>
 public sealed record LatestWorkflowRun(GitHubWorkflow Workflow, GitHubWorkflowRun? LatestRun);
+
+/// <summary>The full file tree of a commit, read with one request.</summary>
+/// <param name="Truncated">GitHub left entries out because the tree is too large (over 100,000 entries or 7 MB).</param>
+public sealed record GitHubTree(string Sha, bool Truncated, IReadOnlyList<GitHubTreeEntry> Entries);
+
+/// <param name="Type"><c>blob</c> for a file, <c>tree</c> for a folder, <c>commit</c> for a submodule.</param>
+/// <param name="Size">The size in bytes of a file; <c>null</c> for other entries.</param>
+public sealed record GitHubTreeEntry(string Path, string Type, long? Size)
+{
+    public bool IsFile
+    {
+        get
+        {
+            return Type == "blob";
+        }
+    }
+}

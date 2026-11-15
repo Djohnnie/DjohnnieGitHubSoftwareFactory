@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<SyncLogEvent> SyncLogEvents => Set<SyncLogEvent>();
+    public DbSet<TodoTask> TodoTasks => Set<TodoTask>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -53,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureAuthSession()
             .ConfigureChatConversation()
             .ConfigureSyncLog()
+            .ConfigureTodoTask()
             .ConfigureEntityKeys();
     }
 }

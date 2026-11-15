@@ -26,5 +26,7 @@ public enum InternalAgentUsageSource
     [Description("Description Writer")] DescriptionWriter,
     [Description("Work Item Breakdown")] WorkItemBreakdown,
     [Description("Mindmap Work Item Writer")] MindmapWorkItemWriter,
-    [Description("Copilot Skills Agent Chat")] CopilotSkillsAgentChat
+    [Description("Copilot Skills Agent Chat")] CopilotSkillsAgentChat,
+    [Description("Repository Analyst")] RepositoryAnalyst,
+    [Description("Repository Work Item Writer")] RepositoryWorkItemWriter
 }

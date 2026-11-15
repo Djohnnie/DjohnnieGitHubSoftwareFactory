@@ -185,10 +185,10 @@ public sealed class CopilotInstructionsFormTools(
         }
     }
 
-    private const string OutsideRepository = "Paths are relative to the repository root and can't contain '..'.";
+    internal const string OutsideRepository = "Paths are relative to the repository root and can't contain '..'.";
 
     /// <summary>Normalizes a repository path; <c>false</c> for paths with '..', which could reach other GitHub API endpoints.</summary>
-    private static bool TryNormalizePath(string? path, out string normalized)
+    internal static bool TryNormalizePath(string? path, out string normalized)
     {
         var segments = (path ?? string.Empty).Replace('\\', '/')
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

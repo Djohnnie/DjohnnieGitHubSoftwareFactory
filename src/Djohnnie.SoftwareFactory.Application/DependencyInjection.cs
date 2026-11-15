@@ -12,8 +12,10 @@ using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Mindmaps;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
+using Djohnnie.SoftwareFactory.Application.Features.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Application.Features.Speech;
 using Djohnnie.SoftwareFactory.Application.Features.SyncLog;
+using Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 using Djohnnie.SoftwareFactory.Application.Features.Skills;
 using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -51,6 +53,17 @@ public static class DependencyInjection
             services.AddScoped<WorkItemSyncService>();
             services.AddOptions<WorkItemSyncOptions>();
             services.AddScoped<SyncLogService>();
+            services.AddScoped<TodoTaskService>();
+            services.AddScoped<TodoTaskDispatcher>();
+            services.AddScoped<TodoTaskExecutor>();
+            services.AddScoped<RepositoryFiles>();
+            services.AddScoped<ITodoTaskHandler, AnalyzeRepositoryHandler>();
+            services.AddScoped<ITodoTaskHandler, WriteFeatureWorkItemsHandler>();
+            var todoTasks = services.AddOptions<TodoTaskOptions>();
+            if (configuration is not null)
+            {
+                todoTasks.Bind(configuration.GetSection(TodoTaskOptions.SectionName));
+            }
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<SkillService>();
             services.AddScoped<MindmapService>();
