@@ -208,8 +208,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     /// <summary>Plans the epics and features of a repository; empty when the agent returns nothing usable.</summary>
     /// <param name="agent">The Repository Analyst agent.</param>
     /// <param name="tools">Lets the agent read the repository's files.</param>
+    /// <param name="workItems">Lets the agent read the description of a work item in the backlog.</param>
     public async Task<IReadOnlyList<PlannedEpic>> AnalyzeRepositoryAsync(InternalAgent agent, RepositoryAnalysisInput input, RepositoryExplorerTools tools,
-        CancellationToken cancellationToken = default)
+        WorkItemTools workItems, CancellationToken cancellationToken = default)
     {
         var request = new
         {
@@ -217,9 +218,7 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             Mode = ModeName(input.Mode),
             Folder = string.IsNullOrWhiteSpace(input.PathPrefix) ? null : input.PathPrefix,
             input.MaxFeatures,
-            EpicTemplate = Template(input.EpicTemplate),
-            ExistingEpics = input.ExistingEpics.Select(epic => new { epic.Title, Description = Truncate(epic.Description, 1_000) }).ToList(),
-            ExistingFeatures = input.ExistingFeatures.Select(feature => new { feature.Title, Epic = feature.Parent?.Title }).ToList()
+            EpicTemplate = Template(input.EpicTemplate)
         };
         var message = $"""
             Plan the epics and features for this repository.
@@ -228,13 +227,15 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             {JsonSerializer.Serialize(request, JsonOptions)}
             ```
 
+            {BacklogSection(input.Backlog)}
+
             The readable files of the repository, with their sizes:
             ```text
             {Truncate(input.Outline, MaxOutlineLength)}
             ```
             """;
 
-        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryAnalyst, tools.AsTools())
+        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryAnalyst, [.. tools.AsTools(), .. workItems.AsTools()])
             .RunAsync<RepositoryPlanOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var epicTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var featureTitles = new HashSet<string>(input.ExistingFeatures.Select(f => f.Title.Trim()), StringComparer.OrdinalIgnoreCase);
@@ -270,8 +271,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     /// <summary>Describes one planned feature and writes its user stories (and, for improvements, bugs).</summary>
     /// <param name="agent">The Repository Work Item Writer agent.</param>
     /// <param name="tools">Lets the agent read the repository's files.</param>
+    /// <param name="workItems">Lets the agent read the description of a work item in the backlog.</param>
     public async Task<WrittenFeature> WriteFeatureWorkItemsAsync(InternalAgent agent, FeatureWritingInput input, RepositoryExplorerTools tools,
-        CancellationToken cancellationToken = default)
+        WorkItemTools workItems, CancellationToken cancellationToken = default)
     {
         var request = new
         {
@@ -292,13 +294,15 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             {JsonSerializer.Serialize(request, JsonOptions)}
             ```
 
+            {BacklogSection(input.Backlog)}
+
             The readable files of the repository, with their sizes:
             ```text
             {Truncate(input.Outline, MaxOutlineLength)}
             ```
             """;
 
-        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryWorkItemWriter, tools.AsTools())
+        var response = await CreateAgent(agent, InternalAgentUsageSource.RepositoryWorkItemWriter, [.. tools.AsTools(), .. workItems.AsTools()])
             .RunAsync<WrittenFeatureOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
         var titles = new HashSet<string>(input.ExistingChildTitles.Select(t => t.Trim()), StringComparer.OrdinalIgnoreCase);
         List<GeneratedWorkItem> NewItems(IEnumerable<(string? Title, string? Description)> items)
@@ -318,6 +322,23 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             ? NewItems((output?.Bugs ?? []).Select(bug => (bug.Title, bug.Description)))
             : [];
         return new WrittenFeature(Truncate(output?.FeatureDescription?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength), stories, bugs);
+    }
+
+    /// <summary>
+    /// The backlog and how to use it. It is explained in the message rather than only in the system prompt, so agents
+    /// whose prompt was stored before the backlog existed use it too.
+    /// </summary>
+    private static string BacklogSection(string backlog)
+    {
+        return $"""
+            The whole backlog of the repository: every epic, feature, user story, bug and task with its status and id, children
+            indented under their parent. Don't propose work that already exists in it (in any status), and don't overlap it.
+            Items that are done or in progress describe what has been or is being implemented. Call `get_work_item` with an id to
+            read an item's full description when you need it.
+            ```text
+            {backlog}
+            ```
+            """;
     }
 
     private static string ModeName(RepositoryAnalysisMode mode)

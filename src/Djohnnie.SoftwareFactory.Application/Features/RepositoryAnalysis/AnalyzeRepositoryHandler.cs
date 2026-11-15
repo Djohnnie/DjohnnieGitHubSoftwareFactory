@@ -41,13 +41,14 @@ public sealed class AnalyzeRepositoryHandler(
         var repository = task.RepositoryFullName;
         var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, task.RootId, cancellationToken);
 
-        var existingEpics = await items.GetAllAsync(repository, [WorkItemType.Epic], cancellationToken: cancellationToken);
-        var existingFeatures = await items.GetAllAsync(repository, [WorkItemType.Feature], cancellationToken: cancellationToken);
+        var backlog = await items.GetAllAsync(repository, cancellationToken: cancellationToken);
+        var existingEpics = backlog.Where(item => item.Type == WorkItemType.Epic).ToList();
+        var existingFeatures = backlog.Where(item => item.Type == WorkItemType.Feature).ToList();
         var epicTemplate = WorkItemTemplate.Proposed(await templates.GetAllAsync(WorkItemType.Epic, cancellationToken));
         var tools = snapshot.CreateTools(MaxReads);
         var input = new RepositoryAnalysisInput(repository, payload.Mode, payload.PathPrefix, payload.MaxFeatures, snapshot.Outline,
-            existingEpics, existingFeatures, epicTemplate);
-        var plan = await agents.AnalyzeRepositoryAsync(agent, input, tools, cancellationToken);
+            WorkItemBacklog.Outline(backlog), existingFeatures, epicTemplate);
+        var plan = await agents.AnalyzeRepositoryAsync(agent, input, tools, WorkItemToolsFor(items, repository), cancellationToken);
         if (plan.Count == 0)
         {
             return TodoTaskOutcome.Done($"The Repository Analyst planned no new epics or features (it read {tools.Reads} files).");
@@ -112,6 +113,12 @@ public sealed class AnalyzeRepositoryHandler(
             }
         }
         return builder.ToString().Trim();
+    }
+
+    /// <summary>The <c>get_work_item</c> tool, limited to the items of the analyzed repository.</summary>
+    internal static WorkItemTools WorkItemToolsFor(IWorkItemStore items, string repositoryFullName)
+    {
+        return new WorkItemTools((id, cancellationToken) => items.GetAsync(repositoryFullName, id, cancellationToken));
     }
 
     /// <exception cref="DomainRuleException">The agent is disabled or no model is configured; a retry won't help.</exception>

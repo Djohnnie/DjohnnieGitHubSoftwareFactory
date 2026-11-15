@@ -41,7 +41,8 @@ public sealed class WriteFeatureWorkItemsHandler(
         var epic = await items.GetAsync(repository, payload.EpicId, cancellationToken);
         var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, task.RootId, cancellationToken);
 
-        var existingChildren = await items.GetAllAsync(repository, parentId: feature.Id, cancellationToken: cancellationToken);
+        var backlog = await items.GetAllAsync(repository, cancellationToken: cancellationToken);
+        var existingChildren = backlog.Where(item => item.ParentId == feature.Id).ToList();
         var tools = snapshot.CreateTools(RepositoryExplorerTools.DefaultMaxReads);
         var input = new FeatureWritingInput(
             repository,
@@ -50,12 +51,13 @@ public sealed class WriteFeatureWorkItemsHandler(
             epic?.Description ?? string.Empty,
             payload.Feature,
             snapshot.Outline,
+            WorkItemBacklog.Outline(backlog),
             payload.OtherFeatures,
             existingChildren.Select(child => child.Title).ToList(),
             await ProposedAsync(WorkItemType.Feature, cancellationToken),
             await ProposedAsync(WorkItemType.Story, cancellationToken),
             payload.Mode == RepositoryAnalysisMode.Improvements ? await ProposedAsync(WorkItemType.Bug, cancellationToken) : null);
-        var written = await agents.WriteFeatureWorkItemsAsync(agent, input, tools, cancellationToken);
+        var written = await agents.WriteFeatureWorkItemsAsync(agent, input, tools, AnalyzeRepositoryHandler.WorkItemToolsFor(items, repository), cancellationToken);
 
         if (await tasks.GetStatusAsync(task.Id, cancellationToken) != TodoTaskStatus.Running)
         {

@@ -47,6 +47,40 @@ public class RepositoryAnalysisTests
     }
 
     [Fact]
+    public void BacklogOutline_IndentsChildrenUnderTheirParent_WithStatusIssueAndId_AndCutsOffALongBacklog()
+    {
+        var epic = new WorkItem { Id = Guid.NewGuid(), Type = WorkItemType.Epic, Title = "Webshop", Status = WorkItemStatus.Accepted, IssueNumber = 3 };
+        var feature = new WorkItem { Id = Guid.NewGuid(), Type = WorkItemType.Feature, Title = "Cart", ParentId = epic.Id, Status = WorkItemStatus.Done, IssueNumber = 4 };
+        var story = new WorkItem { Id = Guid.NewGuid(), Type = WorkItemType.Story, Title = "Add to cart", ParentId = feature.Id, Status = WorkItemStatus.InProgress };
+        var bug = new WorkItem { Id = Guid.NewGuid(), Type = WorkItemType.Bug, Title = "Crash\non login" };
+
+        var outline = WorkItemBacklog.Outline([bug, story, feature, epic]).ReplaceLineEndings("\n");
+
+        Assert.Equal(
+            $"- Epic [accepted, #3] Webshop (id: {epic.Id})\n" +
+            $"  - Feature [done, #4] Cart (id: {feature.Id})\n" +
+            $"    - User story [in progress] Add to cart (id: {story.Id})\n" +
+            $"- Bug [draft] Crash on login (id: {bug.Id})", outline);
+        Assert.Equal("(The backlog is empty.)", WorkItemBacklog.Outline([]));
+        Assert.EndsWith("[3 more items are not shown: the backlog is too long.]", WorkItemBacklog.Outline([bug, story, feature, epic], 100));
+    }
+
+    [Fact]
+    public async Task WorkItemTools_ReadADescriptionById_AndStopAtTheReadLimit()
+    {
+        var parent = new WorkItemReference(Guid.NewGuid(), WorkItemType.Feature, "Cart", WorkItemStatus.Draft, null, null);
+        var story = new WorkItem { Id = Guid.NewGuid(), Type = WorkItemType.Story, Title = "Add to cart", ParentId = parent.Id, Parent = parent, Description = "## Acceptance criteria" };
+        var tools = new WorkItemTools((id, _) => Task.FromResult(id == story.Id ? story : null), maxReads: 2);
+
+        var result = await tools.GetWorkItemAsync(story.Id.ToString(), _cancellationToken);
+
+        Assert.Equal($"User story [draft] Add to cart (id: {story.Id})\nPart of: Feature Cart (id: {parent.Id})\n\n## Acceptance criteria", result.ReplaceLineEndings("\n"));
+        Assert.Contains("not a work item id", await tools.GetWorkItemAsync("story-1", _cancellationToken));
+        Assert.Contains("no work item with id", await tools.GetWorkItemAsync(Guid.NewGuid().ToString(), _cancellationToken));
+        Assert.Contains("limit of 2 work items", await tools.GetWorkItemAsync(story.Id.ToString(), _cancellationToken));
+    }
+
+    [Fact]
     public void TreeFilter_NormalizesFolders_AndRefusesParentSegments()
     {
         Assert.Null(RepositoryTreeFilter.NormalizePrefix(" / "));
@@ -142,7 +176,10 @@ public class RepositoryAnalysisTests
         Assert.Contains("\"mode\": \"improvements\"", input);
         Assert.Contains("src/App/Program.cs  (2 KB)", input);
         Assert.DoesNotContain("App.dll", input);
-        Assert.Contains("Existing feature", input);
+        Assert.Contains($"- Epic [draft] Existing epic (id: {existingEpic.Id})", input);
+        Assert.Contains("  - Feature [draft] Existing feature (id: ", input);
+        Assert.Contains("`get_work_item`", input);
+        Assert.Contains(chat.Options[0]!.Tools!, tool => tool.Name == "get_work_item");
         Assert.Contains("You are the Repository Analyst", InternalAgentTests.SystemPrompt(chat, 0));
         Assert.Contains(gitHub.Requests, path => path.EndsWith("/contents/README.md", StringComparison.Ordinal));
 
@@ -161,7 +198,8 @@ public class RepositoryAnalysisTests
         Assert.Equal(2, run.Total);
         Assert.Equal("Planned 2 features in 1 new and 1 existing epics (2 readable files; the analyst read 1).", run.Root.Result);
 
-        // The writer of the first feature: describes it and adds a user story and a bug.
+        // The writer of the first feature: reads an existing epic, describes the feature and adds a user story and a bug.
+        chat.Enqueue(ScriptedChatClient.ToolCall("get_work_item", new Dictionary<string, object?> { ["id"] = existingEpic.Id.ToString() }));
         chat.Enqueue(Json(new
         {
             featureDescription = "## Current situation\nExceptions escape `Program.cs`.",
@@ -174,6 +212,10 @@ public class RepositoryAnalysisTests
         Assert.Contains("You are the Repository Work Item Writer", InternalAgentTests.SystemPrompt(chat, 2));
         var writerInput = string.Join("\n", chat.Requests[2].Where(m => m.Role == ChatRole.User).Select(m => m.Text));
         Assert.Contains("Docs", writerInput);
+        Assert.Contains($"\n  - Feature [draft] Error handling (id: {errorHandling.Id})", writerInput.ReplaceLineEndings("\n"));
+        var epicResult = chat.Requests[3].SelectMany(m => m.Contents).OfType<FunctionResultContent>().Single().Result?.ToString();
+        Assert.Contains($"Epic [draft] Existing epic (id: {existingEpic.Id})", epicResult);
+        Assert.EndsWith("Keep me.", epicResult);
         var described = await items.GetAsync(Repo, errorHandling.Id, _cancellationToken);
         Assert.Equal("## Current situation\nExceptions escape `Program.cs`.", described!.Description);
         var children = await items.GetAllAsync(Repo, parentId: errorHandling.Id, cancellationToken: _cancellationToken);

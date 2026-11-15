@@ -6,15 +6,15 @@ namespace Djohnnie.SoftwareFactory.Agents;
 
 /// <summary>What the Repository Analyst gets to plan the epics and features of a repository.</summary>
 /// <param name="Outline">The filtered file tree as an indented outline with file sizes.</param>
-/// <param name="ExistingEpics">The epics the repository already has; new features can be put under them.</param>
-/// <param name="ExistingFeatures">The features the repository already has, so they aren't planned again.</param>
+/// <param name="Backlog">Every work item of the repository (<see cref="WorkItemBacklog.Outline"/>), so nothing is planned twice.</param>
+/// <param name="ExistingFeatures">The features the repository already has; planned features with their titles are dropped.</param>
 public sealed record RepositoryAnalysisInput(
     string RepositoryFullName,
     RepositoryAnalysisMode Mode,
     string? PathPrefix,
     int MaxFeatures,
     string Outline,
-    IReadOnlyList<WorkItem> ExistingEpics,
+    string Backlog,
     IReadOnlyList<WorkItem> ExistingFeatures,
     WorkItemTemplate? EpicTemplate);
 
@@ -28,6 +28,7 @@ public sealed record PlannedFeature(string Title, string Summary, IReadOnlyList<
 /// <summary>What the Repository Work Item Writer gets to describe one feature and write its user stories.</summary>
 /// <param name="OtherFeatures">The titles of the other features of the run, which are out of scope for this one.</param>
 /// <param name="ExistingChildTitles">The children the feature already has, so they aren't written again.</param>
+/// <param name="Backlog">Every work item of the repository (<see cref="WorkItemBacklog.Outline"/>), so nothing is written twice.</param>
 public sealed record FeatureWritingInput(
     string RepositoryFullName,
     RepositoryAnalysisMode Mode,
@@ -35,6 +36,7 @@ public sealed record FeatureWritingInput(
     string EpicDescription,
     PlannedFeature Feature,
     string Outline,
+    string Backlog,
     IReadOnlyList<string> OtherFeatures,
     IReadOnlyList<string> ExistingChildTitles,
     WorkItemTemplate? FeatureTemplate,
