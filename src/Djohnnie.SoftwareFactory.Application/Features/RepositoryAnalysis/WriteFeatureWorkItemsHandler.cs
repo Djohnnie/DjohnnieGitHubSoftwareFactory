@@ -39,7 +39,7 @@ public sealed class WriteFeatureWorkItemsHandler(
         var feature = await items.GetAsync(repository, payload.FeatureId, cancellationToken)
             ?? throw new DomainRuleException($"The feature '{payload.Feature.Title}' was deleted.");
         var epic = await items.GetAsync(repository, payload.EpicId, cancellationToken);
-        var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, cancellationToken);
+        var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, task.RootId, cancellationToken);
 
         var existingChildren = await items.GetAllAsync(repository, parentId: feature.Id, cancellationToken: cancellationToken);
         var tools = snapshot.CreateTools(RepositoryExplorerTools.DefaultMaxReads);

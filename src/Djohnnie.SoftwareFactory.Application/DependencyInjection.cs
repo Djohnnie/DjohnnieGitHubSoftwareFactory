@@ -57,12 +57,16 @@ public static class DependencyInjection
             services.AddScoped<TodoTaskDispatcher>();
             services.AddScoped<TodoTaskExecutor>();
             services.AddScoped<RepositoryFiles>();
+            services.AddScoped<RepositorySnapshotCleaner>();
+            services.TryAddSingleton<IRepositorySnapshotStorage, AzureBlobRepositorySnapshotStorage>();
             services.AddScoped<ITodoTaskHandler, AnalyzeRepositoryHandler>();
             services.AddScoped<ITodoTaskHandler, WriteFeatureWorkItemsHandler>();
             var todoTasks = services.AddOptions<TodoTaskOptions>();
+            var snapshots = services.AddOptions<RepositorySnapshotOptions>();
             if (configuration is not null)
             {
                 todoTasks.Bind(configuration.GetSection(TodoTaskOptions.SectionName));
+                snapshots.Bind(configuration.GetSection(RepositorySnapshotOptions.SectionName));
             }
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<SkillService>();

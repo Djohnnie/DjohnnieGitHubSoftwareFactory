@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Formats.Tar;
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -212,6 +215,62 @@ public class RepositoryAnalysisTests
         await Assert.ThrowsAsync<DomainRuleException>(() => todo.DiscardDraftsAsync(Repo, Guid.NewGuid(), _cancellationToken));
     }
 
+    [Fact]
+    public async Task WithSnapshotStorage_ARunDownloadsTheRepositoryOnce_AndAllItsTasksReadFromTheSnapshot()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var gitHub = new FakeGitHub();
+        var storage = new MemorySnapshotStorage();
+        var chat = new ScriptedChatClient(
+            ScriptedChatClient.ToolCall("read_repository_file", new Dictionary<string, object?> { ["path"] = "README.md" }),
+            Json(new { epics = new[] { new { title = "Reliability", description = "## Goal", features = new[] { new { title = "Error handling", summary = "Handle failures.", paths = new[] { "src/App/Program.cs" } } } } } }),
+            ScriptedChatClient.ToolCall("read_repository_file", new Dictionary<string, object?> { ["path"] = "src/App/Program.cs" }),
+            Json(new { featureDescription = "## Current situation", stories = new[] { new { title = "Return problem details", description = "## Acceptance criteria" } }, bugs = Array.Empty<object>() }));
+        await using var services = Services(database, chat, gitHub, storage);
+        var todo = services.GetRequiredService<TodoTaskService>();
+        var root = await todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.Improvements, null, 5, null), _cancellationToken);
+
+        Assert.Equal(TodoTaskStatus.Waiting, await DispatchAndExecuteAsync(services, root.Id));
+        var run = await todo.GetRunAsync(Repo, root.Id, _cancellationToken);
+        Assert.Equal(TodoTaskStatus.Succeeded, await DispatchAndExecuteAsync(services, Assert.Single(run.SubTasks).Id));
+
+        Assert.Equal([$"/repos/{Repo}/tarball/HEAD"], gitHub.Requests);
+        Assert.Equal(["files/README.md", "files/src/App/Program.cs", "manifest.json"], storage.Names(root.Id));
+        var toolResults = chat.Requests.SelectMany(r => r).SelectMany(m => m.Contents).OfType<FunctionResultContent>().Select(r => r.Result?.ToString()).ToList();
+        Assert.Equal(["# README.md", "# src/App/Program.cs"], toolResults);
+        var analystInput = string.Join("\n", chat.Requests[0].Where(m => m.Role == ChatRole.User).Select(m => m.Text));
+        Assert.Contains("src/App/Program.cs  (", analystInput);
+        Assert.DoesNotContain("App.dll", analystInput);
+
+        Assert.Equal(TodoTaskStatus.Succeeded, (await todo.GetRunAsync(Repo, root.Id, _cancellationToken)).Root.Status);
+        await using var scope = services.CreateAsyncScope();
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<RepositorySnapshotCleaner>().CleanUpAsync(_cancellationToken));
+        Assert.Empty(storage.Names(root.Id));
+    }
+
+    [Fact]
+    public async Task WithSnapshotStorage_ARunFails_WhenTheRepositoryIsLargerThanASnapshotMayBe_AndActiveRunsKeepTheirSnapshot()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var storage = new MemorySnapshotStorage();
+        await using var services = Services(database, new ScriptedChatClient(), new FakeGitHub(), storage, options => options.MaxFiles = 1);
+        var todo = services.GetRequiredService<TodoTaskService>();
+        var root = await todo.StartRepositoryAnalysisAsync(new(Repo, RepositoryAnalysisMode.DescribeExisting, null, 5, null), _cancellationToken);
+        var active = Guid.NewGuid();
+        var activeRun = await services.GetRequiredService<ITodoTaskStore>().CreateRunAsync("owner/other", new NewTodoTask(TodoTaskKind.AnalyzeRepository, "Other", "{}"), null, 3, _cancellationToken);
+        await storage.WriteAsync(activeRun.Id, "manifest.json", [1], _cancellationToken);
+        await storage.WriteAsync(active, "manifest.json", [1], _cancellationToken);
+
+        Assert.Equal(TodoTaskStatus.Failed, await DispatchAndExecuteAsync(services, root.Id));
+
+        Assert.Contains("more than 1 readable files", (await todo.GetRunAsync(Repo, root.Id, _cancellationToken)).Root.Error);
+        Assert.Empty(storage.Names(root.Id));
+        await using var scope = services.CreateAsyncScope();
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<RepositorySnapshotCleaner>().CleanUpAsync(_cancellationToken));
+        Assert.NotEmpty(storage.Names(activeRun.Id));
+        Assert.Empty(storage.Names(active));
+    }
+
     private async Task<TodoTaskStatus?> DispatchAndExecuteAsync(IServiceProvider services, Guid id)
     {
         // One dispatch queues every due task, so a sub-task may already have been queued by an earlier one.
@@ -221,14 +280,64 @@ public class RepositoryAnalysisTests
         return await scope.ServiceProvider.GetRequiredService<TodoTaskExecutor>().ExecuteAsync(id, _cancellationToken);
     }
 
-    private static ServiceProvider Services(SqlServerDatabase database, ScriptedChatClient chat, FakeGitHub gitHub)
+    private static ServiceProvider Services(SqlServerDatabase database, ScriptedChatClient chat, FakeGitHub gitHub, MemorySnapshotStorage? storage = null,
+        Action<RepositorySnapshotOptions>? snapshotOptions = null)
     {
         var client = new GitHubApiClient(new HttpClient(gitHub) { BaseAddress = new Uri("https://api.github.com/") }, new ConfiguredGitHubTokenProvider("token"));
-        return new ServiceCollection().AddLogging().AddApplication()
+        var services = new ServiceCollection().AddLogging().AddApplication()
             .AddSingleton(database.Factory)
             .AddSingleton(new AssistantAgentFactory(chat, NullLoggerFactory.Instance))
             .AddSingleton(client)
-            .BuildServiceProvider();
+            .Configure(snapshotOptions ?? (_ => { }));
+        if (storage is not null)
+        {
+            services.AddSingleton<IRepositorySnapshotStorage>(storage);
+        }
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>Snapshot storage in memory: blob names per run.</summary>
+    private sealed class MemorySnapshotStorage : IRepositorySnapshotStorage
+    {
+        private readonly ConcurrentDictionary<(Guid RunId, string Name), byte[]> _blobs = new();
+
+        public bool IsConfigured
+        {
+            get
+            {
+                return true;
+            }
+        }
+
+        public List<string> Names(Guid runId)
+        {
+            return _blobs.Keys.Where(k => k.RunId == runId).Select(k => k.Name).Order(StringComparer.Ordinal).ToList();
+        }
+
+        public Task WriteAsync(Guid runId, string name, byte[] content, CancellationToken cancellationToken)
+        {
+            _blobs[(runId, name)] = content;
+            return Task.CompletedTask;
+        }
+
+        public Task<byte[]?> ReadAsync(Guid runId, string name, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_blobs.TryGetValue((runId, name), out var content) ? content : null);
+        }
+
+        public Task<IReadOnlyList<Guid>> GetRunsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<Guid>>(_blobs.Keys.Select(k => k.RunId).Distinct().ToList());
+        }
+
+        public Task DeleteAsync(Guid runId, CancellationToken cancellationToken)
+        {
+            foreach (var key in _blobs.Keys.Where(k => k.RunId == runId).ToList())
+            {
+                _blobs.TryRemove(key, out _);
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private static ChatResponse Json(object value)
@@ -254,6 +363,10 @@ public class RepositoryAnalysisTests
         {
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(path);
+            if (path == $"/repos/{Repo}/tarball/HEAD")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Tarball()) });
+            }
             if (path == $"/repos/{Repo}/git/trees/HEAD")
             {
                 var tree = new { sha = "abc", truncated = false, tree = _files.Select(f => new { path = f.Path, type = "blob", size = f.Size }) };
@@ -268,6 +381,26 @@ public class RepositoryAnalysisTests
                 return Task.FromResult(Respond(HttpStatusCode.OK, JsonSerializer.Serialize(body)));
             }
             return Task.FromResult(Respond(HttpStatusCode.NotFound, "{\"message\":\"Not Found\"}"));
+        }
+
+        /// <summary>The files as GitHub's archive: gzipped tar, a global header, and everything under one root folder.</summary>
+        private byte[] Tarball()
+        {
+            using var archive = new MemoryStream();
+            using (var gzip = new GZipStream(archive, CompressionLevel.Fastest, leaveOpen: true))
+            using (var tar = new TarWriter(gzip, TarEntryFormat.Pax, leaveOpen: true))
+            {
+                tar.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(new Dictionary<string, string> { ["comment"] = "abc1234" }));
+                tar.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "owner-repo-abc1234/"));
+                foreach (var file in _files)
+                {
+                    tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, $"owner-repo-abc1234/{file.Path}")
+                    {
+                        DataStream = new MemoryStream(Encoding.UTF8.GetBytes($"# {file.Path}"))
+                    });
+                }
+            }
+            return archive.ToArray();
         }
 
         private static HttpResponseMessage Respond(HttpStatusCode status, string json)

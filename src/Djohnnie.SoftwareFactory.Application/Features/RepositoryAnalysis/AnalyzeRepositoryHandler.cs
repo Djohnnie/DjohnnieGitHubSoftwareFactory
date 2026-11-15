@@ -39,7 +39,7 @@ public sealed class AnalyzeRepositoryHandler(
         var payload = TodoTaskPayloads.Read<AnalyzeRepositoryPayload>(task);
         var agent = await RequireAgentAsync(registry, agents, InternalAgentKeys.RepositoryAnalyst, cancellationToken);
         var repository = task.RepositoryFullName;
-        var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, cancellationToken);
+        var snapshot = await repositoryFiles.ReadAsync(repository, payload.PathPrefix, task.RootId, cancellationToken);
 
         var existingEpics = await items.GetAllAsync(repository, [WorkItemType.Epic], cancellationToken: cancellationToken);
         var existingFeatures = await items.GetAllAsync(repository, [WorkItemType.Feature], cancellationToken: cancellationToken);

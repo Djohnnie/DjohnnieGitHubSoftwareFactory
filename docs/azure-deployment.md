@@ -95,6 +95,14 @@ Everything the sync does is also written to the `SyncLogEvents` table in the dat
 
 A "Generate from repository" run works like this. The **Repository Analyst** reads the repository's file tree with one request (binaries, dependencies, build output, lock files and generated code are left out) and up to 40 files. It saves epics and features as drafts. Then a **Repository Work Item Writer** task per feature reads up to 30 files, writes the feature's description and its user stories (and bugs, for improvements), and saves them as drafts. Every draft remembers its run, so **Discard drafts** on the Background tasks page can remove a run's drafts at once. Both agents are internal agents: their prompts and models can be changed on the internal agents page, and their token spend is tracked there.
 
+**Repository snapshots (recommended).** With `RepositorySnapshots__ConnectionString` set, the first task of a run downloads the whole default branch as one archive. That is a single GitHub request. It stores the readable files, plus a manifest, in a private blob container under `{runId}/`, and every task of the run reads from there. A run then uses one GitHub request instead of up to ~30 per feature, and all its tasks see the same commit. A snapshot may hold at most 20,000 files or 100 MB after filtering; for a larger repository, analyze one folder at a time. The `RepositorySnapshotCleanup` function deletes the snapshot of every run that has ended, every 10 minutes. Without the setting, the tasks read the file tree and every file from the GitHub API.
+
+Create the container without anonymous access (don't reuse the image upload container, which is public). As a safety net, add a lifecycle management rule on the storage account that deletes blobs in that container a day after they were modified:
+
+```powershell
+az storage container create -n repository-snapshots --account-name <account> --public-access off
+```
+
 Configure these app settings on the Function App:
 
 | Setting | Notes |
@@ -105,6 +113,9 @@ Configure these app settings on the Function App:
 | `ConnectionStrings__Database` | The same database as the Web App. The function reads and writes background tasks and work items but doesn't migrate |
 | `GitHub__TasksToken` | GitHub token that can read the contents of every repository that is analyzed: a classic token with `repo`, or a fine-grained token with read access to contents. The function fails to start without it |
 | `OpenAI__Endpoint`, `OpenAI__Model`, `OpenAI__ApiKey` | The same model settings as the Web App; without them every run fails because the agents aren't configured |
+| `RepositorySnapshots__ConnectionString` | Optional (recommended); the storage account connection string for repository snapshots. Without it, the tasks read from the GitHub API |
+| `RepositorySnapshots__ContainerName` | Optional; default `repository-snapshots`. A private container; it is created if it doesn't exist |
+| `RepositorySnapshots__MaxFiles`, `RepositorySnapshots__MaxSizeInMegabytes` | Optional; default 20000 and 100 |
 | `TodoTasks__MaxAttempts`, `TodoTasks__RetryDelay`, `TodoTasks__Lease`, `TodoTasks__QueuedTimeout` | Optional; default 3, `00:01:00`, `00:35:00` and `00:15:00`. Keep the lease longer than the `functionTimeout` in `host.json` (30 minutes) |
 | `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
 

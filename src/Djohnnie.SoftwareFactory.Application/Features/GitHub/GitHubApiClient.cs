@@ -109,6 +109,20 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return new GitHubTree(tree.Sha, tree.Truncated, (tree.Tree ?? []).Select(e => new GitHubTreeEntry(e.Path, e.Type, e.Size)).ToList());
     }
 
+    /// <summary>
+    /// Downloads the whole default branch as one gzipped tar archive (one API request; GitHub redirects to its download
+    /// host) and passes the stream to <paramref name="read"/> while it downloads, so the archive is never buffered.
+    /// </summary>
+    public async Task DownloadTarballAsync(string repositoryFullName, Func<Stream, Task> read, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"repos/{repositoryFullName}/tarball/HEAD");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await read(stream);
+    }
+
     private async Task<string> GetRawContentAsync(string url, CancellationToken cancellationToken)
     {
         using var response = await SendAsync(HttpMethod.Get, url, null, cancellationToken, RawMediaType);

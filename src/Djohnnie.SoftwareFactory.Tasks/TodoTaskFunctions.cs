@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Application.Features.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Application.Features.TodoTasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -9,8 +10,23 @@ namespace Djohnnie.SoftwareFactory.Tasks;
 /// stuck ones; the executor (queue trigger) runs one task per message. The database is the source of truth: a message
 /// only carries a task id, and retries are scheduled in the database instead of through message redelivery.
 /// </summary>
-public sealed class TodoTaskFunctions(TodoTaskDispatcher dispatcher, TodoTaskExecutor executor, ILogger<TodoTaskFunctions> logger)
+public sealed class TodoTaskFunctions(
+    TodoTaskDispatcher dispatcher,
+    TodoTaskExecutor executor,
+    RepositorySnapshotCleaner snapshotCleaner,
+    ILogger<TodoTaskFunctions> logger)
 {
+    /// <summary>Every 10 minutes: deletes the repository snapshots of runs that have ended. Does nothing without snapshot storage.</summary>
+    [Function("RepositorySnapshotCleanup")]
+    public async Task CleanUpSnapshotsAsync([TimerTrigger("0 */10 * * * *")] TimerInfo timer, CancellationToken cancellationToken)
+    {
+        var deleted = await snapshotCleaner.CleanUpAsync(cancellationToken);
+        if (deleted > 0)
+        {
+            logger.LogInformation("Deleted {Count} repository snapshots of runs that ended.", deleted);
+        }
+    }
+
     /// <summary>Runs on the CRON expression in the <c>TodoTaskDispatchSchedule</c> app setting (six fields, with seconds, in UTC).</summary>
     [Function("TodoTaskDispatch")]
     [ServiceBusOutput("%TodoTaskQueueName%", Connection = "ServiceBus")]

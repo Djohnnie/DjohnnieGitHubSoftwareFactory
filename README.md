@@ -112,12 +112,15 @@ Then run `func start` in that directory. The function doesn't apply migrations, 
     "GitHub__TasksToken": "<GitHub token that can read the contents of the repositories you analyze>",
     "OpenAI__Endpoint": "<same as the web app>",
     "OpenAI__Model": "<same as the web app>",
-    "OpenAI__ApiKey": "<same as the web app>"
+    "OpenAI__ApiKey": "<same as the web app>",
+    "RepositorySnapshots__ConnectionString": "UseDevelopmentStorage=true"
   }
 }
 ```
 
 Then run `func start --port 7072` in that directory, so it can run next to the sync function on port 7071.
+
+`RepositorySnapshots__ConnectionString` is optional. With it, a run downloads the repository once as an archive into the private `repository-snapshots` blob container (Azurite locally), and all its tasks read their files from there. Without it, every task reads from the GitHub API.
 
 ## Tests
 
