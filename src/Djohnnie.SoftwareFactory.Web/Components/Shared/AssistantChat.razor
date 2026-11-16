@@ -126,8 +126,8 @@ else
     /// <summary>Example prompts shown before the conversation starts when the Chat Suggestions agent has none.</summary>
     [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
 
-    /// <summary>Extra page context for the Chat Suggestions agent, e.g. the selected repository.</summary>
-    [Parameter] public string? SuggestionContext { get; set; }
+    /// <summary>The selected repository; the Chat Suggestions agent gets its mindmaps and parent work items as context.</summary>
+    [Parameter] public string? SuggestionRepository { get; set; }
 
     private readonly List<ChatEntry> _messages = [];
     private InternalAgent? _copilot;
@@ -199,7 +199,7 @@ else
         {
             // Let the page finish rendering its form first; the tools read it on the UI thread.
             await Task.Yield();
-            suggestions = await Assistant.SuggestPromptsAsync(copilot, SuggestionContext, tools, cancellationToken);
+            suggestions = await Assistant.SuggestPromptsAsync(copilot, SuggestionRepository, tools, cancellationToken);
         }
         catch (OperationCanceledException)
         {

@@ -844,6 +844,63 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSuggestions_GetTheMindmapsAndTheParentWorkItemsOfTheRepository()
+    {
+        await SelectRepositoryAsync();
+        var epic = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Security", Description = "Safer." }, _cancellationToken);
+        var feature = await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Feature, ParentId = epic.Id, Title = "Passkeys", Description = "No passwords." }, _cancellationToken);
+        await Items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Task, ParentId = feature.Id, Title = "Bump the WebAuthn package", Description = "Leaf." }, _cancellationToken);
+        var map = Contracts.Mindmaps.Mindmap.Create(Repo, "Release 2.0");
+        MindmapLayout.AddChild(map, map.Root!.Id, "Dark mode");
+        await Services.GetRequiredService<Application.Features.Mindmaps.MindmapService>().SaveAsync(map, _cancellationToken);
+        _chatClient = new ScriptedChatClient(ScriptedChatClient.Text("""{"suggestions":["Add dark mode"]}"""));
+        Navigation.NavigateTo("/tasks/new");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Add dark mode", cut.Markup), TimeSpan.FromSeconds(5));
+        var message = string.Join("\n", Assert.Single(_chatClient.Requests).Where(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Select(m => m.Text));
+        Assert.Contains($"Repository: {Repo}", message);
+        Assert.Contains("- Release 2.0\n  - Dark mode", message.ReplaceLineEndings("\n"));
+        Assert.Contains($"- Epic [draft] Security (id: {epic.Id})\n  - Feature [draft] Passkeys (id: {feature.Id})", message.ReplaceLineEndings("\n"));
+        Assert.DoesNotContain("Bump the WebAuthn package", message);
+    }
+
+    [Fact]
+    public async Task ChatSuggestions_RefreshWhenTheParentChanges_AndGetTheSelectedParent()
+    {
+        await SelectRepositoryAsync();
+        var epic = await SaveAsync(WorkItemType.Epic, "Passkeys");
+        var feature = await SaveAsync(WorkItemType.Feature, "Passkey login", epic.Id);
+        var otherFeature = await SaveAsync(WorkItemType.Feature, "Account recovery", epic.Id);
+        var story = await SaveAsync(WorkItemType.Story, "Sign in with a passkey", feature.Id);
+        _chatClient = new ScriptedChatClient(
+            ScriptedChatClient.Text("""{"suggestions":["First idea"]}"""),
+            ScriptedChatClient.Text("""{"suggestions":["About recovery"]}"""));
+        Navigation.NavigateTo($"/stories/{story.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, story.Id));
+        cut.WaitForAssertion(() => Assert.Contains("First idea", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("\"parent\": \"Feature: Passkey login\"", FormOf(_chatClient.Requests[0]));
+
+        var parent = cut.FindComponent<MudSelect<Guid?>>();
+        await cut.InvokeAsync(() => parent.Instance.ValueChanged.InvokeAsync(otherFeature.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("About recovery", cut.Markup), TimeSpan.FromSeconds(5));
+        Assert.Contains("\"parent\": \"Feature: Account recovery\"", FormOf(_chatClient.Requests[1]));
+
+        // Choosing the same parent again doesn't ask again.
+        await cut.InvokeAsync(() => parent.Instance.ValueChanged.InvokeAsync(otherFeature.Id));
+        Assert.Equal(2, _chatClient.Requests.Count);
+
+        static string FormOf(IEnumerable<Microsoft.Extensions.AI.ChatMessage> request)
+        {
+            return string.Join("\n", request.Where(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Select(m => m.Text));
+        }
+    }
+
+    [Fact]
     public async Task ModelSuggestion_ForAnExistingDraftWithADescription_IsShownWhenThePageOpens()
     {
         await SelectRepositoryAsync();

@@ -143,7 +143,7 @@ else if (_item is not null)
                     }
                     @if (_item.IsDraft)
                     {
-                        <AssistantChat @ref="_chat" @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItem(_type)" SuggestionContext="@($"Repository: {RepositoryName}")" Tools="_assistantTools"
+                        <AssistantChat @ref="_chat" @key="@($"{_type}:{Id}")" CopilotKey="@InternalAgentKeys.ForWorkItem(_type)" SuggestionRepository="@RepositoryName" Tools="_assistantTools"
                                        Owner="@(IsNew ? null : ChatOwner.ForWorkItem(RepositoryName, Id!.Value))"
                                        Placeholder="@ChatPlaceholder"
                                        Subtitle="@($"Describe the {Name}; I'll ask what I need to know and fill in the form.")"
@@ -305,7 +305,7 @@ else if (_item is not null)
                             <MudText Typo="Typo.h6">Part of</MudText>
                             @if (_item.IsDraft)
                             {
-                                <MudSelect T="Guid?" Variant="Variant.Outlined" @bind-Value="_item.ParentId" Label="Parent"
+                                <MudSelect T="Guid?" Variant="Variant.Outlined" Value="_item.ParentId" ValueChanged="OnParentChanged" Label="Parent"
                                            Required="_type.RequiresParent" RequiredError="@($"Choose the {ParentNames} this {Name} is part of.")"
                                            Clearable="!_type.RequiresParent" ToStringFunc="ParentLabel" AnchorOrigin="Origin.BottomCenter" MaxHeight="420"
                                            HelperText="@ParentHelp">
@@ -907,6 +907,18 @@ else if (_item is not null)
             _suggestionsForm = form;
             _chat?.RefreshSuggestions();
         }
+    }
+
+    /// <summary>A different parent changes what the item builds on, so the agent's suggestion chips follow it.</summary>
+    private void OnParentChanged(Guid? parentId)
+    {
+        if (_item is null || _item.ParentId == parentId)
+        {
+            return;
+        }
+
+        _item.ParentId = parentId;
+        _chat?.RefreshSuggestions();
     }
 
     private void OnDescriptionChanged(string description)

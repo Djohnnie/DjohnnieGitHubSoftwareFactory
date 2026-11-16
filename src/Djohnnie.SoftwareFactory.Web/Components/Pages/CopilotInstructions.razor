@@ -60,7 +60,7 @@
     <MudStack Spacing="4">
         @if (_assistantTools is not null)
         {
-            <AssistantChat CopilotKey="@InternalAgentKeys.CopilotInstructionsCopilot" SuggestionContext="@($"Repository: {Repository.Current?.FullName}")"
+            <AssistantChat CopilotKey="@InternalAgentKeys.CopilotInstructionsCopilot" SuggestionRepository="@Repository.Current?.FullName"
                            Owner="@ChatOwner.ForCopilotInstructions(Repository.Current!.FullName)"
                            Tools="_assistantTools" Placeholder="Tell me what Copilot should know about this repository"
                            Subtitle="@ChatSubtitle" Suggestions="@(Exists ? ImproveSuggestions : NewSuggestions)" />

@@ -26,6 +26,8 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     private const int MaxOutlineLength = 40_000;
     private const int MaxSummaryLength = 2_000;
     private const int MaxPathsPerFeature = 40;
+    private const int MaxMindmapsLength = 15_000;
+    private const int MaxParentWorkItemsLength = 15_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -76,9 +78,9 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     /// <summary>Writes example prompts for a chat agent; empty when the agent returns nothing usable.</summary>
     /// <param name="agent">The Chat Suggestions agent.</param>
     /// <param name="copilot">The chat agent the suggestions are for.</param>
-    /// <param name="context">Extra page context, e.g. the selected repository.</param>
+    /// <param name="repository">What the selected repository is about; <c>null</c> when no repository is selected.</param>
     /// <param name="tools">The chat agent's tools; their form snapshot is sent along.</param>
-    public async Task<IReadOnlyList<string>> SuggestPromptsAsync(InternalAgent agent, InternalAgent copilot, string? context, AssistantTools? tools,
+    public async Task<IReadOnlyList<string>> SuggestPromptsAsync(InternalAgent agent, InternalAgent copilot, RepositoryOverview? repository, AssistantTools? tools,
         CancellationToken cancellationToken = default)
     {
         var form = tools?.Snapshot is { } snapshot ? await snapshot() : null;
@@ -86,12 +88,13 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         var message = $"""
             Agent: {copilot.Name}
             Purpose: {copilot.Description}
-            Context: {(string.IsNullOrWhiteSpace(context) ? "(none)" : context.Trim())}
+            Repository: {(string.IsNullOrWhiteSpace(repository?.FullName) ? "(none)" : repository.FullName.Trim())}
 
             Current form:
             ```json
             {formJson}
             ```
+            {(repository is null ? string.Empty : RepositoryOverviewSection(repository))}
             """;
 
         var response = await CreateAgent(agent, InternalAgentUsageSource.ChatSuggestions)
@@ -339,6 +342,42 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             {backlog}
             ```
             """;
+    }
+
+    /// <summary>
+    /// The mindmaps and parent work items of the repository, for the Chat Suggestions agent. Explained in the message
+    /// rather than only in the system prompt, so agents whose prompt was stored before this context existed use it too.
+    /// </summary>
+    private static string RepositoryOverviewSection(RepositoryOverview repository)
+    {
+        return $"""
+
+            The mindmaps of the repository: what is being thought about, as outlines of ideas. Done ideas are marked [done].
+            ```text
+            {Truncate(repository.Mindmaps, MaxMindmapsLength)}
+            ```
+
+            The epics, features and user stories of the repository with their status, children indented under their parent:
+            the existing structure the item on the form may belong to or build on.
+            ```text
+            {Truncate(repository.ParentWorkItems, MaxParentWorkItemsLength)}
+            ```
+
+            Use both as inspiration and to make the suggestions concrete for this repository, e.g. an open mindmap idea that
+            has no work item yet, or a gap under an existing epic or feature. Don't suggest work that already exists.
+            """;
+    }
+
+    /// <summary>All mindmaps as indented outlines, one after the other; a note when there are none.</summary>
+    public static string MindmapsOutline(IReadOnlyList<Mindmap> mindmaps, IReadOnlyDictionary<Guid, WorkItem> linkedItems)
+    {
+        if (mindmaps.Count == 0)
+        {
+            return "(The repository has no mindmaps.)";
+        }
+
+        return string.Join(Environment.NewLine + Environment.NewLine,
+            mindmaps.Select(mindmap => MindmapOutline(mindmap, Guid.Empty, linkedItems)).Where(outline => outline.Length > 0));
     }
 
     private static string ModeName(RepositoryAnalysisMode mode)

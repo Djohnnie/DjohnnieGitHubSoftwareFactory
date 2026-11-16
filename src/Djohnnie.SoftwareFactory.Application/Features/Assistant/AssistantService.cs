@@ -2,6 +2,9 @@ using System.Runtime.CompilerServices;
 using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
+using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using AgentInfrastructure = Djohnnie.SoftwareFactory.Agents;
@@ -13,6 +16,8 @@ public sealed class AssistantService(
     AgentInfrastructure.AssistantAgentFactory factory,
     AgentInfrastructure.BackgroundAgents backgroundAgents,
     AgentInfrastructure.IAgentUsageRecorder usageRecorder,
+    IWorkItemStore workItems,
+    IMindmapStore mindmapStore,
     ISender mediator,
     ILogger<AssistantService> logger)
 {
@@ -50,11 +55,11 @@ public sealed class AssistantService(
     }
 
     /// <summary>
-    /// Lets the Chat Suggestions agent write example prompts for the chat agent, based on the current form.
-    /// Empty when the agent is disabled, not configured or fails.
+    /// Lets the Chat Suggestions agent write example prompts for the chat agent, based on the current form and the
+    /// mindmaps and parent work items of the repository. Empty when the agent is disabled, not configured or fails.
     /// </summary>
-    /// <param name="context">Extra page context, e.g. the selected repository.</param>
-    public async Task<IReadOnlyList<string>> SuggestPromptsAsync(InternalAgent copilot, string? context, AssistantTools? tools,
+    /// <param name="repositoryFullName">The selected repository; <c>null</c> when none is selected.</param>
+    public async Task<IReadOnlyList<string>> SuggestPromptsAsync(InternalAgent copilot, string? repositoryFullName, AssistantTools? tools,
         CancellationToken cancellationToken = default)
     {
         if (!IsConfigured)
@@ -65,15 +70,38 @@ public sealed class AssistantService(
         try
         {
             var agent = await GetCopilotAsync(InternalAgentKeys.ChatSuggestions, cancellationToken);
-            return agent.IsEnabled
-                ? await backgroundAgents.SuggestPromptsAsync(agent, copilot, context, tools?.Tools, cancellationToken)
-                : [];
+            if (!agent.IsEnabled)
+            {
+                return [];
+            }
+
+            var overview = string.IsNullOrWhiteSpace(repositoryFullName) ? null : await GetOverviewAsync(repositoryFullName, cancellationToken);
+            return await backgroundAgents.SuggestPromptsAsync(agent, copilot, overview, tools?.Tools, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Chat Suggestions could not write suggestions for {Agent}.", copilot.Key);
             return [];
         }
+    }
+
+    /// <summary>The repository's mindmaps and its work items that can have children (epics, features and user stories).</summary>
+    private async Task<AgentInfrastructure.RepositoryOverview> GetOverviewAsync(string repositoryFullName, CancellationToken cancellationToken)
+    {
+        var items = await workItems.GetAllAsync(repositoryFullName, cancellationToken: cancellationToken);
+        var mindmaps = new List<Mindmap>();
+        foreach (var summary in await mindmapStore.GetAllAsync(repositoryFullName, cancellationToken))
+        {
+            if (await mindmapStore.GetAsync(repositoryFullName, summary.Id, cancellationToken) is { } mindmap)
+            {
+                mindmaps.Add(mindmap);
+            }
+        }
+
+        var parents = items.Where(item => item.Type.ChildTypes.Count > 0).ToList();
+        return new AgentInfrastructure.RepositoryOverview(repositoryFullName,
+            AgentInfrastructure.BackgroundAgents.MindmapsOutline(mindmaps, items.ToDictionary(item => item.Id)),
+            AgentInfrastructure.WorkItemBacklog.Outline(parents));
     }
 }
 

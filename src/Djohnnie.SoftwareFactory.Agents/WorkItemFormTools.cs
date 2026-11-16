@@ -240,10 +240,24 @@ public sealed class WorkItemFormTools(
     public async Task<WorkItemFormSnapshot> GetFormAsync()
     {
         WorkItemFormSnapshot? form = null;
+        WorkItemReference? storedParent = null;
+        Guid? parentId = null;
         await onUi(() =>
         {
             var item = getItem();
-            var parent = item.Parent is { } p ? $"{p.Type.DisplayName}: {p.Title}" : null;
+            storedParent = item.Parent;
+            parentId = item.ParentId;
+        });
+
+        // The stored parent only follows the "Part of" selection once the item is saved.
+        var parent = storedParent is { } stored && stored.Id == parentId
+            ? $"{stored.Type.DisplayName}: {stored.Title}"
+            : (await LoadAncestorsAsync(parentId, CancellationToken.None))?.FirstOrDefault() is { } selected
+                ? $"{selected.Type.DisplayName}: {selected.Title}"
+                : null;
+        await onUi(() =>
+        {
+            var item = getItem();
             form = item.Type.CanBeAssigned
                 ? new(item.Type.DisplayName, item.Status.ToString(), parent, item.Title, item.Description, item.TechnicalDetails,
                     item.CustomAgent ?? "(default Copilot agent)", item.Model ?? "(auto)",
