@@ -732,6 +732,49 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Assistant_FillsTheTechnicalDetailsFromTheWholeParentHierarchy()
+    {
+        await SelectRepositoryAsync();
+        await InternalAgentTests.DisableAsync(Services, InternalAgentKeys.ChatSuggestions);
+        var epic = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Epic, Title = "Platform", Description = "About it.", TechnicalDetails = "Use PostgreSQL."
+        }, _cancellationToken);
+        var feature = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Feature, ParentId = epic.Id, Title = "Accounts", Description = "About it."
+        }, _cancellationToken);
+        _chatClient = new ScriptedChatClient(
+            ScriptedChatClient.ToolCall("get_parent_technical_details", new Dictionary<string, object?>()),
+            ScriptedChatClient.ToolCall("update_work_item_form", new Dictionary<string, object?>
+            {
+                ["technicalDetails"] = "Store accounts in PostgreSQL.\nUse EF Core."
+            }),
+            ScriptedChatClient.Text("Added the technical details."));
+        Navigation.NavigateTo(WorkItemRoutes.NewPath(WorkItemType.Story, feature.Id));
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>();
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Sign up");
+        await SendToCopilotAsync(cut, "We use EF Core");
+        cut.WaitForAssertion(() => Assert.Contains("Added the technical details.", cut.Markup), TimeSpan.FromSeconds(5));
+
+        // The request names the parents with technical details (the epic, not the feature without them)...
+        var request = _chatClient.Requests[0].Last(m => m.Role == Microsoft.Extensions.AI.ChatRole.User).Text;
+        Assert.Contains("\"parentsWithTechnicalDetails\": [\n    \"Epic: Platform\"\n  ]", request.ReplaceLineEndings("\n"));
+        // ...and the tool reads the whole hierarchy, closest parent first.
+        var parents = _chatClient.Requests[1].SelectMany(m => m.Contents).OfType<Microsoft.Extensions.AI.FunctionResultContent>().Single().Result?.ToString();
+        Assert.True(parents!.IndexOf("Accounts", StringComparison.Ordinal) < parents.IndexOf("Platform", StringComparison.Ordinal));
+        Assert.Contains("Use PostgreSQL.", parents);
+
+        cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Sign up");
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save draft")).Click());
+
+        var story = Assert.Single(await Items.GetAllAsync(Repo, [WorkItemType.Story], cancellationToken: _cancellationToken));
+        Assert.Equal("Store accounts in PostgreSQL.\nUse EF Core.", story.TechnicalDetails);
+    }
+
+    [Fact]
     public async Task ModelSuggestion_IsDebouncedOnDescriptionChanges_AndAppliedFromTheChip()
     {
         await SelectRepositoryAsync();

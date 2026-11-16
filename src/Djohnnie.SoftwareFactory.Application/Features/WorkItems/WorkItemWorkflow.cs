@@ -44,7 +44,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         var issueSince = await store.BeginAcceptAsync(repositoryFullName, id, AcceptClaimTimeout, cancellationToken);
         var label = item.Type.Label;
         var creating = false;
-        GitHubIssue issue;
+        GitHubIssue? issue = null;
         try
         {
             await gitHub.EnsureLabelAsync(repositoryFullName, label, item.Type.LabelColor, $"{item.Type.DisplayName} planned in DGHSF", cancellationToken);
@@ -55,10 +55,13 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
                 : null;
             creating = existing is null;
             issue = existing ?? await gitHub.CreateIssueAsync(repositoryFullName, item.Title.Trim(), IssueBody(item), [label], cancellationToken);
+
+            // Still part of the attempt, so the item only becomes accepted (and is assigned) once the agent can read them.
+            await PostTechnicalDetailsAsync(item, issue, existing is not null, cancellationToken);
         }
         catch (Exception ex)
         {
-            await EndFailedAcceptAsync(item, creating && !IsRejectedByGitHub(ex));
+            await EndFailedAcceptAsync(item, issue is not null || (creating && !IsRejectedByGitHub(ex)));
             throw;
         }
 
@@ -208,6 +211,52 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     public static string IssueBody(WorkItem item)
     {
         return $"{item.Description.Trim()}\n\n{Marker(item)}\n";
+    }
+
+    /// <summary>The heading of the comment with the technical details.</summary>
+    public const string TechnicalDetailsHeading = "## 🛠️ Technical details";
+
+    /// <summary>The first comment of the issue: the item's technical details under a heading, with a hidden marker.</summary>
+    public static string TechnicalDetailsComment(WorkItem item)
+    {
+        return $"""
+            {TechnicalDetailsHeading}
+
+            _Implementation notes for the agent, in addition to the description above._
+
+            {item.TechnicalDetails.Trim()}
+
+            {TechnicalDetailsMarker(item)}
+
+            """;
+    }
+
+    /// <summary>Identifies the technical details comment, so a retried acceptance doesn't post it twice.</summary>
+    public static string TechnicalDetailsMarker(WorkItem item)
+    {
+        return $"<!-- dghsf-technical-details:{item.Id} -->";
+    }
+
+    /// <summary>
+    /// Posts the technical details (if any) as a comment, before Copilot is assigned: it reads the issue's comments too.
+    /// On an issue that an earlier attempt created, the comment may already be there.
+    /// </summary>
+    private async Task PostTechnicalDetailsAsync(WorkItem item, GitHubIssue issue, bool reused, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(item.TechnicalDetails))
+        {
+            return;
+        }
+        if (reused)
+        {
+            var marker = TechnicalDetailsMarker(item);
+            var comments = await gitHub.GetIssueCommentsAsync(item.RepositoryFullName, issue.Number, cancellationToken);
+            if (comments.Any(c => c.Body?.Contains(marker, StringComparison.Ordinal) == true))
+            {
+                return;
+            }
+        }
+        await gitHub.CreateIssueCommentAsync(item.RepositoryFullName, issue.Number, TechnicalDetailsComment(item), cancellationToken);
     }
 
     /// <summary>

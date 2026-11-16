@@ -182,6 +182,30 @@ else if (_item is not null)
                         }
                     </MudPaper>
 
+                    @if (_item.IsDraft || !string.IsNullOrWhiteSpace(_item.TechnicalDetails))
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Technical details">
+                            @if (_item.IsDraft)
+                            {
+                                <MarkdownEditor @bind-Value="_item.TechnicalDetails" MaxLength="WorkItem.MaxTechnicalDetailsLength" AllowImages="true" Height="300px"
+                                                Placeholder="Files, APIs, patterns or constraints the agent should know about...">
+                                    <Header>
+                                        <MudText Typo="Typo.h6">Technical details</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                                            Optional. Implementation notes for the agent that don't belong in the description. Accepting posts them as the first comment of the GitHub issue, before Copilot is assigned.
+                                        </MudText>
+                                    </Header>
+                                </MarkdownEditor>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.h6">Technical details</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">Posted as the first comment of the GitHub issue.</MudText>
+                                <MarkdownViewer Value="@_item.TechnicalDetails" />
+                            }
+                        </MudPaper>
+                    }
+
                     @if (!IsNew && _type.ChildTypes.Count > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Children">
@@ -865,7 +889,8 @@ else if (_item is not null)
             () => SelectedTemplate,
             models,
             async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
-            change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }));
+            change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }),
+            (parentId, cancellationToken) => WorkItemService.GetAncestorsAsync(RepositoryName, parentId, cancellationToken));
     }
 
     /// <summary>The agent's suggestion chips follow the title and description, once a changed field loses focus.</summary>

@@ -32,6 +32,16 @@ public sealed record WorkItem
     [MaxLength(MaxDescriptionLength)]
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional Markdown with technical details for the agent (e.g. files, APIs, constraints), kept out of the description.
+    /// Accepting the item posts it as the first comment of the issue; it is never refreshed from GitHub.
+    /// </summary>
+    [MaxLength(MaxTechnicalDetailsLength)]
+    public string TechnicalDetails { get; set; } = string.Empty;
+
+    /// <summary>Leaves room for the comment's heading and marker within GitHub's 65,536 characters per comment.</summary>
+    public const int MaxTechnicalDetailsLength = 60_000;
+
     public WorkItemStatus Status { get; set; } = WorkItemStatus.Draft;
 
     /// <summary>The custom agent id (file name without <c>.agent.md</c>), or <c>null</c> for the default Copilot agent.</summary>

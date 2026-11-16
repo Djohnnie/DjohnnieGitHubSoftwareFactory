@@ -17,6 +17,12 @@ public sealed class WorkItemService(ISender mediator)
         return (await mediator.Send(new GetWorkItemQuery(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
 
+    /// <summary>The parent with the given id and every item above it, closest first.</summary>
+    public async Task<IReadOnlyList<WorkItem>> GetAncestorsAsync(string repositoryFullName, Guid parentId, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetWorkItemAncestorsQuery(new(repositoryFullName, parentId)), cancellationToken)).Dto.Items;
+    }
+
     /// <summary>The counts of a repository for every work item type.</summary>
     public async Task<IReadOnlyList<WorkItemCounts>> GetCountsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {

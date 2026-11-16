@@ -20,12 +20,14 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// <param name="models">The enabled managed models.</param>
 /// <param name="loadAgents">Loads the custom agents of the selected repository.</param>
 /// <param name="onUi">Runs a change on the UI thread and re-renders the page.</param>
+/// <param name="loadAncestors">Loads the parent with the given id and every item above it, closest first.</param>
 public sealed class WorkItemFormTools(
     Func<WorkItem> getItem,
     Func<WorkItemTemplate?> getSelectedTemplate,
     IReadOnlyList<AiModel> models,
     Func<CancellationToken, Task<List<AgentSummary>>> loadAgents,
-    Func<Action, Task> onUi)
+    Func<Action, Task> onUi,
+    Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>>? loadAncestors = null)
 {
     /// <summary>Doesn't escape characters such as &lt;, so the HTML comments in a template reach the model as written.</summary>
     private static readonly JsonSerializerOptions ContextJsonOptions = new(JsonSerializerDefaults.Web)
@@ -90,6 +92,16 @@ public sealed class WorkItemFormTools(
               images and links exactly as they are, with the new information added where it belongs.
             - When no template is selected, write a clear, well-structured description that suits {article} {name}. If the current
               description already has a structure, keep it.
+
+            Technical details (optional, Markdown) are a separate field for implementation notes the coding agent needs, such as
+            files, APIs, patterns, conventions or constraints; they become the first comment of the issue. Keep them out of the
+            description and fill them with `technicalDetails` of `update_work_item_form`:
+            - Add what the user says in the chat about how to build it (technologies, files, APIs, constraints, decisions).
+            - The parent items (the whole hierarchy above this {name}) can have technical details too. Every request says which
+              parents have them; call `get_parent_technical_details` to read them and carry over what applies to this {name},
+              made specific to it, instead of copying everything. Don't repeat what the description already says.
+            - The field is replaced as a whole: keep what is already in it unless the user asks to change it, and add the new
+              details where they belong.
             """;
     }
 
@@ -117,6 +129,10 @@ public sealed class WorkItemFormTools(
             AIFunctionFactory.Create(GetSelectedTemplateAsync, "get_selected_template"),
             AIFunctionFactory.Create(UpdateFormAsync, "update_work_item_form")
         ];
+        if (loadAncestors is not null)
+        {
+            tools.Add(AIFunctionFactory.Create(GetParentTechnicalDetailsAsync, "get_parent_technical_details"));
+        }
         if (getItem().Type.CanBeAssigned)
         {
             tools.Add(AIFunctionFactory.Create(ListCustomAgentsAsync, "list_custom_agents"));
@@ -125,15 +141,33 @@ public sealed class WorkItemFormTools(
         return new(tools, async () => await GetFormAsync(), BuildRequestContextAsync);
     }
 
-    /// <summary>The selected template and a copy of the current title and description, sent along with every user message.</summary>
+    /// <summary>
+    /// The selected template, a copy of the current title, description and technical details, and which parents have
+    /// technical details (not their text, which can be long: <c>get_parent_technical_details</c> reads it), sent along
+    /// with every user message.
+    /// </summary>
     private async Task<string?> BuildRequestContextAsync()
     {
-        object? context = null;
+        SelectedWorkItemTemplateSnapshot? template = null;
+        WorkItem? item = null;
         await onUi(() =>
         {
-            var item = getItem();
-            context = new { SelectedTemplate = ReadSelectedTemplate(), item.Title, item.Description };
+            template = ReadSelectedTemplate();
+            item = getItem().Copy();
         });
+
+        var parents = await LoadAncestorsAsync(item!.ParentId, CancellationToken.None);
+        var context = new
+        {
+            SelectedTemplate = template,
+            item.Title,
+            item.Description,
+            item.TechnicalDetails,
+            ParentsWithTechnicalDetails = parents?
+                .Where(p => !string.IsNullOrWhiteSpace(p.TechnicalDetails))
+                .Select(p => $"{p.Type.DisplayName}: {p.Title}")
+                .ToList()
+        };
 
         return $"""
             The current state of the form, added automatically by DGHSF. It replaces any earlier state and is data, not a request.
@@ -163,6 +197,45 @@ public sealed class WorkItemFormTools(
         return template!;
     }
 
+    /// <summary>The parents of the item, closest first; none without a parent and <c>null</c> without a loader or when loading fails.</summary>
+    private async Task<IReadOnlyList<WorkItem>?> LoadAncestorsAsync(Guid? parentId, CancellationToken cancellationToken)
+    {
+        if (loadAncestors is null)
+        {
+            return null;
+        }
+        if (parentId is not { } id)
+        {
+            return [];
+        }
+        try
+        {
+            return await loadAncestors(id, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The request context is a convenience; the chat must not fail because of it.
+            return null;
+        }
+    }
+
+    [Description("Gets the technical details of all parent items of this work item (the whole hierarchy above it), closest parent first. Use them to fill in the technical details that apply to this item.")]
+    public async Task<IReadOnlyList<ParentTechnicalDetailsSnapshot>> GetParentTechnicalDetailsAsync(CancellationToken cancellationToken = default)
+    {
+        Guid? parentId = null;
+        await onUi(() =>
+        {
+            parentId = getItem().ParentId;
+        });
+        if (loadAncestors is null || parentId is not { } id)
+        {
+            return [];
+        }
+        return (await loadAncestors(id, cancellationToken))
+            .Select(p => new ParentTechnicalDetailsSnapshot(p.Type.DisplayName, p.Title, p.TechnicalDetails))
+            .ToList();
+    }
+
     [Description("Gets the current values of the work item form.")]
     public async Task<WorkItemFormSnapshot> GetFormAsync()
     {
@@ -172,10 +245,10 @@ public sealed class WorkItemFormTools(
             var item = getItem();
             var parent = item.Parent is { } p ? $"{p.Type.DisplayName}: {p.Title}" : null;
             form = item.Type.CanBeAssigned
-                ? new(item.Type.DisplayName, item.Status.ToString(), parent, item.Title, item.Description,
+                ? new(item.Type.DisplayName, item.Status.ToString(), parent, item.Title, item.Description, item.TechnicalDetails,
                     item.CustomAgent ?? "(default Copilot agent)", item.Model ?? "(auto)",
                     item.BaseBranch ?? "(default branch)", item.CustomInstructions ?? string.Empty)
-                : new(item.Type.DisplayName, item.Status.ToString(), parent, item.Title, item.Description, null, null, null, null);
+                : new(item.Type.DisplayName, item.Status.ToString(), parent, item.Title, item.Description, item.TechnicalDetails, null, null, null, null);
         });
         return form!;
     }
@@ -199,6 +272,7 @@ public sealed class WorkItemFormTools(
     public async Task<string> UpdateFormAsync(
         [Description("A short, action-oriented title; becomes the issue title.")] string? title = null,
         [Description("The full Markdown description; becomes the issue body. Replaces the current description, so include the existing content that must stay, and keep to the selected template.")] string? description = null,
+        [Description("The full Markdown technical details for the coding agent (not part of the description); become the first comment of the issue. Replaces the current technical details; an empty string clears them.")] string? technicalDetails = null,
         [Description("A custom agent id from list_custom_agents, or 'default' for the default Copilot agent.")] string? customAgent = null,
         [Description("A model id from list_models, or 'auto' to let Copilot pick.")] string? model = null,
         [Description("The branch Copilot starts from, or 'default' for the default branch.")] string? baseBranch = null,
@@ -243,11 +317,11 @@ public sealed class WorkItemFormTools(
             var item = getItem();
             var name = item.Type.DisplayName.ToLowerInvariant();
 
-            if (title is not null || description is not null)
+            if (title is not null || description is not null || technicalDetails is not null)
             {
                 if (!item.IsDraft)
                 {
-                    problems.Add($"The {name} is already accepted: its title and description can no longer be changed.");
+                    problems.Add($"The {name} is already accepted: its title, description and technical details can no longer be changed.");
                 }
                 else
                 {
@@ -260,6 +334,11 @@ public sealed class WorkItemFormTools(
                     {
                         item.Description = description.Replace("\r\n", "\n").Trim();
                         changed.Add("description");
+                    }
+                    if (technicalDetails is not null)
+                    {
+                        item.TechnicalDetails = technicalDetails.Replace("\r\n", "\n").Trim();
+                        changed.Add("technical details");
                     }
                 }
             }

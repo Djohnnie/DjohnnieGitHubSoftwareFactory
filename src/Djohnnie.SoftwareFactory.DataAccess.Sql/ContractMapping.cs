@@ -132,6 +132,7 @@ internal static class ContractMapping
                 Parent = value.Parent?.ToReference(),
                 Title = value.Title,
                 Description = value.Description,
+                TechnicalDetails = value.TechnicalDetails,
                 Status = value.Status,
                 CustomAgent = value.CustomAgent,
                 Model = value.Model,

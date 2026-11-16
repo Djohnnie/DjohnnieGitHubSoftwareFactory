@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261115101415_AddTodoTasks";
+    public override string LastMigrationId => "20261116082145_AddWorkItemTechnicalDetails";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -994,6 +994,11 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("int");
 
                 SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<string>("TechnicalDetails")
+                    .IsRequired()
+                    .HasMaxLength(60000)
+                    .HasColumnType("nvarchar(max)");
 
                 b.Property<string>("Title")
                     .IsRequired()

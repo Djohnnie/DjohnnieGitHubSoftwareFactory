@@ -65,6 +65,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         {
             entity.Title = item.Title.Trim();
             entity.Description = item.Description ?? string.Empty;
+            entity.TechnicalDetails = item.TechnicalDetails ?? string.Empty;
             await SetParentAsync(db, entity, item.RepositoryFullName, item.ParentId, cancellationToken);
         }
         else if (!entity.Type.CanBeAssigned || entity.Status != WorkItemStatus.Accepted)

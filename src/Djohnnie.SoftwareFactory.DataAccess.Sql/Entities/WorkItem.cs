@@ -23,6 +23,10 @@ public class WorkItem : Entity
     [MaxLength(Contracts.WorkItems.WorkItem.MaxDescriptionLength)]
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>Markdown for the agent; becomes the first comment of the issue.</summary>
+    [MaxLength(Contracts.WorkItems.WorkItem.MaxTechnicalDetailsLength)]
+    public string TechnicalDetails { get; set; } = string.Empty;
+
     public WorkItemStatus Status { get; set; } = WorkItemStatus.Draft;
 
     /// <summary>The custom agent id (file name without <c>.agent.md</c>), or <c>null</c> for the default Copilot agent.</summary>

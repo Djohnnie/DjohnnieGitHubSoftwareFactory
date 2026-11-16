@@ -29,11 +29,13 @@ public static class AssistantForms
     }
 
     /// <summary>Tools for the work item form; the assignment tools are only included for stories, bugs and tasks.</summary>
+    /// <param name="loadAncestors">Loads a parent and every item above it, closest first, for their technical details.</param>
     public static AssistantTools ForWorkItem(
         Func<WorkItem> getItem, Func<WorkItemTemplate?> getSelectedTemplate, IReadOnlyList<AiModel> models,
-        Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi)
+        Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi,
+        Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>> loadAncestors)
     {
-        return new(new AgentInfrastructure.WorkItemFormTools(getItem, getSelectedTemplate, models, loadAgents, onUi).AsTools());
+        return new(new AgentInfrastructure.WorkItemFormTools(getItem, getSelectedTemplate, models, loadAgents, onUi, loadAncestors).AsTools());
     }
 
     /// <summary>

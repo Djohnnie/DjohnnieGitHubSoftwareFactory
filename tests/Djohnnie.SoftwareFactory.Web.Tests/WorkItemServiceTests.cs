@@ -179,6 +179,80 @@ public partial class WorkItemServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Accept_WithTechnicalDetails_PostsThemAsTheFirstCommentBeforeAssigningCopilot()
+    {
+        var task = await _service.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Cache", Description = "Cache the list.",
+            TechnicalDetails = "Use `IMemoryCache` in `ListService`."
+        }, _cancellationToken);
+
+        var result = await _service.AcceptAsync(Repo, task.Id, _cancellationToken);
+
+        Assert.Equal(WorkItemStatus.InProgress, result.WorkItem.Status);
+        Assert.Equal("Use `IMemoryCache` in `ListService`.", result.WorkItem.TechnicalDetails);
+        Assert.DoesNotContain("IMemoryCache", Assert.Single(_gitHub.CreatedIssues).Body);
+        var comment = Assert.Single(_gitHub.Requests, r => r is { Method: "POST", Path: "/repos/owner/repo/issues/42/comments" });
+        var body = JsonDocument.Parse(comment.Body!).RootElement.GetProperty("body").GetString()!;
+        Assert.StartsWith(WorkItemWorkflow.TechnicalDetailsHeading, body);
+        Assert.Contains("Use `IMemoryCache` in `ListService`.", body);
+        Assert.Contains(WorkItemWorkflow.TechnicalDetailsMarker(task), body);
+        var assign = _gitHub.Requests.FindIndex(r => r.Path.EndsWith("/assignees"));
+        Assert.True(_gitHub.Requests.IndexOf(comment) < assign, "The comment must be posted before Copilot is assigned.");
+        // Never looked for, as this attempt created the issue.
+        Assert.DoesNotContain(_gitHub.Requests, r => r is { Method: "GET" } && r.Path.EndsWith("/comments"));
+    }
+
+    [Fact]
+    public async Task Accept_WithoutTechnicalDetails_PostsNoComment()
+    {
+        var task = await SaveAsync(WorkItemType.Task, "Task");
+
+        await _service.AcceptAsync(Repo, task.Id, _cancellationToken);
+
+        Assert.DoesNotContain(_gitHub.Requests, r => r.Path.EndsWith("/comments"));
+    }
+
+    [Fact]
+    public async Task Accept_WhenPostingTheTechnicalDetailsFails_StaysDraftAndTheRetryReusesTheIssue()
+    {
+        var task = await _service.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Task", Description = "About it.", TechnicalDetails = "Details."
+        }, _cancellationToken);
+        _gitHub.CommentFailures = 1;
+
+        await Assert.ThrowsAsync<GitHubApiException>(() => _service.AcceptAsync(Repo, task.Id, _cancellationToken));
+        Assert.True((await _service.GetAsync(Repo, task.Id, _cancellationToken))!.IsDraft);
+        Assert.DoesNotContain(_gitHub.Requests, r => r.Path.EndsWith("/assignees"));
+
+        var result = await _service.AcceptAsync(Repo, task.Id, _cancellationToken);
+
+        Assert.Equal(WorkItemStatus.InProgress, result.WorkItem.Status);
+        Assert.Single(_gitHub.CreatedIssues);
+        Assert.Single(_gitHub.Requests, r => r is { Method: "GET", Path: "/repos/owner/repo/issues/42/comments" });
+        Assert.Equal(2, _gitHub.Requests.Count(r => r is { Method: "POST", Path: "/repos/owner/repo/issues/42/comments" }));
+    }
+
+    [Fact]
+    public async Task Accept_RetryOnAnIssueThatHasTheTechnicalDetails_DoesNotPostThemAgain()
+    {
+        var task = await _service.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Task", Description = "About it.", TechnicalDetails = "Details."
+        }, _cancellationToken);
+        _gitHub.NextIssueCreationStatus = HttpStatusCode.BadGateway;
+        await Assert.ThrowsAsync<GitHubApiException>(() => _service.AcceptAsync(Repo, task.Id, _cancellationToken));
+        _gitHub.ConversationComments.Add($"Earlier.\n\n{WorkItemWorkflow.TechnicalDetailsMarker(task)}");
+
+        var result = await _service.AcceptAsync(Repo, task.Id, _cancellationToken);
+
+        Assert.Equal(42, result.WorkItem.IssueNumber);
+        Assert.Single(_gitHub.CreatedIssues);
+        Assert.DoesNotContain(_gitHub.Requests, r => r is { Method: "POST" } && r.Path.EndsWith("/comments"));
+    }
+
+    [Fact]
     public async Task Accept_BeforeTheParentIsAccepted_IsRefusedWithoutCallingGitHub()
     {
         var epic = await SaveAsync(WorkItemType.Epic, "Epic");
@@ -438,6 +512,9 @@ public partial class WorkItemServiceTests : IDisposable
         public List<string> ConversationComments { get; } = [];
         public List<(string Path, int Line, string Body)> LineComments { get; } = [];
 
+        /// <summary>The number of next comments that fail with 502 Bad Gateway (without being posted).</summary>
+        public int CommentFailures { get; set; }
+
         /// <summary>When set, submitting a review is refused with this status (e.g. 422 for a line no longer in the diff).</summary>
         public HttpStatusCode? ReviewFailure { get; set; }
 
@@ -524,6 +601,11 @@ public partial class WorkItemServiceTests : IDisposable
             if (IssueCommentsPath().Match(path) is { Success: true } comments)
             {
                 var commented = int.Parse(comments.Groups["number"].Value);
+                if (method == "POST" && CommentFailures > 0)
+                {
+                    CommentFailures--;
+                    return Json(HttpStatusCode.BadGateway, """{"message":"Server Error"}""");
+                }
                 return method == "POST"
                     ? Json(HttpStatusCode.Created, $$"""{"html_url":"https://github.com/owner/repo/pull/{{commented}}#issuecomment-1"}""")
                     : Json(HttpStatusCode.OK, JsonSerializer.Serialize(ConversationComments.Select((text, index) => new

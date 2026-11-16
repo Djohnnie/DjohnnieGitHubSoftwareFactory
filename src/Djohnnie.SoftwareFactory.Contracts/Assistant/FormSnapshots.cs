@@ -22,10 +22,17 @@ public sealed record WorkItemFormSnapshot(
     [property: JsonPropertyName("parent")] string? Parent,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("technicalDetails")] string TechnicalDetails,
     [property: JsonPropertyName("customAgent"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomAgent,
     [property: JsonPropertyName("model"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Model,
     [property: JsonPropertyName("baseBranch"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BaseBranch,
     [property: JsonPropertyName("customInstructions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomInstructions);
+
+/// <remarks>One parent of a work item; <c>technicalDetails</c> is empty when the parent has none.</remarks>
+public sealed record ParentTechnicalDetailsSnapshot(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("technicalDetails")] string TechnicalDetails);
 
 /// <remarks><c>selected</c> is <c>false</c> when the form has no template; the other fields are then left out.</remarks>
 public sealed record SelectedWorkItemTemplateSnapshot(
