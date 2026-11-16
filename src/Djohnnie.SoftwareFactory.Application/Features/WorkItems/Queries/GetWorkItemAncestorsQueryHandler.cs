@@ -10,15 +10,6 @@ public sealed class GetWorkItemAncestorsQueryHandler(IWorkItemStore store) : IRe
 {
     public async Task<Response<CollectionResult<WorkItem>>> Handle(GetWorkItemAncestorsQuery request, CancellationToken cancellationToken)
     {
-        var ancestors = new List<WorkItem>();
-        Guid? id = request.Dto.Id;
-        // The hierarchy is at most epic > feature > story; the visited check only guards against a corrupt loop.
-        while (id is { } current && ancestors.All(a => a.Id != current)
-            && await store.GetAsync(request.Dto.RepositoryFullName, current, cancellationToken) is { } item)
-        {
-            ancestors.Add(item);
-            id = item.ParentId;
-        }
-        return new(new(ancestors));
+        return new(new(await store.GetAncestorsAsync(request.Dto.RepositoryFullName, request.Dto.Id, cancellationToken)));
     }
 }

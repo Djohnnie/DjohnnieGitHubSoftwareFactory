@@ -26,6 +26,28 @@ public partial class WorkItemServiceTests
     }
 
     [Fact]
+    public async Task Refresh_LeavesTheParentIssuesOutOfTheDescription()
+    {
+        var epic = await AcceptAsync(WorkItemType.Epic, "Epic");
+        var feature = await SaveAsync(WorkItemType.Feature, "Feature", epic.Id);
+        await _service.AcceptAsync(Repo, feature.Id, _cancellationToken);
+        var created = Assert.Single(_gitHub.CreatedIssues, i => i.Number == 43).Body;
+        Assert.Contains("- Epic: #42", created);
+
+        // As GitHub's web editor returns it: other line endings.
+        _gitHub.IssuesOnGitHub[43] = new("Feature", created.ReplaceLineEndings("\r\n"), "open");
+        var unchanged = await _service.RefreshAsync(Repo, feature.Id, _cancellationToken);
+
+        Assert.False(unchanged.Changed);
+        Assert.Equal("About Feature.", unchanged.WorkItem.Description);
+
+        _gitHub.IssuesOnGitHub[43] = new("Feature", created.Replace("About Feature.", "Edited on GitHub."), "open");
+        var edited = await _service.RefreshAsync(Repo, feature.Id, _cancellationToken);
+
+        Assert.Equal("Edited on GitHub.", edited.WorkItem.Description);
+    }
+
+    [Fact]
     public async Task Refresh_RemovesMarkersOfEarlierFormats()
     {
         var epic = await AcceptAsync(WorkItemType.Epic, "Epic");

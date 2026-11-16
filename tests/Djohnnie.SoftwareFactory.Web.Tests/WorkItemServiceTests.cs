@@ -164,6 +164,15 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Contains(WorkItemWorkflow.Marker(story), issues[2].GetProperty("body").GetString());
         Assert.Equal(["epic", "feature", "story"], _gitHub.CreatedLabels);
 
+        // Every issue lists the issues of the whole hierarchy above it, from the top down, below its description.
+        Assert.DoesNotContain(WorkItemWorkflow.ParentIssuesHeading, issues[0].GetProperty("body").GetString());
+        // Bare references: GitHub renders them with the issue's state icon and title.
+        Assert.Contains($"{WorkItemWorkflow.ParentIssuesHeading}\n\n- Epic: #42\n<!--", issues[1].GetProperty("body").GetString());
+        var storyBody = issues[2].GetProperty("body").GetString()!;
+        Assert.StartsWith("As a user I want passkeys.\n\n", storyBody);
+        Assert.Contains($"{WorkItemWorkflow.ParentIssuesHeading}\n\n- Epic: #42\n- Feature: #43\n<!--", storyBody);
+        Assert.True(storyBody.IndexOf(WorkItemWorkflow.ParentIssuesHeading, StringComparison.Ordinal) < storyBody.IndexOf(WorkItemWorkflow.Marker(story), StringComparison.Ordinal));
+
         // The feature (#43, id 1043) is a sub-issue of the epic (#42), the story (#44, id 1044) of the feature.
         Assert.Equal([(42, 1043L), (43, 1044L)], _gitHub.SubIssues);
 

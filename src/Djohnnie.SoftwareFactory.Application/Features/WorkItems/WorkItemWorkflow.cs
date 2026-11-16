@@ -33,8 +33,9 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         {
             throw new DomainRuleException($"Choose the parent of this {name} before accepting it.");
         }
-        if (item.ParentId is { } parentId
-            && await store.GetAsync(repositoryFullName, parentId, cancellationToken) is { IssueNumber: null } parent)
+        // The whole hierarchy above the item, closest first: the issue body lists their issues.
+        var ancestors = await store.GetAncestorsAsync(repositoryFullName, item.ParentId, cancellationToken);
+        if (ancestors is [{ IssueNumber: null } parent, ..])
         {
             throw new DomainRuleException(
                 $"Accept the {parent.Type.DisplayName.ToLowerInvariant()} '{parent.Title}' before accepting this {name}.");
@@ -54,7 +55,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
                 ? await gitHub.FindIssueByMarkerAsync(repositoryFullName, label, Marker(item), LookupSince(since), cancellationToken)
                 : null;
             creating = existing is null;
-            issue = existing ?? await gitHub.CreateIssueAsync(repositoryFullName, item.Title.Trim(), IssueBody(item), [label], cancellationToken);
+            issue = existing ?? await gitHub.CreateIssueAsync(repositoryFullName, item.Title.Trim(), IssueBody(item, ancestors), [label], cancellationToken);
 
             // Still part of the attempt, so the item only becomes accepted (and is assigned) once the agent can read them.
             await PostTechnicalDetailsAsync(item, issue, existing is not null, cancellationToken);
@@ -175,12 +176,13 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     }
 
     /// <summary>
-    /// The issue body without the marker. GitHub's web editor changes line endings and <see cref="IssueBody"/> trims, so
+    /// The issue body without the parent issues section and the marker. GitHub's web editor changes line endings and <see cref="IssueBody"/> trims, so
     /// the stored text is kept when only those differ; otherwise every refresh would count as a change.
     /// </summary>
     private static string DescriptionFromIssue(WorkItem item, GitHubIssue issue)
     {
-        var description = Normalized(AnyMarker().Replace(issue.Body ?? string.Empty, string.Empty));
+        var body = ParentIssues().Replace(issue.Body ?? string.Empty, string.Empty);
+        var description = Normalized(AnyMarker().Replace(body, string.Empty));
         return description == Normalized(item.Description) ? item.Description : description;
     }
 
@@ -208,10 +210,47 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         return since - DateTimeOffset.UnixEpoch > GitHubClockSkew ? since - GitHubClockSkew : DateTimeOffset.UnixEpoch;
     }
 
-    public static string IssueBody(WorkItem item)
+    /// <param name="ancestors">The items above <paramref name="item"/>, closest first; those with an issue are listed below the description.</param>
+    public static string IssueBody(WorkItem item, IReadOnlyList<WorkItem>? ancestors = null)
     {
-        return $"{item.Description.Trim()}\n\n{Marker(item)}\n";
+        return $"{item.Description.Trim()}\n\n{ParentIssuesSection(ancestors ?? [])}{Marker(item)}\n";
     }
+
+    /// <summary>The heading above the list of parent issues at the bottom of the issue body.</summary>
+    public const string ParentIssuesHeading = "### Parent issues";
+
+    private const string ParentIssuesStart = "<!-- dghsf:parents -->";
+    private const string ParentIssuesEnd = "<!-- dghsf:parents:end -->";
+
+    /// <summary>
+    /// The issues of every item above the item, from the top of the hierarchy down to the direct parent, so the
+    /// Copilot cloud agent sees them as context. Between hidden markers, so a refresh leaves it out of the description.
+    /// Empty when no parent has an issue.
+    /// </summary>
+    public static string ParentIssuesSection(IReadOnlyList<WorkItem> ancestors)
+    {
+        var lines = ancestors.Where(a => a.IssueNumber is not null).Reverse()
+            .Select(a => $"- {a.Type.DisplayName}: {ParentIssueReference(a)}")
+            .ToList();
+        if (lines.Count == 0)
+        {
+            return string.Empty;
+        }
+        return $"{ParentIssuesStart}\n\n---\n\n{ParentIssuesHeading}\n\n{string.Join("\n", lines)}\n{ParentIssuesEnd}\n\n";
+    }
+
+    /// <summary>
+    /// The bare reference (<c>#42</c>): GitHub renders it with the issue's state icon and current title. Don't add the
+    /// title (GitHub then shows it twice) or make it a link with its own text (GitHub then drops the icon and title).
+    /// </summary>
+    private static string ParentIssueReference(WorkItem parent)
+    {
+        return $"#{parent.IssueNumber}";
+    }
+
+    /// <summary>The parent issues section, including the line breaks around it.</summary>
+    [GeneratedRegex(@"\s*<!--\s*dghsf:parents\s*-->.*?<!--\s*dghsf:parents:end\s*-->", RegexOptions.Singleline)]
+    private static partial Regex ParentIssues();
 
     /// <summary>The heading of the comment with the technical details.</summary>
     public const string TechnicalDetailsHeading = "## 🛠️ Technical details";
