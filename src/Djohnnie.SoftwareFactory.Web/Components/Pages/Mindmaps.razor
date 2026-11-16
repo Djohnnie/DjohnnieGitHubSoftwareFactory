@@ -18,9 +18,9 @@
 <MudStack Class="mb-3">
     @* The title opens the quick switcher (also Ctrl+K) to jump to another mindmap. *@
     <div>
-        <button type="button" class="mindmap-title" @onclick="OpenSwitcherAsync" disabled="@(_loading || _saving)"
+        <button type="button" class="mindmap-title switcher-title" @onclick="OpenSwitcherAsync" disabled="@(_loading || _saving)"
                 title="Switch to another mindmap (Ctrl+K)" aria-haspopup="dialog">
-            <MudText Typo="Typo.h4" Class="mindmap-title-text">@(_map?.Title ?? "Mindmap")@(IsNew ? " (not saved)" : null)</MudText>
+            <MudText Typo="Typo.h4">@(_map?.Title ?? "Mindmap")@(IsNew ? " (not saved)" : null)</MudText>
             <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.UnfoldMore)</svg>
         </button>
     </div>

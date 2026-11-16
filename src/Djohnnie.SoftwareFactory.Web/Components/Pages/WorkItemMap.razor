@@ -4,6 +4,7 @@
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IDialogService Dialogs
 @implements IAsyncDisposable
 
 <PageTitle>Work item map</PageTitle>
@@ -12,7 +13,12 @@
 
 <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mb-3">
     <div>
-        <MudText Typo="Typo.h4">Work item map</MudText>
+        @* The title opens the quick switcher (also Ctrl+K) to put another epic in the middle, or all of them. *@
+        <button type="button" class="switcher-title" @onclick="OpenSwitcherAsync" disabled="@(_layout is not { Epics.Count: > 0 } || _loading)"
+                title="Switch to another epic (Ctrl+K)" aria-haspopup="dialog">
+            <MudText Typo="Typo.h4">@(_layout?.Center?.Title ?? "All epics")</MudText>
+            <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.UnfoldMore)</svg>
+        </button>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             All work items of <b>@Repository.Current?.FullName</b> in one view. Expand an epic to put it in the middle with everything below it;
             click an item to open it.
@@ -148,23 +154,6 @@
             </div>
         </div>
 
-        <nav class="map-dock" aria-label="Epics">
-            <button type="button" class="@($"map-dock-item map-dock-hub{(map.Center is null ? " active" : null)}")" @onclick="ShowAllEpics"
-                    aria-pressed="@(map.Center is null ? "true" : "false")">
-                <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)Icons.Material.Filled.Hub)</svg>
-                <span>All epics</span>
-            </button>
-            @foreach (var epic in map.Epics)
-            {
-                var active = map.Center?.Id == epic.Id;
-                <button type="button" class="@($"map-dock-item{(active ? " active" : null)}{(epic.Status == WorkItemStatus.Done ? " done" : null)}")"
-                        @onclick="() => Expand(epic.Id)" aria-pressed="@(active ? "true" : "false")" title="@epic.Title">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)WorkItemRoutes.Icon(WorkItemType.Epic))</svg>
-                    <span class="map-dock-title">@epic.Title</span>
-                    <span class="map-dock-count">@map.DescendantCount(epic.Id)</span>
-                </button>
-            }
-        </nav>
     }
     else if (_error is null)
     {
@@ -179,7 +168,7 @@
 @code {
     private const string AllEpics = "all";
 
-    /// <summary>The expanded epic's id, or <c>all</c> for the repository hub; without it the first open epic is expanded.</summary>
+    /// <summary>The expanded epic's id, or <c>all</c> for the repository hub; without it the map opens on the hub.</summary>
     [SupplyParameterFromQuery(Name = "epic")]
     public string? Epic { get; set; }
 
@@ -192,8 +181,7 @@
     // Changes with every expansion, so the descendants and lines are new elements that animate in again.
     private int _mapKey;
 
-    // The height of the epics dock below the map, which the stage's measured height includes.
-    private const double DockHeight = 53;
+    private bool _switcherOpen;
 
     // The height of the progress strip above the map, shown while an epic is expanded.
     private const double ProgressHeight = 41;
@@ -203,7 +191,7 @@
     private IJSObjectReference? _observer;
     private DotNetObjectReference<WorkItemMap>? _selfReference;
     private double _width = WorkItemMapLayout.DefaultWidth;
-    private double _height = WorkItemMapLayout.DefaultHeight + DockHeight;
+    private double _height = WorkItemMapLayout.DefaultHeight;
 
     protected override async Task OnInitializedAsync()
     {
@@ -299,15 +287,57 @@
     {
         Guid? epic = _expanded switch
         {
-            AllEpics => null,
             { } value when Guid.TryParse(value, out var id) && _items.Any(i => i.Id == id && i.Type == WorkItemType.Epic) => id,
-            _ => WorkItemMapLayout.DefaultEpic(_items)
+            _ => null
         };
         if (_layout is null || _layout.Center?.Id != epic)
         {
             _mapKey++;
         }
-        _layout = WorkItemMapLayout.Create(_items, epic, _width, _height - DockHeight - (epic is null ? 0 : ProgressHeight));
+        _layout = WorkItemMapLayout.Create(_items, epic, _width, _height - (epic is null ? 0 : ProgressHeight));
+    }
+
+    /// <summary>The quick switcher: puts another epic in the middle, or shows all epics.</summary>
+    private async Task OpenSwitcherAsync()
+    {
+        if (_layout is not { Epics.Count: > 0 } map || _loading || _switcherOpen)
+        {
+            return;
+        }
+        _switcherOpen = true;
+        try
+        {
+            var dialog = await Dialogs.ShowAsync<EpicSwitcherDialog>("Switch epic",
+                new DialogParameters<EpicSwitcherDialog>
+                {
+                    { d => d.Epics, map.Epics },
+                    { d => d.Counts, map.Epics.ToDictionary(e => e.Id, e => map.DescendantCount(e.Id)) },
+                    { d => d.Current, map.Center?.Id }
+                },
+                new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, Position = DialogPosition.TopCenter });
+            if (await dialog.Result is { Canceled: false, Data: Guid id })
+            {
+                if (id == Guid.Empty)
+                {
+                    ShowAllEpics();
+                }
+                else
+                {
+                    Expand(id);
+                }
+            }
+        }
+        finally
+        {
+            _switcherOpen = false;
+        }
+    }
+
+    /// <summary>Ctrl+K (or ⌘K) on the page opens the quick switcher.</summary>
+    [JSInvokable]
+    public async Task OpenSwitcherFromBrowser()
+    {
+        await InvokeAsync(OpenSwitcherAsync);
     }
 
     private void Expand(Guid epic)

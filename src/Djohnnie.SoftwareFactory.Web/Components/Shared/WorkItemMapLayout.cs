@@ -121,13 +121,6 @@ public sealed class WorkItemMapLayout
 
     public IReadOnlyList<WorkItemMapEdge> Edges { get; private set; } = [];
 
-    /// <summary>The epic that is expanded when the URL doesn't say: the first open one, or else the first one.</summary>
-    public static Guid? DefaultEpic(IReadOnlyList<WorkItem> items)
-    {
-        var epics = items.Where(i => i.Type == WorkItemType.Epic).OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.CreatedAt).ToList();
-        return (epics.FirstOrDefault(e => e.Status != WorkItemStatus.Done) ?? epics.FirstOrDefault())?.Id;
-    }
-
     /// <param name="expandedEpic">The epic to put in the middle; when it is <c>null</c> or not an epic of <paramref name="items"/>, the repository hub is.</param>
     /// <param name="width">The width of the map in pixels.</param>
     /// <param name="height">The height of the map in pixels.</param>

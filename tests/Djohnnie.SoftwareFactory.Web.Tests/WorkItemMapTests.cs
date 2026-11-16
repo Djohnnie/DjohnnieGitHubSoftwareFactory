@@ -104,18 +104,6 @@ public class WorkItemMapTests : BunitContext
     }
 
     [Fact]
-    public void DefaultEpic_IsTheFirstOpenEpicAlphabetically()
-    {
-        var closed = Item(WorkItemType.Epic, "Accounts", status: WorkItemStatus.Done);
-        var open = Item(WorkItemType.Epic, "Billing");
-        var later = Item(WorkItemType.Epic, "Checkout");
-
-        Assert.Equal(open.Id, WorkItemMapLayout.DefaultEpic([later, closed, open]));
-        Assert.Equal(closed.Id, WorkItemMapLayout.DefaultEpic([closed]));
-        Assert.Null(WorkItemMapLayout.DefaultEpic([Item(WorkItemType.Bug, "Crash")]));
-    }
-
-    [Fact]
     public void Layout_SpreadsAFewItemsWideAtFullSize_AndFitsManyCloserTogether()
     {
         var epic = Item(WorkItemType.Epic, "Big");
@@ -225,8 +213,14 @@ public class WorkItemMapTests : BunitContext
         await SaveAsync(WorkItemType.Feature, "Refunds", billing.Id);
         await SaveAsync(WorkItemType.Epic, "Passkeys");
         Navigation.NavigateTo("/work-item-map");
+        var dialogs = Render<MudBlazor.MudDialogProvider>();
 
         var cut = Render<WorkItemMap>();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".map-hub")));
+        Assert.Empty(cut.FindAll(".map-progress-strip"));
+
+        await PickEpicAsync(cut, dialogs, "Billing");
 
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".map-progress-strip")));
         var bar = cut.Find(".map-progress-bar");
@@ -235,13 +229,25 @@ public class WorkItemMapTests : BunitContext
         Assert.Equal("width:100%", cut.Find(".map-progress-part.status-draft").GetAttribute("style"));
         Assert.Contains("2 draft", cut.Find(".map-progress-counts").TextContent);
 
-        await cut.InvokeAsync(() => cut.FindAll(".map-dock button").Single(b => b.TextContent.Contains("Passkeys")).Click());
+        await PickEpicAsync(cut, dialogs, "Passkeys");
 
-        Assert.Contains("Nothing below this epic yet", cut.Find(".map-progress-bar").TextContent);
+        cut.WaitForAssertion(() => Assert.Contains("Nothing below this epic yet", cut.Find(".map-progress-bar").TextContent));
 
-        await cut.InvokeAsync(() => cut.Find(".map-dock-hub").Click());
+        await PickEpicAsync(cut, dialogs, "All epics");
 
-        Assert.Empty(cut.FindAll(".map-progress-strip"));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".map-progress-strip")));
+    }
+
+    private static async Task PickEpicAsync(IRenderedComponent<WorkItemMap> cut, IRenderedComponent<MudBlazor.MudDialogProvider> dialogs, string title)
+    {
+        await cut.InvokeAsync(() => cut.Find(".switcher-title").Click());
+        dialogs.WaitForAssertion(() => Assert.NotEmpty(dialogs.FindAll(".switcher-item")));
+        await dialogs.InvokeAsync(() => dialogs.FindAll(".switcher-item").Single(b => b.QuerySelector(".switcher-item-title")!.TextContent == title).Click());
+    }
+
+    private static string Title(IRenderedComponent<WorkItemMap> cut)
+    {
+        return cut.Find(".switcher-title").TextContent.Trim();
     }
 
     private static List<WorkItemMapNode> Children(WorkItemMapLayout layout)
@@ -250,7 +256,7 @@ public class WorkItemMapTests : BunitContext
     }
 
     [Fact]
-    public async Task Page_ExpandsTheFirstOpenEpic_LinksEveryItem_AndExpandingAnotherEpicClosesIt()
+    public async Task Page_OpensOnAllEpics_LinksEveryItem_AndExpandingAnotherEpicClosesIt()
     {
         await SelectRepositoryAsync();
         var billing = await SaveAsync(WorkItemType.Epic, "Billing");
@@ -259,36 +265,49 @@ public class WorkItemMapTests : BunitContext
         var login = await SaveAsync(WorkItemType.Feature, "Passkey login", passkeys.Id);
         var story = await SaveAsync(WorkItemType.Story, "Register a passkey", login.Id);
         Navigation.NavigateTo("/work-item-map");
+        var dialogs = Render<MudBlazor.MudDialogProvider>();
 
         var cut = Render<WorkItemMap>();
 
-        cut.WaitForAssertion(() => Assert.Contains("Invoices", cut.Find(".map-canvas").TextContent));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".map-hub")));
+        Assert.Equal("All epics", Title(cut));
+        Assert.Empty(cut.FindAll(".map-node-center"));
+        Assert.Equal(2, cut.FindAll(".map-node-epic").Count);
+
+        // Expanding an epic on the "All epics" diagram puts it in the middle and in the title.
+        await cut.InvokeAsync(() => cut.FindAll(".map-node-epic .map-toggle").Single(b => b.GetAttribute("aria-label") == "Expand Billing").Click());
+
+        Assert.Equal("Billing", Title(cut));
+        Assert.Contains("Invoices", cut.Find(".map-canvas").TextContent);
         Assert.Contains("Billing", cut.Find(".map-node-center").TextContent);
         Assert.Equal($"/epics/{billing.Id}", cut.Find(".map-node-center a").GetAttribute("href"));
         Assert.Equal($"/features/{invoices.Id}", cut.Find(".map-node-depth1 a").GetAttribute("href"));
         Assert.DoesNotContain("Passkey login", cut.Find(".map-canvas").TextContent);
-        Assert.Equal(["Allepics", "Billing1", "Passkeys2"], cut.FindAll(".map-dock button").Select(b => string.Concat(b.TextContent.Where(c => !char.IsWhiteSpace(c)))));
+        Assert.Empty(cut.FindAll(".map-hub"));
 
-        await cut.InvokeAsync(() => cut.FindAll(".map-dock button").Single(b => b.TextContent.Contains("Passkeys")).Click());
+        // The title opens the switcher: all epics first, then every epic with the number of items below it; typing filters.
+        await cut.InvokeAsync(() => cut.Find(".switcher-title").Click());
+        dialogs.WaitForAssertion(() => Assert.Equal(3, dialogs.FindAll(".switcher-item").Count));
+        Assert.Equal(["All epics", "Billing", "Passkeys"], dialogs.FindAll(".switcher-item-title").Select(t => t.TextContent));
+        Assert.Equal(["2 epics", "open now · 1 item", "2 items"], dialogs.FindAll(".switcher-item-meta").Select(t => t.TextContent));
+        await dialogs.InvokeAsync(() => dialogs.Find("input").Input("pass"));
+        Assert.Equal(["Passkeys"], dialogs.FindAll(".switcher-item-title").Select(t => t.TextContent));
+        await dialogs.InvokeAsync(() => dialogs.Find("input").KeyDown("Enter"));
 
+        cut.WaitForAssertion(() => Assert.Equal("Passkeys", Title(cut)));
         Assert.Contains("Passkeys", cut.Find(".map-node-center").TextContent);
         Assert.Equal($"/stories/{story.Id}", cut.Find(".map-node-depth2 a").GetAttribute("href"));
         Assert.DoesNotContain("Invoices", cut.Find(".map-canvas").TextContent);
         Assert.Single(cut.FindAll(".map-node-center"));
         Assert.EndsWith($"/work-item-map?epic={passkeys.Id}", Navigation.Uri, StringComparison.Ordinal);
-        Assert.Equal("true", cut.FindAll(".map-dock button").Single(b => b.TextContent.Contains("Passkeys")).GetAttribute("aria-pressed"));
 
         await cut.InvokeAsync(() => cut.Find(".map-node-center .map-toggle").Click());
 
+        Assert.Equal("All epics", Title(cut));
         Assert.Empty(cut.FindAll(".map-node-center"));
         Assert.NotNull(cut.Find(".map-hub"));
         Assert.Equal(2, cut.FindAll(".map-node-epic").Count);
         Assert.EndsWith("/work-item-map?epic=all", Navigation.Uri, StringComparison.Ordinal);
-
-        await cut.InvokeAsync(() => cut.FindAll(".map-node-epic .map-toggle").Single(b => b.GetAttribute("aria-label") == "Expand Billing").Click());
-
-        Assert.Contains("Billing", cut.Find(".map-node-center").TextContent);
-        Assert.Empty(cut.FindAll(".map-hub"));
     }
 
     [Fact]
@@ -302,6 +321,7 @@ public class WorkItemMapTests : BunitContext
         var cut = Render<WorkItemMap>();
 
         cut.WaitForAssertion(() => Assert.Contains("Passkeys", cut.Find(".map-node-center").TextContent));
+        Assert.Equal("Passkeys", Title(cut));
         Assert.Contains("Nothing below this epic yet", cut.Markup);
     }
 
@@ -315,7 +335,7 @@ public class WorkItemMapTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("This repository has no work items yet.", cut.Markup));
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == "/epics/new");
-        Assert.Empty(cut.FindAll(".map-dock"));
+        Assert.True(cut.Find(".switcher-title").HasAttribute("disabled"));
     }
 
     private static double Distance(WorkItemMapLayout layout, WorkItem item)

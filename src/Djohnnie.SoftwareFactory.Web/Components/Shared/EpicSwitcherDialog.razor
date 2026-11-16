@@ -1,0 +1,94 @@
+@* Puts another epic in the middle of the work item map: type to filter, arrow keys to pick, Enter to open.
+   Closes with the epic's id, or Guid.Empty for all epics. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Search epics"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" AutoFocus="true"
+                      OnKeyDown="OnKeyDown" TextChanged="_ => _active = 0" />
+        <div class="switcher-list mt-2" role="listbox" aria-label="Epics">
+            @for (var index = 0; index < Options.Count; index++)
+            {
+                var option = Options[index];
+                var position = index;
+                var current = option.Id == (Current ?? Guid.Empty);
+                <button type="button" role="option" aria-selected="@(position == _active ? "true" : "false")"
+                        class="@($"switcher-item {(position == _active ? "switcher-item-active" : null)} {(current ? "switcher-item-current" : null)} {(option.Done ? "switcher-item-done" : null)}")"
+                        @onclick="() => Close(option.Id)" @onmouseenter="() => _active = position">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)option.Icon)</svg>
+                    <span class="switcher-item-title">@option.Title</span>
+                    <span class="switcher-item-meta">@(current ? "open now · " : null)@option.Meta</span>
+                </button>
+            }
+            @if (Options.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">No epic matches "@_search".</MudText>
+            }
+        </div>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">↑ ↓ to pick · Enter to open · Esc to close · Ctrl+K opens this anywhere on the map</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The epics, in the order to show them.</summary>
+    [Parameter] public IReadOnlyList<WorkItem> Epics { get; set; } = [];
+
+    /// <summary>The number of items below each epic.</summary>
+    [Parameter] public IReadOnlyDictionary<Guid, int> Counts { get; set; } = new Dictionary<Guid, int>();
+
+    /// <summary>The epic in the middle now, or <c>null</c> when all epics are shown.</summary>
+    [Parameter] public Guid? Current { get; set; }
+
+    private string? _search;
+
+    private int _active;
+
+    private sealed record Option(Guid Id, string Title, string Icon, string Meta, bool Done);
+
+    private List<Option> Options
+    {
+        get
+        {
+            var search = _search?.Trim();
+            var options = new List<Option>();
+            if (string.IsNullOrEmpty(search) || "All epics".Contains(search, StringComparison.CurrentCultureIgnoreCase))
+            {
+                options.Add(new Option(Guid.Empty, "All epics", Icons.Material.Filled.Hub, Epics.Count == 1 ? "1 epic" : $"{Epics.Count} epics", false));
+            }
+            foreach (var epic in Epics.Where(e => string.IsNullOrEmpty(search) || e.Title.Contains(search, StringComparison.CurrentCultureIgnoreCase)))
+            {
+                var count = Counts.GetValueOrDefault(epic.Id);
+                options.Add(new Option(epic.Id, epic.Title, WorkItemRoutes.Icon(WorkItemType.Epic), count == 1 ? "1 item" : $"{count} items",
+                    epic.Status == WorkItemStatus.Done));
+            }
+            return options;
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        var options = Options;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _active = Math.Min(_active + 1, Math.Max(options.Count - 1, 0));
+                break;
+            case "ArrowUp":
+                _active = Math.Max(_active - 1, 0);
+                break;
+            case "Enter":
+                if (_active < options.Count)
+                {
+                    Close(options[_active].Id);
+                }
+                break;
+        }
+    }
+
+    private void Close(Guid id)
+    {
+        MudDialog.Close(DialogResult.Ok(id));
+    }
+}

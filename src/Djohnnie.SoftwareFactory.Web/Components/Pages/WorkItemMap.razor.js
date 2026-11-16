@@ -1,5 +1,5 @@
 // Reports the size of the work item map's stage to the page, once and after every resize (debounced),
-// so the layout can spread the items over the room there is or fit them closer together.
+// so the layout can spread the items over the room there is or fit them closer together; and opens the epic switcher on Ctrl+K.
 export function observe(element, page) {
     let timer = 0;
     let last = "";
@@ -18,10 +18,21 @@ export function observe(element, page) {
     });
     observer.observe(element);
     report();
+
+    // Ctrl+K (⌘K on a Mac) opens the quick switcher to put another epic in the middle.
+    const onKeyDown = event => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            page.invokeMethodAsync("OpenSwitcherFromBrowser").catch(() => { });
+        }
+    };
+    document.addEventListener("keydown", onKeyDown);
+
     return {
         dispose() {
             clearTimeout(timer);
             observer.disconnect();
+            document.removeEventListener("keydown", onKeyDown);
         }
     };
 }
