@@ -53,6 +53,26 @@ public class BackgroundTasksPageTests : BunitContext
     }
 
     [Fact]
+    public async Task Run_IsCollapsedByDefault_AndItsHeaderExpandsIt()
+    {
+        await Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
+            1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo", null, false, false, false, null, "main", null));
+        await Services.GetRequiredService<ITodoTaskStore>().CreateRunAsync("owner/repo",
+            new NewTodoTask(TodoTaskKind.AnalyzeRepository, "Analyze the repository", "{}"), "octocat", 3, _cancellationToken);
+
+        Render<MudPopoverProvider>();
+        var cut = Render<BackgroundTasks>();
+
+        cut.WaitForAssertion(() => Assert.Equal("false", cut.Find(".run-toggle").GetAttribute("aria-expanded")));
+        Assert.False(cut.FindComponent<MudCollapse>().Instance.Expanded);
+
+        await cut.InvokeAsync(() => cut.Find(".run-toggle").Click());
+
+        Assert.Equal("true", cut.Find(".run-toggle").GetAttribute("aria-expanded"));
+        Assert.True(cut.FindComponent<MudCollapse>().Instance.Expanded);
+    }
+
+    [Fact]
     public async Task Page_WithoutRuns_ExplainsHowToStartOne()
     {
         await Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(

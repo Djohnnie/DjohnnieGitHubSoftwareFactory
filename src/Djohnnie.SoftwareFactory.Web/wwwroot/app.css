@@ -43,6 +43,48 @@ h1:focus {
     outline-offset: 2px;
 }
 
+/* An external navigation link: a small "open in new" badge in the corner of its icon. */
+.external-link {
+    position: relative;
+    display: inline-flex;
+}
+
+.external-link-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 14px !important;
+    height: 14px !important;
+    padding: 1px;
+    border-radius: 50%;
+    pointer-events: none;
+    color: var(--mud-palette-text-primary);
+    background-color: var(--mud-palette-background);
+}
+
+/* A count in a tab's caption, on the text's line (MudBlazor's tab badge floats at the corner instead). */
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: middle;
+    color: var(--mud-palette-primary-text);
+    background-color: var(--mud-palette-primary);
+}
+
+/* Room between a page's tab bar and what the tab shows. */
+.tab-panel {
+    padding-top: 24px;
+}
+
 /* Mobile navigation panel */
 .app-drawer {
     --mud-drawer-width-left: min(300px, 85vw);

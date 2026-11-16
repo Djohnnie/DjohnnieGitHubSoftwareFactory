@@ -19,8 +19,22 @@
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
-        <MudButton Href="/agent-templates" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy">From template</MudButton>
         <MudButton Href="/agents/new" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">New agent</MudButton>
+        @* Picks a template to prefill a new agent with; the Templates button manages them. *@
+        <MudMenu Label="From template" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy"
+                 EndIcon="@Icons.Material.Filled.ArrowDropDown" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
+            @if (_templates.Count == 0)
+            {
+                <MudMenuItem Disabled="true">No agent templates yet</MudMenuItem>
+            }
+            @foreach (var template in _templates)
+            {
+                <MudMenuItem Href="@($"/agents/new?template={template.Id}")" Icon="@Icons.Material.Filled.SmartToy">@template.Name</MudMenuItem>
+            }
+            <MudDivider />
+            <MudMenuItem Href="/agent-templates" Icon="@Icons.Material.Filled.LibraryBooks">Manage templates</MudMenuItem>
+        </MudMenu>
+        <MudButton Href="/agent-templates" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.LibraryBooks">Templates</MudButton>
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
     </MudStack>
@@ -87,13 +101,27 @@
     }
 
     private List<AgentRow> _agents = [];
+    private IReadOnlyList<AgentTemplate> _templates = [];
     private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading = true;
     private string? _error;
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
-        return LoadAsync();
+        await LoadTemplatesAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        try
+        {
+            _templates = (await Templates.GetAllAsync()).OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load the agent templates: {ex.Message}", Severity.Warning);
+        }
     }
 
     private async Task LoadAsync()

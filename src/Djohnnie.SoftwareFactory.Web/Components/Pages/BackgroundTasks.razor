@@ -45,11 +45,16 @@ else if (_runs.Count == 0)
 <MudStack Spacing="3">
     @foreach (var run in _runs)
     {
+        var expanded = _expanded.Contains(run.Root.Id);
+        @* Collapsed by default: the header (status, title and actions) toggles the details and sub-tasks; the actions don't. *@
         <MudPaper Outlined="true" Class="pa-4" @key="run.Root.Id">
             <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                @StatusChip(run.Root.Status)
-                <MudText Typo="Typo.h6">@run.Root.Title</MudText>
-                <MudSpacer />
+                <button type="button" class="run-toggle d-flex flex-grow-1 justify-start align-center" style="text-align:left" aria-expanded="@(expanded ? "true" : "false")" aria-controls="@($"run-{run.Root.Id}")"
+                        title="@(expanded ? "Hide the sub-tasks" : "Show the sub-tasks")" @onclick="() => Toggle(run)">
+                    <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" />
+                    @StatusChip(run.Root.Status)
+                    <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left">@run.Root.Title</MudText>
+                </button>
                 @if (run.IsActive)
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Stop"
@@ -67,7 +72,8 @@ else if (_runs.Count == 0)
                     </MudTooltip>
                 }
             </MudStack>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
+            <MudCollapse Expanded="expanded" id="@($"run-{run.Root.Id}")">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
                 Started <TimeAgo At="run.Root.CreatedAt" />@(run.Root.CreatedBy is null ? "" : $" by {run.Root.CreatedBy}")
                 @if (run.Root.CompletedAt is { } completed)
                 {
@@ -113,6 +119,7 @@ else if (_runs.Count == 0)
                     </RowTemplate>
                 </MudTable>
             }
+            </MudCollapse>
         </MudPaper>
     }
 </MudStack>
@@ -122,6 +129,9 @@ else if (_runs.Count == 0)
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
     private IReadOnlyList<TodoTaskRun> _runs = [];
+
+    /// <summary>The runs whose details and sub-tasks are shown; the others are collapsed to their header.</summary>
+    private readonly HashSet<Guid> _expanded = [];
     private bool _loading = true;
     private bool _busy;
     private string? _error;
@@ -246,6 +256,14 @@ else if (_runs.Count == 0)
             _busy = false;
         }
         await LoadAsync();
+    }
+
+    private void Toggle(TodoTaskRun run)
+    {
+        if (!_expanded.Remove(run.Root.Id))
+        {
+            _expanded.Add(run.Root.Id);
+        }
     }
 
     private static double Progress(TodoTaskRun run)

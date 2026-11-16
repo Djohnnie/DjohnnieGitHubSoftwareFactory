@@ -26,7 +26,7 @@
             <MudDivider Class="my-1" />
 
             <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
-            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">Models</MudButton>
+            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">GitHub Copilot Models</MudButton>
             <MudButton Href="/background-tasks" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PendingActions">Background tasks</MudButton>
         }
         <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
@@ -35,8 +35,8 @@
                    StartIcon="@Icons.Material.Filled.Memory">Internal models</MudButton>
         <MudButton Href="/sync-log" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.ManageHistory">Sync log</MudButton>
-        <MudButton Href="@ProjectRepositoryUrl" Target="_blank" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                   StartIcon="@Icons.Custom.Brands.GitHub">GitHub</MudButton>
+        <MudButton Href="@ProjectRepositoryUrl" Target="_blank" rel="noopener noreferrer" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                   StartIcon="@Icons.Custom.Brands.GitHub" EndIcon="@Icons.Material.Filled.OpenInNew" aria-label="@ExternalLinkLabel">GitHub</MudButton>
     </nav>
 }
 else
@@ -56,15 +56,19 @@ else
                 @IconLink(WorkItemRoutes.ListPath(type), WorkItemRoutes.Icon(type), type.PluralName)
             }
             @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
-            @IconLink("/models", Icons.Material.Filled.Memory, "Models")
+            @IconLink("/models", Icons.Material.Filled.Memory, "GitHub Copilot Models")
             @IconLink("/background-tasks", Icons.Material.Filled.PendingActions, "Background tasks")
         }
         @IconLink("/internal-agents", Icons.Material.Filled.Psychology, "Internal agents")
         @IconLink("/internal-models", Icons.Material.Filled.Memory, "Internal models")
         @IconLink("/sync-log", Icons.Material.Filled.ManageHistory, "Sync log")
-        <MudTooltip Text="GitHub">
-            <MudIconButton Href="@ProjectRepositoryUrl" Target="_blank" Icon="@Icons.Custom.Brands.GitHub" Color="Color.Inherit" Class="header-link"
-                           aria-label="GitHub" />
+        @* The corner badge marks the link as external: it opens the repository on GitHub in a new tab. *@
+        <MudTooltip Text="@ExternalLinkLabel">
+            <span class="external-link">
+                <MudIconButton Href="@ProjectRepositoryUrl" Target="_blank" rel="noopener noreferrer" Icon="@Icons.Custom.Brands.GitHub" Color="Color.Inherit"
+                               Class="header-link" aria-label="@ExternalLinkLabel" />
+                <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Class="external-link-badge" aria-hidden="true" />
+            </span>
         </MudTooltip>
     </nav>
 }
@@ -72,6 +76,8 @@ else
 @code {
     /// <summary>The GitHub repository of this project itself, linked last in the navigation.</summary>
     private const string ProjectRepositoryUrl = "https://github.com/Djohnnie/DjohnnieGitHubSoftwareFactory";
+
+    private const string ExternalLinkLabel = "GitHub repository (opens in a new tab)";
 
     /// <summary>Whether a repository is selected; without one, only the repository-independent pages are linked.</summary>
     [Parameter] public bool HasRepository { get; set; }

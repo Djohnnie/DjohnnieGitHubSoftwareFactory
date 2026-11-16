@@ -28,7 +28,13 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-<MudTable Outlined="true" Striped="true" T="InternalModel" Items="_models" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" aria-label="Internal models">
+<MudTable Outlined="true" Striped="true" T="InternalModel" Items="_models" Filter="Matches" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" aria-label="Internal models">
+    <ToolBarContent>
+        <MudTextField Variant="Variant.Text" Underline="false" @bind-Value="_search" Placeholder="Search models" Adornment="Adornment.Start" Immediate="true"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Clearable="true" />
+        <MudSpacer />
+        <MudSwitch @bind-Value="_onlyFlagship" Color="Color.Primary" Label="Flagship only" />
+    </ToolBarContent>
     <HeaderContent>
         <MudTh>Model</MudTh>
         <MudTh>Flagship</MudTh>
@@ -81,6 +87,17 @@
     private List<InternalModel> _models = [];
     private bool _loading = true;
     private string? _error;
+    private string? _search;
+    private bool _onlyFlagship;
+
+    private bool Matches(InternalModel model)
+    {
+        return (!_onlyFlagship || model.IsFlagship) &&
+        (string.IsNullOrWhiteSpace(_search)
+         || model.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+         || model.Label.Contains(_search, StringComparison.OrdinalIgnoreCase)
+         || model.Description.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    }
 
     protected override async Task OnInitializedAsync()
     {

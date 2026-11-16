@@ -37,11 +37,51 @@
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
 }
 
-@foreach (var kind in Enum.GetValues<InternalAgentKind>())
-{
-    <MudText Typo="Typo.h6" Class="mt-4 mb-2">@(kind == InternalAgentKind.Copilot ? "Chat agents" : "Background agents")</MudText>
-    <MudTable Outlined="true" Striped="true" T="InternalAgent" Items="@_agents.Where(a => a.Kind == kind)" Loading="_loading"
-              LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" Class="mb-4" aria-label="@(kind == InternalAgentKind.Copilot ? "Chat agents" : "Background agents")">
+@* Only the tab bar is outlined: the tables in the panels are outlined already. *@
+<MudTabs @bind-ActivePanelIndex="_tab" KeepPanelsAlive="true" Elevation="0" Outlined="true" Rounded="true">
+    <MudTabPanel Icon="@Icons.Material.Filled.Forum">
+        <TabContent>
+            Chat agents
+            <span class="tab-count">@_agents.Count(a => a.Kind == InternalAgentKind.Copilot)</span>
+        </TabContent>
+        <ChildContent><div class="tab-panel">@AgentTable(InternalAgentKind.Copilot)</div></ChildContent>
+    </MudTabPanel>
+    <MudTabPanel Icon="@Icons.Material.Filled.PendingActions">
+        <TabContent>
+            Background agents
+            <span class="tab-count">@_agents.Count(a => a.Kind == InternalAgentKind.Background)</span>
+        </TabContent>
+        <ChildContent><div class="tab-panel">@AgentTable(InternalAgentKind.Background)</div></ChildContent>
+    </MudTabPanel>
+    <MudTabPanel Icon="@Icons.Material.Filled.History">
+        <TabContent>
+            Recent requests
+            @if (_usage.Count > 0)
+            {
+                <span class="tab-count">@_usage.Count</span>
+            }
+        </TabContent>
+        <ChildContent>
+            <div class="tab-panel">
+                @if (_usage.Count > 0)
+                {
+                    <UsageRequestsTable Items="_usage" ShowAgent="true" Label="All recent requests" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">The latest @InternalAgentUsage.RecentOverallCount requests. The totals above include every request.</MudText>
+                }
+                else if (!_loading)
+                {
+                    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info">No agent has made a request yet.</MudAlert>
+                }
+            </div>
+        </ChildContent>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private RenderFragment AgentTable(InternalAgentKind kind)
+    {
+        return @<MudTable Outlined="true" Striped="true" T="InternalAgent" Items="@_agents.Where(a => a.Kind == kind)" Loading="_loading"
+              LoadingProgressColor="Color.Primary" Hover="true" Elevation="0" aria-label="@(kind == InternalAgentKind.Copilot ? "Chat agents" : "Background agents")">
         <HeaderContent>
             <MudTh>Agent</MudTh>
             <MudTh>@(kind == InternalAgentKind.Copilot ? "Page" : "Runs")</MudTh>
@@ -89,17 +129,12 @@
                 </MudTooltip>
             </MudTd>
         </RowTemplate>
-    </MudTable>
-}
-
-@if (_usage.Count > 0)
-{
-    <MudText Typo="Typo.h6" Class="mt-4 mb-2">Recent requests of all agents</MudText>
-    <UsageRequestsTable Items="_usage" ShowAgent="true" Label="All recent requests" />
-    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">The latest @InternalAgentUsage.RecentOverallCount requests. The totals above include every request.</MudText>
+    </MudTable>;
+    }
 }
 
 @code {
+    private int _tab;
     private List<InternalAgent> _agents = [];
     private IReadOnlyList<InternalAgentUsage> _usage = [];
     private bool _loading = true;
