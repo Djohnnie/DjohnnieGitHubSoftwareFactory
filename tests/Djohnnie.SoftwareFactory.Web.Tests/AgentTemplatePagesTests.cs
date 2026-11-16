@@ -95,7 +95,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         {
             // Without a repository only the repository-independent pages are linked; the template pages are linked from their list pages.
             var links = cut.FindAll(".app-header > .mud-appbar + .desktop-only > nav a");
-            Assert.Equal(new[] { "/internal-agents", "/internal-models", "/sync-log" }, links.Select(link => link.GetAttribute("href")));
+            Assert.Equal(new[] { "/internal-agents", "/internal-models", "/sync-log", "https://github.com/Djohnnie/DjohnnieGitHubSoftwareFactory" }, links.Select(link => link.GetAttribute("href")));
             // Like every link in the bar, it's an icon with a tooltip: the label is for screen readers, not a caption.
             var internalAgents = cut.Find(".app-header > .mud-appbar + .desktop-only > nav a[href='/internal-agents']");
             Assert.Equal("Internal agents", internalAgents.GetAttribute("aria-label"));
@@ -153,7 +153,8 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         Assert.Equal(new[]
             {
                 "/", "/mindmaps", "/work-item-map", "/actions", "/copilot-instructions", "/skills", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
-                "/copilot-code-review", "/models", "/background-tasks", "/internal-agents", "/internal-models", "/sync-log"
+                "/copilot-code-review", "/models", "/background-tasks", "/internal-agents", "/internal-models", "/sync-log",
+                "https://github.com/Djohnnie/DjohnnieGitHubSoftwareFactory"
             },
             navigation.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Empty(navigation.QuerySelectorAll("[role='group']"));
