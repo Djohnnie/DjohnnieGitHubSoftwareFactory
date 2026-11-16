@@ -28,7 +28,7 @@ public sealed class UploadKnowledgeFileCommandHandler(IKnowledgeBaseStore store,
             RepositoryFullName = dto.RepositoryFullName?.Trim().ToLowerInvariant(),
             Title = dto.Title,
             Description = dto.Description ?? string.Empty,
-            FileName = Path.GetFileName(dto.FileName.Trim()),
+            FileName = KnowledgeFileNames.Clean(dto.FileName),
             ContentType = string.IsNullOrWhiteSpace(dto.ContentType) ? DefaultContentType : dto.ContentType.Trim(),
             Size = dto.Size
         };

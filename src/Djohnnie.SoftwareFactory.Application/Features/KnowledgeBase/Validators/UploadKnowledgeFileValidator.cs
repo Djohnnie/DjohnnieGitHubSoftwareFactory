@@ -13,7 +13,7 @@ public sealed class UploadKnowledgeFileValidator : AbstractValidator<UploadKnowl
         RuleFor(request => request.Dto.Title).KnowledgeFileTitle();
         RuleFor(request => request.Dto.Description).KnowledgeFileDescription();
         RuleFor(request => request.Dto.FolderId).KnowledgeFileFolder(request => request.Dto.RepositoryFullName);
-        RuleFor(request => request.Dto.FileName).Must(name => !string.IsNullOrWhiteSpace(Path.GetFileName(name?.Trim())))
+        RuleFor(request => request.Dto.FileName).Must(name => KnowledgeFileNames.Clean(name).Length > 0)
             .WithMessage("A file name is required.")
             .Must(name => (name?.Trim().Length ?? 0) <= KnowledgeFile.MaxFileNameLength)
             .WithMessage($"The file name can be at most {KnowledgeFile.MaxFileNameLength} characters.");

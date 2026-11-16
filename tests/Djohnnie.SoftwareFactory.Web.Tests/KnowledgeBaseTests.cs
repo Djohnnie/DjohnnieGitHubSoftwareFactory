@@ -427,6 +427,17 @@ public class KnowledgeBaseTests : BunitContext
         Assert.Equal(expected, AzureBlobKnowledgeFileStorage.ContentDisposition(fileName, contentType));
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\me\notes.bin", "notes.bin")]
+    [InlineData("/home/me/notes.bin", "notes.bin")]
+    [InlineData(@"docs/old\ notes.bin ", "notes.bin")]
+    [InlineData("notes.bin", "notes.bin")]
+    [InlineData(@"C:\Users\me\", "")]
+    public void FileNames_LoseTheirDirectoryOnEveryOperatingSystem(string fileName, string expected)
+    {
+        Assert.Equal(expected, KnowledgeFileNames.Clean(fileName));
+    }
+
     [Fact]
     public void BlobName_IsTheFileId()
     {
