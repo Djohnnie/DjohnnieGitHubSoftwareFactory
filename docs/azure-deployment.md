@@ -59,6 +59,10 @@ Configure these on the Web App under **Settings > Environment variables**. Use `
 | `OpenAI__Endpoint`, `OpenAI__Model`, `OpenAI__ApiKey` | Optional; enables the DGHSF agents |
 | `ImageUploads__ConnectionString` | Optional; storage account connection string that enables image upload in the work item editors. See [Image uploads](#image-uploads) |
 | `ImageUploads__ContainerName`, `ImageUploads__PublicBaseUrl`, `ImageUploads__MaxImageSizeInMegabytes` | Optional; default to `dghsf-uploads`, the blob container URL and `10` |
+| `KnowledgeBase__ConnectionString` | Optional; storage account connection string that enables uploading files to the knowledge base. See [Knowledge base](#knowledge-base) |
+| `KnowledgeBase__ContainerName`, `KnowledgeBase__PublicBaseUrl`, `KnowledgeBase__MaxFileSizeInMegabytes` | Optional; default to `dghsf-knowledge-base`, the blob container URL and `100` |
+| `KnowledgeSearch__Endpoint`, `KnowledgeSearch__ApiKey` | Optional; the Azure AI Search service URL and a query key, so the work item chat agents can search the knowledge base. See [Knowledge base search](#knowledge-base-search) |
+| `KnowledgeSearch__IndexName`, `KnowledgeSearch__SemanticConfiguration`, `KnowledgeSearch__MaxResults` | Optional; default to `dghsf-knowledge-base`, none (set `default` to use the semantic ranker) and `5` passages per search |
 | `Speech__Region`, `Speech__ApiKey` | Optional; Azure AI Speech resource that enables dictating titles and descriptions. See [Dictation](#dictation) |
 | `Speech__Language`, `Speech__Endpoint` | Optional; locale(s) to recognize (default `en-US`, or up to four comma-separated, e.g. `en-US,nl-BE`, to detect the spoken one) and a custom-domain endpoint to issue tokens from |
 
@@ -132,6 +136,54 @@ az storage account show-connection-string -n <account> -g <resource-group> -o ts
 ```
 
 Use `--public-access blob`, not `container`, so the container cannot be listed. Blob names are random (`yyyy/MM/<guid>-<name>.png`) and never contain the repository name, but anyone with a link can view the image, also for private repositories. Only PNG, JPEG, GIF and WebP are accepted (detected from the content; SVG is refused). Without configuration, the editors refuse images instead of embedding them as base64.
+
+## Knowledge base
+
+> **Knowledge base files are public.** Anyone with a link can open a file, together with its title, description and folder path (blob metadata, returned as response headers). Don't upload confidential data, such as secrets, credentials, personal data or internal documents that may not be shared. The page and the upload and edit dialog warn about this.
+
+The knowledge base page keeps a library of files: global files for every repository, and per repository its own files in virtual folders. The folders, titles, descriptions and repositories are stored in Azure SQL; each file is a blob named after its id (a GUID) in its own container, separate from the image uploads. Work items link to the files, and GitHub and the Copilot cloud agent must be able to open those links, so the container must allow anonymous read access to blobs. The app creates the container with blob access when it doesn't exist, but that only works when the account allows public access:
+
+```powershell
+az storage container create -n dghsf-knowledge-base --account-name <account> --public-access blob
+```
+
+Each blob also has `title`, `description` and `path` metadata (the virtual folder, like `/Specs/API`), percent-encoded as UTF-8, so the container is understandable in Storage Explorer without the database. The app keeps it up to date when a file is edited or its folder is renamed or moved. Azure returns metadata as `x-ms-meta-*` response headers when a blob is downloaded, also anonymously, so anyone with a link can read the title, description and folder path, not only the file.
+
+Use `--public-access blob`, not `container`, so the files cannot be listed. The links contain only the file's id, never its title or name, but anyone with a link can download the file, also for private repositories. HTML, SVG, XML and JavaScript files are served as downloads, never shown in the browser. Files are at most `KnowledgeBase__MaxFileSizeInMegabytes` (default 100 MB); they stream through the Blazor circuit, so large files take a while. Without configuration, the page still manages folders and the existing metadata but refuses uploads.
+
+## Knowledge base search
+
+The work item chat agents get a `search_knowledge_base` tool that finds passages in the knowledge base files: the global files and the files of the selected repository. An Azure AI Search indexer reads the knowledge base container, splits every file into overlapping passages of about 2,000 characters, embeds them with an Azure OpenAI embedding model and stores one search document per passage. Each passage carries the file id (the blob name) and the `scope` (`global` or `repository`) and `repository` blob metadata that DGHSF writes, so DGHSF searches with the filter `scope eq 'global' or scope eq null or repository eq 'owner/repo'` (passages without a scope come from files uploaded before files could belong to a repository, which are all global). The search is hybrid: keywords plus vectors, with the query embedded by the index's own vectorizer. DGHSF then checks every passage against the database and takes the file's title, link and folder from there, so a deleted file, or a file that moved to another repository, never reaches an agent, even before the indexer has caught up.
+
+What you need:
+
+- The Azure AI Search service. Basic or higher; the free tier works for trying it out, but limits the index size and has no semantic ranker quota to speak of.
+- An Azure OpenAI (or Foundry) resource with an embedding deployment, for example `text-embedding-3-small` (1,536 dimensions). Both the indexer and the query vectorizer call it, so indexing costs embedding tokens for every passage, and every search costs a few.
+- Blob soft delete on the storage account, so the indexer notices deleted files and removes their passages:
+
+  ```powershell
+  az storage account blob-service-properties update -n <account> -g <resource-group> --enable-delete-retention true --delete-retention-days 7
+  ```
+
+Then create the data source, index, skillset and indexer. The script fills in the templates in `docs/knowledge-base-search` and is safe to run again:
+
+```powershell
+./scripts/setup-knowledge-search.ps1 -SearchServiceName <search service name> -SearchAdminKey <admin key> `
+    -StorageConnectionString "<the same connection string as KnowledgeBase__ConnectionString>" `
+    -OpenAIEndpoint https://<resource>.openai.azure.com -OpenAIKey <key> -EmbeddingDeployment <deployment name>
+```
+
+Add `-EmbeddingModel text-embedding-3-large -Dimensions 3072` for the large model, `-Schedule PT5M` to index more often (the default is every 15 minutes), and `-ContainerName` or `-IndexName` when you changed them in DGHSF. The vector field can't be changed in place: to switch models or dimensions later, delete the index, run the script again and reset the indexer.
+
+Finally, configure DGHSF:
+
+| Setting | Value |
+| --- | --- |
+| `KnowledgeSearch__Endpoint` | `https://<search service name>.search.windows.net` |
+| `KnowledgeSearch__ApiKey` | A **query** key (Search service > Keys > Manage query keys); DGHSF only reads the index |
+| `KnowledgeSearch__SemanticConfiguration` | Optional: `default`, to rerank results with the semantic ranker (enable it on the search service first) |
+
+Check it in the portal: the indexer's execution history shows each run with its documents and warnings, and Search explorer on the index should return passages with `file_id`, `scope` and `repository` filled in. Formats the indexer can't read (images without OCR, archives) are skipped with a warning. Files in the container are recognized by their content type, because the blob names have no extension.
 
 ## Dictation
 

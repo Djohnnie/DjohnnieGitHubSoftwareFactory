@@ -7,6 +7,7 @@
 @inject ImageUploadService ImageUploads
 @inject SpeechService Speech
 @inject ISnackbar Snackbar
+@inject IDialogService Dialogs
 @inject ILogger<MarkdownEditor> Logger
 
 @*
@@ -16,6 +17,7 @@
     configured) and linked by URL, instead of Toast UI's default base64 data URIs.
     With Dictation set (and Azure AI Speech configured), a microphone at the top right, next to the Header, listens until
     it is clicked again (wwwroot/js/dictation.js); the Description Writer then fits what was said into the description.
+    With AllowFileLinks, a toolbar button picks a knowledge base file (KnowledgeFilePickerDialog) and inserts a link to it.
 *@
 <div class="markdown-editor">
     @if (Header is not null || CanDictate)
@@ -103,6 +105,9 @@
     /// <summary>Allows uploading images (when image storage is configured); otherwise the editor refuses images.</summary>
     [Parameter] public bool AllowImages { get; set; }
 
+    /// <summary>Adds a toolbar button that inserts a link to a file of the knowledge base.</summary>
+    [Parameter] public bool AllowFileLinks { get; set; }
+
     /// <summary>
     /// Starts in the raw Markdown mode with a side-by-side preview instead of WYSIWYG, e.g. for files in a repository,
     /// where the WYSIWYG round trip would reformat the existing Markdown.
@@ -172,7 +177,8 @@
                 MinHeight = "200px",
                 RawMarkdown,
                 AllowImages = AllowImages && ImageUploads.IsEnabled,
-                ImageUploads.MaxImageSize
+                ImageUploads.MaxImageSize,
+                AllowFileLinks
             });
 
             // The value may have changed while the editor was being created.
@@ -236,6 +242,34 @@
     public void ReportImageError(string message)
     {
         Snackbar.Add(message, Severity.Error);
+    }
+
+    /// <summary>A link to insert at the cursor: the text and the URL.</summary>
+    public sealed record FileLink(string Text, string Url);
+
+    /// <summary>The toolbar's knowledge base button: lets the user pick a file and returns the link to insert, or <c>null</c>.</summary>
+    [JSInvokable]
+    public async Task<FileLink?> PickFileLink()
+    {
+        if (!AllowFileLinks)
+        {
+            return null;
+        }
+
+        var dialog = await Dialogs.ShowAsync<KnowledgeFilePickerDialog>("Link a knowledge base file", new DialogParameters(),
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        if (await dialog.Result is not { Canceled: false, Data: KnowledgeFile file })
+        {
+            return null;
+        }
+
+        return new FileLink(LinkText(file.Title), file.Url);
+    }
+
+    /// <summary>The title without square brackets, which would end the link text early in Markdown.</summary>
+    public static string LinkText(string title)
+    {
+        return title.Replace('[', '(').Replace(']', ')');
     }
 
     /// <summary>The microphone: starts listening, or stops and writes the description.</summary>

@@ -16,6 +16,7 @@
 @inject AssistantService Assistant
 @inject InternalAgentService InternalAgents
 @inject MindmapService Mindmaps
+@inject KnowledgeBaseService Knowledge
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -166,7 +167,7 @@ else if (_item is not null)
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                         @if (_item.IsDraft)
                         {
-                            <MarkdownEditor Value="@_item.Description" ValueChanged="OnDescriptionChanged" OnBlur="OnFieldBlur" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true"
+                            <MarkdownEditor Value="@_item.Description" ValueChanged="OnDescriptionChanged" OnBlur="OnFieldBlur" MaxLength="WorkItem.MaxDescriptionLength" AllowImages="true" AllowFileLinks="true"
                                             Placeholder="@($"Describe the {Name}...")"
                                             Dictation="@(new DescriptionDictation(Name, _item.Title, SelectedTemplate?.Description))">
                                 <Header>
@@ -187,7 +188,7 @@ else if (_item is not null)
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Technical details">
                             @if (_item.IsDraft)
                             {
-                                <MarkdownEditor @bind-Value="_item.TechnicalDetails" MaxLength="WorkItem.MaxTechnicalDetailsLength" AllowImages="true" Height="300px"
+                                <MarkdownEditor @bind-Value="_item.TechnicalDetails" MaxLength="WorkItem.MaxTechnicalDetailsLength" AllowImages="true" AllowFileLinks="true" Height="300px"
                                                 Placeholder="Files, APIs, patterns or constraints the agent should know about...">
                                     <Header>
                                         <MudText Typo="Typo.h6">Technical details</MudText>
@@ -890,7 +891,23 @@ else if (_item is not null)
             models,
             async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
             change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }),
-            (parentId, cancellationToken) => WorkItemService.GetAncestorsAsync(RepositoryName, parentId, cancellationToken));
+            (parentId, cancellationToken) => WorkItemService.GetAncestorsAsync(RepositoryName, parentId, cancellationToken),
+            Knowledge.IsSearchEnabled ? SearchKnowledgeBaseAsync : null);
+    }
+
+    /// <summary>The agent's <c>search_knowledge_base</c> tool: the global files and this repository's files.</summary>
+    private async Task<IReadOnlyList<KnowledgeSearchResult>> SearchKnowledgeBaseAsync(string query, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Knowledge.SearchAsync(RepositoryName, query, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The agent is told the tool failed; the details are only logged.
+            Logger.LogWarning(ex, "Searching the knowledge base of {Repository} failed.", RepositoryName);
+            throw;
+        }
     }
 
     /// <summary>The agent's suggestion chips follow the title and description, once a changed field loses focus.</summary>

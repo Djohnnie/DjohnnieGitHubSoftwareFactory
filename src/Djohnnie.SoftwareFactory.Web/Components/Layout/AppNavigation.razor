@@ -9,6 +9,7 @@
             <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
             <MudButton Href="/mindmaps" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Hub">Mindmaps</MudButton>
             <MudButton Href="/work-item-map" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.BubbleChart">Work item map</MudButton>
+            <MudButton Href="@KnowledgeBaseRoutes.Path" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.LocalLibrary">Knowledge base</MudButton>
 
             <MudDivider Class="my-1" />
 
@@ -53,6 +54,7 @@ else
             @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
             @IconLink("/mindmaps", Icons.Material.Filled.Hub, "Mindmaps")
             @IconLink("/work-item-map", Icons.Material.Filled.BubbleChart, "Work item map")
+            @IconLink(KnowledgeBaseRoutes.Path, Icons.Material.Filled.LocalLibrary, "Knowledge base")
 
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 

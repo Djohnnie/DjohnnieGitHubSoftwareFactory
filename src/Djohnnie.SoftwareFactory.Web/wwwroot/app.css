@@ -759,3 +759,26 @@ h1:focus {
     text-decoration: line-through;
     text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
 }
+
+/*
+   The Markdown editor's "Link a knowledge base file" toolbar button: an inline icon instead of Toast UI's sprite.
+   Toast UI puts a custom button in a .toastui-editor-toolbar-item-wrapper that already has the 32px height and the
+   7px 5px margin, so the button drops the margin it gets as a toolbar button (otherwise it's pushed down and clipped).
+*/
+.toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-item-wrapper .toastui-editor-toolbar-icons.dghsf-file-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    background-image: none;
+    color: #555;
+}
+
+.toastui-editor-toolbar-icons.dghsf-file-link svg {
+    display: block;
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+}

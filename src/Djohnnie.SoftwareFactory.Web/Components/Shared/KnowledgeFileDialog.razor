@@ -1,0 +1,235 @@
+@* Uploads a file to the knowledge base (without File), or edits a file's title, description and folder (with File). *@
+@inject KnowledgeBaseService Knowledge
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject ILogger<KnowledgeFileDialog> Logger
+@implements IDisposable
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Icon="@Icons.Material.Filled.Public" Class="knowledge-public-notice">
+                    @KnowledgeBaseRoutes.PublicNotice
+                </MudAlert>
+                @if (IsUpload)
+                {
+                    @* The invisible file input covers the whole zone, so clicking and dropping a file both work. *@
+                    <div class="@($"knowledge-drop {(_selected is null ? null : "knowledge-drop-selected")}")">
+                        <InputFile OnChange="OnFileChanged" class="knowledge-drop-input" disabled="@_saving" aria-label="Choose a file" />
+                        <MudIcon Icon="@(_selected is null ? Icons.Material.Filled.CloudUpload : Icons.Material.Filled.InsertDriveFile)" Size="Size.Large" Color="Color.Primary" />
+                        @if (_selected is null)
+                        {
+                            <MudText Typo="Typo.body1">Drop a file here or click to choose one</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">At most @Knowledge.MaxFileSizeInMegabytes MB</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="knowledge-drop-name"><b>@_selected.Name</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@KnowledgeFile.FormatSize(_selected.Size) · click or drop to choose another file</MudText>
+                        }
+                    </div>
+                }
+                else if (File is { } file)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@KnowledgeBaseRoutes.Icon(file)" Color="Color.Primary" />
+                        <div class="flex-grow-1" style="min-width:0">
+                            <MudText Typo="Typo.body1" Style="overflow-wrap:anywhere"><b>@file.FileName</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@KnowledgeFile.FormatSize(file.Size) · uploaded @file.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                        </div>
+                        @if (!string.IsNullOrEmpty(file.Url))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="@file.Url" Target="_blank" rel="noopener noreferrer" title="Open" aria-label="Open the file" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Link" OnClick="CopyLinkAsync" title="Copy link" aria-label="Copy the link" />
+                        }
+                    </MudStack>
+                }
+                <DictationTextField @bind-Value="_title" Label="Title" Required="true" RequiredError="A title is required." MaxLength="KnowledgeFile.MaxTitleLength" Disabled="_saving" />
+                <DictationTextField @bind-Value="_description" Label="Description" Lines="4" MaxLength="KnowledgeFile.MaxDescriptionLength" Disabled="_saving"
+                                    HelperText="What the file is about, so it can be found again." />
+                <div>
+                    @* Without a selected repository a file can only be global. *@
+                    <MudCheckBox T="bool" @bind-Value="_global" Color="Color.Primary" Disabled="@(_saving || RepositoryFullName is null)"
+                                 Label="Global: available in every repository" Class="knowledge-global" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block ml-11">@ScopeHelp</MudText>
+                </div>
+                @* Folders belong to the repository; a global file is always at the top of the library. *@
+                @if (!_global)
+                {
+                    <KnowledgeFolderSelect Library="Library" @bind-Value="_folderId" Disabled="_saving" />
+                }
+            </MudStack>
+        </MudForm>
+        @if (_saving && IsUpload)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Uploading @_selected?.Name...</MudText>
+        }
+        @if (_error is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        @* Cancel stays available while uploading, to stop a slow upload. *@
+        <MudButton Variant="Variant.Text" OnClick="Cancel" Disabled="@(_saving && !IsUpload)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="@(_saving || IsUpload && _selected is null)"
+                   StartIcon="@(IsUpload ? Icons.Material.Filled.UploadFile : null)">@(IsUpload ? "Upload" : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public KnowledgeLibrary Library { get; set; } = KnowledgeLibrary.Empty;
+
+    /// <summary>The file to edit; without it, a new file is uploaded.</summary>
+    [Parameter] public KnowledgeFile? File { get; set; }
+
+    /// <summary>The folder a new file goes to, or <c>null</c> for the top of the library.</summary>
+    [Parameter] public Guid? FolderId { get; set; }
+
+    /// <summary>The selected repository, which a file that isn't global is linked to; <c>null</c> allows global files only.</summary>
+    [Parameter] public string? RepositoryFullName { get; set; }
+
+    private MudForm? _form;
+    private IBrowserFile? _selected;
+    private string? _title;
+    private string? _description;
+    private Guid? _folderId;
+    private bool _global;
+    private bool _saving;
+    private string? _error;
+    private readonly CancellationTokenSource _cancellation = new();
+
+    private bool IsUpload => File is null;
+
+    /// <summary>The repository the file is saved with: <c>null</c> when it's global.</summary>
+    private string? SelectedRepository => _global ? null : RepositoryFullName;
+
+    /// <summary>The folder the file is saved in: always the top of the library for a global file (the picker keeps its choice for when it is unchecked again).</summary>
+    private Guid? SelectedFolder => _global ? null : _folderId;
+
+    private string ScopeHelp
+    {
+        get
+        {
+            return RepositoryFullName is null
+                ? "Select a repository to link a file to it instead."
+                : _global ? $"Every repository sees this file, also {RepositoryFullName}. Global files are always at the top of the library, not in a folder." : $"Only {RepositoryFullName} sees this file. It can go in one of its folders.";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _title = File?.Title;
+        _description = File?.Description;
+        _folderId = File is null ? FolderId : File.FolderId;
+        // A new file belongs to the selected repository unless it's made global; a stored file keeps what it is.
+        _global = RepositoryFullName is null || File is { IsGlobal: true };
+    }
+
+    private void OnFileChanged(InputFileChangeEventArgs args)
+    {
+        var previous = _selected;
+        _selected = args.File;
+        _error = _selected.Size > Knowledge.MaxFileSize ? $"Files can be at most {Knowledge.MaxFileSizeInMegabytes} MB." : null;
+        // The file name is a good start for the title, until the title is typed.
+        if (string.IsNullOrWhiteSpace(_title) || previous is not null && _title == TitleFrom(previous.Name))
+        {
+            _title = TitleFrom(_selected.Name);
+        }
+    }
+
+    private static string TitleFrom(string fileName)
+    {
+        var title = Path.GetFileNameWithoutExtension(fileName).Replace('_', ' ').Trim();
+        return title.Length > KnowledgeFile.MaxTitleLength ? title[..KnowledgeFile.MaxTitleLength] : title;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            if (IsUpload)
+            {
+                if (_selected is null)
+                {
+                    return;
+                }
+                if (_selected.Size > Knowledge.MaxFileSize)
+                {
+                    _error = $"Files can be at most {Knowledge.MaxFileSizeInMegabytes} MB.";
+                    return;
+                }
+
+                await using var content = _selected.OpenReadStream(Knowledge.MaxFileSize, _cancellation.Token);
+                var uploaded = await Knowledge.UploadFileAsync(new UploadKnowledgeFileRequest(
+                    SelectedFolder, _title ?? string.Empty, _description ?? string.Empty, _selected.Name, _selected.ContentType, _selected.Size, content,
+                    SelectedRepository), _cancellation.Token);
+                MudDialog.Close(DialogResult.Ok(uploaded));
+            }
+            else
+            {
+                var file = File! with
+                {
+                    Title = _title ?? string.Empty, Description = _description ?? string.Empty, FolderId = SelectedFolder, RepositoryFullName = SelectedRepository
+                };
+                MudDialog.Close(DialogResult.Ok(await Knowledge.SaveFileAsync(file)));
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException
+                                       or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = ex.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled while uploading; the dialog is already closed.
+        }
+        catch (Exception ex) when (IsUpload)
+        {
+            // The storage or the browser stream failed (e.g. the storage account refused the request).
+            Logger.LogWarning(ex, "Uploading {FileName} to the knowledge base failed.", _selected?.Name);
+            _error = "Uploading the file failed. Check the storage configuration and try again.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CopyLinkAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", File!.Url);
+            Snackbar.Add("Copied the link.", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add($"Could not copy the link. It is {File!.Url}", Severity.Warning);
+        }
+    }
+
+    private void Cancel()
+    {
+        _cancellation.Cancel();
+        MudDialog.Cancel();
+    }
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+}

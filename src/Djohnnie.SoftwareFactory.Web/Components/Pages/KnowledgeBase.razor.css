@@ -1,0 +1,26 @@
+::deep .knowledge-search {
+    flex: 0 1 320px;
+    min-width: 200px;
+}
+
+.knowledge-file {
+    min-width: 0;
+}
+
+::deep .knowledge-description {
+    /* Keep the line breaks of the description, but at most three lines in the list. */
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+/* The header of a group of files (global, or the repository's), spanning the whole row. */
+.knowledge-group {
+    padding: 10px 16px 6px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 6%, transparent);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}

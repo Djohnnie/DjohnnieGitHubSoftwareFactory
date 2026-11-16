@@ -1,0 +1,115 @@
+@* Picks a file of the knowledge base (a global one or one of the selected repository), e.g. to put a link to it in a work item. *@
+@inject KnowledgeBaseService Knowledge
+@inject RepositoryContext Repository
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Search by title, description, file name or folder"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" AutoFocus="true" />
+        <div class="picker-list mt-2">
+            @if (_loading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_error is not null)
+            {
+                <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="ma-2">@_error</MudAlert>
+            }
+            else if (Matches.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+                    @if (_library.Files.Count == 0)
+                    {
+                        @:The knowledge base has no files yet. <MudLink Href="@KnowledgeBaseRoutes.Path" Target="_blank">Upload files</MudLink> first.
+                    }
+                    else
+                    {
+                        @:No files match your search.
+                    }
+                </MudText>
+            }
+            @foreach (var file in Matches)
+            {
+                <button type="button" class="@($"picker-item {(file.Id == _selected?.Id ? "picker-item-selected" : null)}")" @onclick="() => _selected = file"
+                        @ondblclick="() => Close(file)" aria-pressed="@(file.Id == _selected?.Id ? "true" : "false")">
+                    <MudIcon Icon="@KnowledgeBaseRoutes.Icon(file)" Color="Color.Primary" Size="Size.Small" />
+                    <span class="picker-item-text">
+                        <span class="picker-item-title">@file.Title</span>
+                        <span class="picker-item-meta">@Meta(file)</span>
+                    </span>
+                </button>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="() => MudDialog.Cancel()">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_selected is null" OnClick="() => Close(_selected!)"
+                   StartIcon="@Icons.Material.Filled.Link">Insert link</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int MaxShown = 100;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private KnowledgeLibrary _library = KnowledgeLibrary.Empty;
+    private bool _loading = true;
+    private string? _error;
+    private string? _search;
+    private KnowledgeFile? _selected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _library = await Knowledge.GetLibraryAsync(Repository.Current?.FullName);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the knowledge base: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private List<KnowledgeFile> Matches
+    {
+        get
+        {
+            var words = (_search ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return _library.Files
+                .Where(file => !string.IsNullOrEmpty(file.Url))
+                .Where(file => words.All(word => SearchText(file).Contains(word, StringComparison.CurrentCultureIgnoreCase)))
+                .OrderBy(file => _library.PathName(file.FolderId), StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(file => file.Title, StringComparer.CurrentCultureIgnoreCase)
+                .Take(MaxShown)
+                .ToList();
+        }
+    }
+
+    private string SearchText(KnowledgeFile file)
+    {
+        return $"{file.Title} {file.Description} {file.FileName} {_library.PathName(file.FolderId)}";
+    }
+
+    // One string, so the line wraps as plain text instead of as separate pieces.
+    private string Meta(KnowledgeFile file)
+    {
+        var folder = _library.PathName(file.FolderId);
+        var parts = new List<string> { file.IsGlobal ? "Global" : "This repository", file.FileName, KnowledgeFile.FormatSize(file.Size) };
+        if (folder.Length > 0)
+        {
+            parts.Add($"in {folder}");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private void Close(KnowledgeFile file)
+    {
+        MudDialog.Close(DialogResult.Ok(file));
+    }
+}

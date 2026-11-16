@@ -1,0 +1,50 @@
+@* Picks a knowledge base folder by its path, or the top of the library. *@
+
+<MudSelect T="Guid" Value="@(Value ?? Guid.Empty)" ValueChanged="OnValueChanged" Label="@Label" Variant="Variant.Outlined" Disabled="Disabled"
+           ToStringFunc="NameOf" AnchorOrigin="Origin.BottomCenter">
+    <MudSelectItem T="Guid" Value="Guid.Empty">@TopName</MudSelectItem>
+    @foreach (var (id, path) in Options)
+    {
+        <MudSelectItem T="Guid" Value="id">@path</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    private const string TopName = "Top of the library";
+
+    [Parameter, EditorRequired] public KnowledgeLibrary Library { get; set; } = KnowledgeLibrary.Empty;
+
+    /// <summary>The selected folder, or <c>null</c> for the top of the library.</summary>
+    [Parameter] public Guid? Value { get; set; }
+
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    /// <summary>Folders that can't be picked, e.g. a folder being moved and the folders below it.</summary>
+    [Parameter] public IReadOnlySet<Guid> Excluded { get; set; } = new HashSet<Guid>();
+
+    [Parameter] public string Label { get; set; } = "Folder";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private IEnumerable<(Guid Id, string Path)> Options
+    {
+        get
+        {
+            return Library.Folders
+                .Where(folder => !Excluded.Contains(folder.Id))
+                .Select(folder => (folder.Id, Library.PathName(folder.Id)))
+                .OrderBy(option => option.Item2, StringComparer.CurrentCultureIgnoreCase);
+        }
+    }
+
+    private string NameOf(Guid id)
+    {
+        return id == Guid.Empty ? TopName : Library.PathName(id);
+    }
+
+    private async Task OnValueChanged(Guid id)
+    {
+        Value = id == Guid.Empty ? null : id;
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

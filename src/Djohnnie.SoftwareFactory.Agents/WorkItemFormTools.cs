@@ -4,6 +4,7 @@ using System.Text.Json;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
+using Djohnnie.SoftwareFactory.Contracts.KnowledgeBase;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
 using Microsoft.Extensions.AI;
@@ -21,13 +22,18 @@ namespace Djohnnie.SoftwareFactory.Agents;
 /// <param name="loadAgents">Loads the custom agents of the selected repository.</param>
 /// <param name="onUi">Runs a change on the UI thread and re-renders the page.</param>
 /// <param name="loadAncestors">Loads the parent with the given id and every item above it, closest first.</param>
+/// <param name="searchKnowledgeBase">
+/// Searches the knowledge base files of the repository (and the global ones); <c>null</c> when search isn't configured,
+/// which leaves the <c>search_knowledge_base</c> tool out.
+/// </param>
 public sealed class WorkItemFormTools(
     Func<WorkItem> getItem,
     Func<WorkItemTemplate?> getSelectedTemplate,
     IReadOnlyList<AiModel> models,
     Func<CancellationToken, Task<List<AgentSummary>>> loadAgents,
     Func<Action, Task> onUi,
-    Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>>? loadAncestors = null)
+    Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>>? loadAncestors = null,
+    Func<string, CancellationToken, Task<IReadOnlyList<KnowledgeSearchResult>>>? searchKnowledgeBase = null)
 {
     /// <summary>Doesn't escape characters such as &lt;, so the HTML comments in a template reach the model as written.</summary>
     private static readonly JsonSerializerOptions ContextJsonOptions = new(JsonSerializerDefaults.Web)
@@ -102,6 +108,13 @@ public sealed class WorkItemFormTools(
               made specific to it, instead of copying everything. Don't repeat what the description already says.
             - The field is replaced as a whole: keep what is already in it unless the user asks to change it, and add the new
               details where they belong.
+
+            Knowledge base (when the `search_knowledge_base` tool is available):
+            - The knowledge base holds documents for this repository and for all repositories, such as specifications, designs
+              and guidelines. Search it when the request refers to them or when they could make the {name} more accurate.
+            - Base what you write on the passages you find, not on guesses. When a document is relevant, link it in the
+              description or the technical details as a Markdown link with its title and public link, so the coding agent can
+              read the whole document. Don't make up links.
             """;
     }
 
@@ -132,6 +145,10 @@ public sealed class WorkItemFormTools(
         if (loadAncestors is not null)
         {
             tools.Add(AIFunctionFactory.Create(GetParentTechnicalDetailsAsync, "get_parent_technical_details"));
+        }
+        if (searchKnowledgeBase is not null)
+        {
+            tools.Add(AIFunctionFactory.Create(SearchKnowledgeBaseAsync, "search_knowledge_base"));
         }
         if (getItem().Type.CanBeAssigned)
         {
@@ -234,6 +251,20 @@ public sealed class WorkItemFormTools(
         return (await loadAncestors(id, cancellationToken))
             .Select(p => new ParentTechnicalDetailsSnapshot(p.Type.DisplayName, p.Title, p.TechnicalDetails))
             .ToList();
+    }
+
+    [Description("Searches the content of the knowledge base: documents (specifications, designs, guidelines, ...) uploaded for this repository and for all repositories. " +
+                 "Returns the best matching passages, each with the document's title, public link and folder. Search with a short, specific question or keywords.")]
+    public async Task<IReadOnlyList<KnowledgeSearchResult>> SearchKnowledgeBaseAsync(
+        [Description("What to look for, e.g. \"password reset flow\" or \"error handling guidelines for the API\".")] string query,
+        CancellationToken cancellationToken = default)
+    {
+        if (searchKnowledgeBase is null || string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        return await searchKnowledgeBase(query, cancellationToken);
     }
 
     [Description("Gets the current values of the work item form.")]

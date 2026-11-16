@@ -60,6 +60,13 @@ Create `src/Djohnnie.SoftwareFactory.Web/appsettings.Development.json`. It is gi
   "ImageUploads": {
     "ConnectionString": "<optional: Azure Storage connection string for images in Markdown editors>"
   },
+  "KnowledgeBase": {
+    "ConnectionString": "<optional: Azure Storage connection string for knowledge base files, e.g. UseDevelopmentStorage=true for Azurite>"
+  },
+  "KnowledgeSearch": {
+    "Endpoint": "<optional: Azure AI Search URL, e.g. https://my-search.search.windows.net, so the chat agents search the knowledge base>",
+    "ApiKey": "<a query key of the search service>"
+  },
   "Speech": {
     "Region": "<optional: Azure AI Speech region, e.g. westeurope, to dictate titles>",
     "ApiKey": "<Speech resource key>",
@@ -75,6 +82,10 @@ dotnet run --project src/Djohnnie.SoftwareFactory.Web --launch-profile https
 ```
 
 In Development, the app applies the EF Core migrations at startup to the database in `ConnectionStrings:Database`. Point it at a local database, not production. Without the `OpenAI` settings the app still works, but the Copilot chats show a setup hint. Without the `Speech` settings the microphone buttons next to the title fields are hidden.
+
+Without the `KnowledgeBase` settings the knowledge base can't store files. When it can, keep in mind that **knowledge base files are public**: they are stored in a blob container with anonymous read access, so work items and GitHub issues can link to them. Anyone with a link can open the file, together with its title, description and folder path, which are stored as blob metadata. Don't upload confidential data, such as secrets, credentials, personal data or internal documents that may not be shared. The page and the upload dialog show the same warning.
+
+A knowledge base file is either global (every repository sees it) or belongs to the repository that was selected when it was uploaded or edited. Folders belong to a repository and organize its files; global files are always at the top of the library, never in a folder. With the `KnowledgeSearch` settings, the work item chat agents can search the content of the global files and the selected repository's files (RAG with Azure AI Search). `docs/azure-deployment.md` explains how to set up the search service.
 
 ### The sync function
 

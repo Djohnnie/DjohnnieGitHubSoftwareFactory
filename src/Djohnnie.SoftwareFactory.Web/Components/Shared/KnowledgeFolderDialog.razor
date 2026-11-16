@@ -1,0 +1,83 @@
+@* Creates, renames or moves a knowledge base folder. *@
+@inject KnowledgeBaseService Knowledge
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" Model="_model">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_model.Name" Label="Name" Variant="Variant.Outlined" Required="true" RequiredError="A folder name is required."
+                              MaxLength="KnowledgeFolder.MaxNameLength" AutoFocus="true" Validation="@(new Func<string, string?>(ValidateName))"
+                              OnKeyDown="OnKeyDownAsync" />
+                <KnowledgeFolderSelect Library="Library" @bind-Value="_model.ParentId" Excluded="_excluded" Label="In" />
+            </MudStack>
+        </MudForm>
+        @if (_error is not null)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="() => MudDialog.Cancel()" Disabled="_saving">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving">@(_model.Id == Guid.Empty ? "Create" : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public KnowledgeLibrary Library { get; set; } = KnowledgeLibrary.Empty;
+
+    /// <summary>The folder to edit; a folder with an empty id is created.</summary>
+    [Parameter, EditorRequired] public KnowledgeFolder Folder { get; set; } = new();
+
+    private MudForm? _form;
+    private KnowledgeFolder _model = new();
+    private IReadOnlySet<Guid> _excluded = new HashSet<Guid>();
+    private bool _saving;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        _model = Folder.Copy();
+        // A folder can't move into itself or below itself.
+        _excluded = _model.Id == Guid.Empty ? new HashSet<Guid>() : Library.SubtreeOf(_model.Id);
+    }
+
+    private static string? ValidateName(string name)
+    {
+        return name?.IndexOfAny(['/', '\\']) >= 0 ? "A folder name can't contain slashes." : null;
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SaveAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            MudDialog.Close(DialogResult.Ok(await Knowledge.SaveFolderAsync(_model)));
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException
+                                       or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "{{IndexName}}-blobs",
+  "description": "The DGHSF knowledge base container: one blob per file, named after the file id, with title, description, path, scope and repository metadata.",
+  "type": "azureblob",
+  "credentials": {
+    "connectionString": "{{StorageConnectionString}}"
+  },
+  "container": {
+    "name": "{{ContainerName}}"
+  },
+  "dataDeletionDetectionPolicy": {
+    "@odata.type": "#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy"
+  }
+}

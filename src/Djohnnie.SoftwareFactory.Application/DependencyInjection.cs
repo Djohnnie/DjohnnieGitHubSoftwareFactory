@@ -7,6 +7,7 @@ using Djohnnie.SoftwareFactory.Application.Features.AuthSessions;
 using Djohnnie.SoftwareFactory.Application.Features.Assistant;
 using Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 using Djohnnie.SoftwareFactory.Application.Features.InternalModels;
+using Djohnnie.SoftwareFactory.Application.Features.KnowledgeBase;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
@@ -96,6 +97,22 @@ public static class DependencyInjection
             }
 
             services.TryAddSingleton<IImageStorage, AzureBlobImageStorage>();
+            services.AddScoped<KnowledgeBaseService>();
+            services.AddScoped<KnowledgeFileMetadataSync>();
+            var knowledgeBase = services.AddOptions<KnowledgeBaseOptions>();
+            if (configuration is not null)
+            {
+                knowledgeBase.Bind(configuration.GetSection(KnowledgeBaseOptions.SectionName));
+            }
+
+            services.TryAddSingleton<IKnowledgeFileStorage, AzureBlobKnowledgeFileStorage>();
+            var knowledgeSearch = services.AddOptions<KnowledgeSearchOptions>();
+            if (configuration is not null)
+            {
+                knowledgeSearch.Bind(configuration.GetSection(KnowledgeSearchOptions.SectionName));
+            }
+
+            services.TryAddSingleton<IKnowledgeSearchIndex, AzureAiKnowledgeSearchIndex>();
             services.AddScoped<SpeechService>();
             var speech = services.AddOptions<SpeechOptions>();
             if (configuration is not null)

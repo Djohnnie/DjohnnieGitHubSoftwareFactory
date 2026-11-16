@@ -1,0 +1,424 @@
+@page "/knowledge-base"
+@attribute [RepositoryIndependent]
+@inject KnowledgeBaseService Knowledge
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject RepositoryContext Repository
+
+@*
+    The knowledge base: a library of files. A file is global (every repository sees it, never in a folder) or belongs to
+    one repository, whose files can be organized in that repository's virtual folders. The page shows the global files at
+    the top of the library, then the selected repository's folders and files, each group under its own header; other
+    repositories' folders and files aren't shown. Each file is a blob named after its id in a public container, so its link
+    can be put in work items; the title, description, folder and repository are in SQL.
+    ?folder={id} opens a folder of the repository. Searching looks through every folder.
+*@
+
+<PageTitle>Knowledge base</PageTitle>
+
+<PageBreadcrumbs Parents="_breadcrumbs" Current="@(CurrentFolder?.Name ?? "Knowledge base")" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">@(CurrentFolder?.Name ?? "Knowledge base")</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            A library of files. A file is global, for every repository, or belongs to @(RepositoryName is null ? "one repository" : RepositoryName).
+            Global files are always at the top; folders belong to a repository and organize its files. Every file gets a public link that you can put in a work item: use the <b>Link a knowledge base file</b> button in the work item editors.
+            @if (Knowledge.IsSearchEnabled)
+            {
+                @:The work item chat agents also search the content of these files.
+            }
+        </MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile" OnClick="UploadAsync"
+                   Disabled="@(!Knowledge.IsEnabled || _loading)">Upload file</MudButton>
+        @* Folders belong to a repository, so they need a selected one. *@
+        @if (RepositoryName is not null)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync"
+                       Disabled="_loading">New folder</MudButton>
+        }
+        <MudSpacer />
+        <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Search all files" Immediate="true" Clearable="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="knowledge-search" aria-label="Search all files" />
+        <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" aria-label="Reload" />
+    </MudStack>
+</MudStack>
+
+<MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Icon="@Icons.Material.Filled.Public" Class="mb-4 knowledge-public-notice">
+    @KnowledgeBaseRoutes.PublicNotice
+</MudAlert>
+
+@if (!Knowledge.IsEnabled)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
+        The file storage isn't configured, so files can't be uploaded. Set <code>KnowledgeBase:ConnectionString</code> to an Azure Storage account
+        that allows anonymous blob access.
+    </MudAlert>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (FolderId is not null && CurrentFolder is null && !_loading && _error is null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Class="mb-4">
+        This folder doesn't exist (anymore). <MudLink Href="@KnowledgeBaseRoutes.FolderPath(null)">Go to the top of the library</MudLink>
+    </MudAlert>
+}
+
+<MudTable Outlined="true" T="Row" Items="Rows" Loading="_loading" LoadingProgressColor="Color.Primary" Hover="true" Elevation="0">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Size</MudTh>
+        <MudTh>Updated</MudTh>
+        <MudTh Style="text-align:right">Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        @if (context.Group is { } group)
+        {
+            <td colspan="4" class="knowledge-group">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@group.Icon" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle2">@group.Title</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@group.Description · @group.Summary</MudText>
+                </MudStack>
+            </td>
+        }
+        else if (context.Folder is { } folder)
+        {
+            <MudTd DataLabel="Name">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Folder" Color="Color.Warning" />
+                    <div>
+                        <MudLink Href="@KnowledgeBaseRoutes.FolderPath(folder.Id)" Typo="Typo.body1"><b>@folder.Name</b></MudLink>
+                        @if (IsSearching && folder.ParentId is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">in @_library.PathName(folder.ParentId)</MudText>
+                        }
+                    </div>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Size">@ContentsOf(folder.Id)</MudTd>
+            <MudTd DataLabel="Updated">@folder.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap">
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.DriveFileRenameOutline" OnClick="() => EditFolderAsync(folder)"
+                               title="Rename or move" aria-label="@($"Rename or move {folder.Name}")" />
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteFolderAsync(folder)"
+                               title="Delete" aria-label="@($"Delete {folder.Name}")" />
+            </MudTd>
+        }
+        else if (context.File is { } file)
+        {
+            <MudTd DataLabel="Name">
+                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                    <MudIcon Icon="@KnowledgeBaseRoutes.Icon(file)" Color="Color.Primary" Class="mt-1" />
+                    <div class="knowledge-file">
+                        <MudLink Href="@file.Url" Target="_blank" rel="noopener noreferrer" Typo="Typo.body1" Disabled="@string.IsNullOrEmpty(file.Url)"><b>@file.Title</b></MudLink>
+                        @if (!string.IsNullOrWhiteSpace(file.Description))
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="knowledge-description">@file.Description</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                            @file.FileName@(IsSearching && file.FolderId is not null ? $" · in {_library.PathName(file.FolderId)}" : null)
+                        </MudText>
+                    </div>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Size" Style="white-space:nowrap">@KnowledgeFile.FormatSize(file.Size)</MudTd>
+            <MudTd DataLabel="Updated">@file.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap">
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Link" OnClick="() => CopyLinkAsync(file)" Disabled="@string.IsNullOrEmpty(file.Url)"
+                               title="Copy link" aria-label="@($"Copy the link to {file.Title}")" />
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit" OnClick="() => EditFileAsync(file)"
+                               title="Edit" aria-label="@($"Edit {file.Title}")" />
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteFileAsync(file)"
+                               title="Delete" aria-label="@($"Delete {file.Title}")" />
+            </MudTd>
+        }
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+            <MudIcon Icon="@(IsSearching ? Icons.Material.Filled.SearchOff : Icons.Material.Filled.FolderOpen)" Size="Size.Large" Color="Color.Secondary" />
+            @if (IsSearching)
+            {
+                <MudText>No files or folders match '@_search'.</MudText>
+            }
+            else
+            {
+                <MudText>@(CurrentFolder is null ? "The knowledge base is empty." : "This folder is empty.") Upload a file or create a folder.</MudText>
+            }
+        </MudStack>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    /// <summary>A folder, a file, or the header of a group (the global files, or the repository's folders and files) in the table.</summary>
+    private sealed record Row(KnowledgeFolder? Folder, KnowledgeFile? File, FileGroup? Group = null);
+
+    /// <summary>The header of a group: the global files come first, the repository's folders and files below them.</summary>
+    private sealed record FileGroup(string Title, string Description, string Icon, string Summary);
+
+    private KnowledgeLibrary _library = KnowledgeLibrary.Empty;
+    private List<BreadcrumbItem> _breadcrumbs = [];
+    private bool _loading = true;
+    private string? _error;
+    private string? _search;
+
+    [SupplyParameterFromQuery(Name = "folder")] public Guid? FolderId { get; set; }
+
+    private KnowledgeFolder? CurrentFolder => _library.FindFolder(FolderId);
+
+    private bool IsSearching => !string.IsNullOrWhiteSpace(_search);
+
+    /// <summary>The selected repository, whose files are shown below the global ones; <c>null</c> shows the global files only.</summary>
+    private string? RepositoryName => Repository.Current?.FullName;
+
+    /// <summary>The folders first, then the global files and then the repository's files, each group under its own header.</summary>
+    private List<Row> Rows
+    {
+        get
+        {
+            // Folders belong to the repository (the library only has the selected repository's), and global files are never in one.
+            List<KnowledgeFile> globalFiles;
+            List<KnowledgeFolder> folders;
+            List<KnowledgeFile> repositoryFiles;
+            if (IsSearching)
+            {
+                var text = _search!.Trim();
+                globalFiles = _library.Files.Where(file => file.IsGlobal && Matches(file, text)).ToList();
+                folders = _library.Folders.Where(folder => folder.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                repositoryFiles = _library.Files.Where(file => !file.IsGlobal && Matches(file, text)).ToList();
+            }
+            else if (FolderId is not null && CurrentFolder is null)
+            {
+                // A missing folder shows nothing rather than the top of the library, so it's clear the link is broken.
+                return [];
+            }
+            else
+            {
+                // The global files are at the top of the library; inside a folder there are only the repository's.
+                globalFiles = FolderId is null ? _library.Files.Where(file => file.IsGlobal).ToList() : [];
+                folders = _library.Folders.Where(folder => folder.ParentId == FolderId).ToList();
+                repositoryFiles = _library.Files.Where(file => !file.IsGlobal && file.FolderId == FolderId).ToList();
+            }
+
+            var rows = new List<Row>();
+            if (globalFiles.Count > 0)
+            {
+                rows.Add(new Row(null, null, new FileGroup("Global", "Available in every repository", Icons.Material.Filled.Public, Summary(0, globalFiles.Count))));
+                rows.AddRange(globalFiles.Select(file => new Row(null, file)));
+            }
+            if (folders.Count + repositoryFiles.Count > 0)
+            {
+                rows.Add(new Row(null, null, new FileGroup(RepositoryName ?? "Repository", "Only in this repository", Icons.Custom.Brands.GitHub,
+                    Summary(folders.Count, repositoryFiles.Count))));
+                rows.AddRange(folders.Select(folder => new Row(folder, null)));
+                rows.AddRange(repositoryFiles.Select(file => new Row(null, file)));
+            }
+
+            return rows;
+        }
+    }
+
+    private static string Summary(int folders, int files)
+    {
+        var parts = new List<string>();
+        if (folders > 0)
+        {
+            parts.Add(folders == 1 ? "1 folder" : $"{folders} folders");
+        }
+        if (files > 0)
+        {
+            parts.Add(files == 1 ? "1 file" : $"{files} files");
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    // Opening another folder only changes the query string; the library is already loaded.
+    protected override void OnParametersSet()
+    {
+        UpdateBreadcrumbs();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _library = await Knowledge.GetLibraryAsync(RepositoryName);
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            _error = $"Could not load the knowledge base: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateBreadcrumbs();
+    }
+
+    private void UpdateBreadcrumbs()
+    {
+        var path = _library.PathOf(FolderId);
+        if (path.Count == 0)
+        {
+            _breadcrumbs = [];
+            return;
+        }
+
+        _breadcrumbs = [new("Knowledge base", KnowledgeBaseRoutes.FolderPath(null)), .. path[..^1].Select(folder => new BreadcrumbItem(folder.Name, KnowledgeBaseRoutes.FolderPath(folder.Id)))];
+    }
+
+    private static bool Matches(KnowledgeFile file, string text)
+    {
+        return file.Title.Contains(text, StringComparison.CurrentCultureIgnoreCase)
+               || file.Description.Contains(text, StringComparison.CurrentCultureIgnoreCase)
+               || file.FileName.Contains(text, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private string ContentsOf(Guid folderId)
+    {
+        var folders = _library.Folders.Count(folder => folder.ParentId == folderId);
+        var files = _library.Files.Count(file => file.FolderId == folderId);
+        var parts = new List<string>();
+        if (folders > 0)
+        {
+            parts.Add(folders == 1 ? "1 folder" : $"{folders} folders");
+        }
+        if (files > 0)
+        {
+            parts.Add(files == 1 ? "1 file" : $"{files} files");
+        }
+
+        return parts.Count == 0 ? "Empty" : string.Join(", ", parts);
+    }
+
+    private async Task UploadAsync()
+    {
+        var dialog = await Dialogs.ShowAsync<KnowledgeFileDialog>("Upload a file",
+            new DialogParameters<KnowledgeFileDialog>
+            {
+                { d => d.Library, _library },
+                { d => d.FolderId, CurrentFolder?.Id },
+                { d => d.RepositoryFullName, RepositoryName }
+            },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, BackdropClick = false });
+        if (await dialog.Result is { Canceled: false, Data: KnowledgeFile file })
+        {
+            Snackbar.Add($"Uploaded '{file.Title}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task EditFileAsync(KnowledgeFile file)
+    {
+        var dialog = await Dialogs.ShowAsync<KnowledgeFileDialog>($"Edit '{file.Title}'",
+            new DialogParameters<KnowledgeFileDialog>
+            {
+                { d => d.Library, _library },
+                { d => d.File, file },
+                { d => d.RepositoryFullName, RepositoryName }
+            },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, BackdropClick = false });
+        if (await dialog.Result is { Canceled: false, Data: KnowledgeFile saved })
+        {
+            Snackbar.Add($"Saved '{saved.Title}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteFileAsync(KnowledgeFile file)
+    {
+        var message = $"Delete '{file.Title}' ({file.FileName})? The file is removed from the storage, so links to it in work items and GitHub issues stop working.";
+        if (await Dialogs.ShowMessageBoxAsync("Delete file", message, yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await Knowledge.DeleteFileAsync(file.Id);
+            Snackbar.Add($"Deleted '{file.Title}'.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException
+                                       or Djohnnie.SoftwareFactory.Contracts.DomainRuleException)
+        {
+            Snackbar.Add($"Could not delete '{file.Title}': {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CopyLinkAsync(KnowledgeFile file)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", file.Url);
+            Snackbar.Add($"Copied the link to '{file.Title}'.", Severity.Success);
+        }
+        catch (JSException)
+        {
+            // E.g. the browser denies clipboard access.
+            Snackbar.Add($"Could not copy the link. It is {file.Url}", Severity.Warning);
+        }
+    }
+
+    private async Task NewFolderAsync()
+    {
+        await ShowFolderDialogAsync("New folder", new KnowledgeFolder { ParentId = CurrentFolder?.Id, RepositoryFullName = RepositoryName! });
+    }
+
+    private async Task EditFolderAsync(KnowledgeFolder folder)
+    {
+        await ShowFolderDialogAsync($"Rename or move '{folder.Name}'", folder);
+    }
+
+    private async Task ShowFolderDialogAsync(string title, KnowledgeFolder folder)
+    {
+        var dialog = await Dialogs.ShowAsync<KnowledgeFolderDialog>(title,
+            new DialogParameters<KnowledgeFolderDialog>
+            {
+                { d => d.Library, _library },
+                { d => d.Folder, folder }
+            },
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true });
+        if (await dialog.Result is { Canceled: false, Data: KnowledgeFolder saved })
+        {
+            Snackbar.Add(folder.Id == Guid.Empty ? $"Created the folder '{saved.Name}'." : $"Saved the folder '{saved.Name}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteFolderAsync(KnowledgeFolder folder)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete folder", $"Delete the folder '{folder.Name}'?", yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await Knowledge.DeleteFolderAsync(folder.RepositoryFullName, folder.Id);
+            Snackbar.Add($"Deleted the folder '{folder.Name}'.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException
+                                       or Djohnnie.SoftwareFactory.Contracts.DomainRuleException)
+        {
+            Snackbar.Add($"Could not delete '{folder.Name}': {ex.Message}", Severity.Error);
+        }
+    }
+}

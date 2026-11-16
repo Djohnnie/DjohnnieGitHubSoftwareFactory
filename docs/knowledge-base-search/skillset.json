@@ -1,0 +1,45 @@
+{
+  "name": "{{IndexName}}-skillset",
+  "description": "Splits every knowledge base file into overlapping passages and embeds them; each passage becomes a search document with the file id, scope and repository of its blob.",
+  "skills": [
+    {
+      "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+      "name": "split-into-passages",
+      "context": "/document",
+      "textSplitMode": "pages",
+      "maximumPageLength": 2000,
+      "pageOverlapLength": 200,
+      "inputs": [ { "name": "text", "source": "/document/content" } ],
+      "outputs": [ { "name": "textItems", "targetName": "pages" } ]
+    },
+    {
+      "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+      "name": "embed-passages",
+      "context": "/document/pages/*",
+      "resourceUri": "{{OpenAIEndpoint}}",
+      "deploymentId": "{{EmbeddingDeployment}}",
+      "apiKey": "{{OpenAIKey}}",
+      "modelName": "{{EmbeddingModel}}",
+      "dimensions": {{Dimensions}},
+      "inputs": [ { "name": "text", "source": "/document/pages/*" } ],
+      "outputs": [ { "name": "embedding", "targetName": "text_vector" } ]
+    }
+  ],
+  "indexProjections": {
+    "selectors": [
+      {
+        "targetIndexName": "{{IndexName}}",
+        "parentKeyFieldName": "parent_id",
+        "sourceContext": "/document/pages/*",
+        "mappings": [
+          { "name": "chunk", "source": "/document/pages/*" },
+          { "name": "text_vector", "source": "/document/pages/*/text_vector" },
+          { "name": "file_id", "source": "/document/metadata_storage_name" },
+          { "name": "scope", "source": "/document/scope" },
+          { "name": "repository", "source": "/document/repository" }
+        ]
+      }
+    ],
+    "parameters": { "projectionMode": "skipIndexingParentDocuments" }
+  }
+}

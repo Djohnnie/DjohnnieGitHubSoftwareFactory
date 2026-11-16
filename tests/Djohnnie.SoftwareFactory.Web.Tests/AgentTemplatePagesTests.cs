@@ -152,7 +152,7 @@ public class AgentTemplatePagesTests : BunitContext, IAsyncLifetime
         var navigation = cut.Find(".app-header > .mud-appbar + .desktop-only > nav[aria-label='Main navigation']");
         Assert.Equal(new[]
             {
-                "/", "/mindmaps", "/work-item-map", "/actions", "/copilot-instructions", "/skills", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
+                "/", "/mindmaps", "/work-item-map", "/knowledge-base", "/actions", "/copilot-instructions", "/skills", "/agents", "/epics", "/features", "/stories", "/bugs", "/tasks",
                 "/copilot-code-review", "/models", "/background-tasks", "/internal-agents", "/internal-models", "/sync-log",
                 "https://github.com/Djohnnie/DjohnnieGitHubSoftwareFactory"
             },

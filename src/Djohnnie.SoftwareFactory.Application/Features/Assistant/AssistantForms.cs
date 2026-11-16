@@ -3,6 +3,7 @@ using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Agents;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
+using Djohnnie.SoftwareFactory.Contracts.KnowledgeBase;
 using Djohnnie.SoftwareFactory.Contracts.Skills;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts.WorkItemTemplates;
@@ -30,12 +31,14 @@ public static class AssistantForms
 
     /// <summary>Tools for the work item form; the assignment tools are only included for stories, bugs and tasks.</summary>
     /// <param name="loadAncestors">Loads a parent and every item above it, closest first, for their technical details.</param>
+    /// <param name="searchKnowledgeBase">Searches the repository's and the global knowledge base files; <c>null</c> leaves the tool out.</param>
     public static AssistantTools ForWorkItem(
         Func<WorkItem> getItem, Func<WorkItemTemplate?> getSelectedTemplate, IReadOnlyList<AiModel> models,
         Func<CancellationToken, Task<List<AgentSummary>>> loadAgents, Func<Action, Task> onUi,
-        Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>> loadAncestors)
+        Func<Guid, CancellationToken, Task<IReadOnlyList<WorkItem>>> loadAncestors,
+        Func<string, CancellationToken, Task<IReadOnlyList<KnowledgeSearchResult>>>? searchKnowledgeBase = null)
     {
-        return new(new AgentInfrastructure.WorkItemFormTools(getItem, getSelectedTemplate, models, loadAgents, onUi, loadAncestors).AsTools());
+        return new(new AgentInfrastructure.WorkItemFormTools(getItem, getSelectedTemplate, models, loadAgents, onUi, loadAncestors, searchKnowledgeBase).AsTools());
     }
 
     /// <summary>

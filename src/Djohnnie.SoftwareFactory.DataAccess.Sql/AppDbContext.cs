@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentTemplate> AgentTemplates => Set<AgentTemplate>();
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<Mindmap> Mindmaps => Set<Mindmap>();
+    public DbSet<KnowledgeFolder> KnowledgeFolders => Set<KnowledgeFolder>();
+    public DbSet<KnowledgeFile> KnowledgeFiles => Set<KnowledgeFile>();
     public DbSet<WorkItemTemplate> WorkItemTemplates => Set<WorkItemTemplate>();
     public DbSet<InternalAgent> InternalAgents => Set<InternalAgent>();
     public DbSet<InternalModel> InternalModels => Set<InternalModel>();
@@ -49,6 +51,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureAgentTemplate()
             .ConfigureSkill()
             .ConfigureMindmap()
+            .ConfigureKnowledgeBase()
             .ConfigureAiModel()
             .ConfigureInternalAgent()
             .ConfigureAuthSession()
