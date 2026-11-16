@@ -20,6 +20,11 @@ h1:focus {
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
+/* Splits the horizontal navigation into the same groups as the mobile panel. */
+.app-navigation-horizontal .app-navigation-divider {
+    margin: 0.5rem 0.25rem;
+}
+
 .app-header .header-link,
 .app-drawer .header-link {
     text-transform: none;
