@@ -275,7 +275,9 @@ else if (_item is not null)
                         }
                         @if (_item.AssignedAt is { } assigned)
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Assigned to Copilot <TimeAgo At="assigned" /></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                                @(IsWorker ? "Handed to the DGHSF agent worker" : "Assigned to Copilot") <TimeAgo At="assigned" />
+                            </MudText>
                         }
                         @if (_item.Progress != CopilotProgress.None)
                         {
@@ -289,7 +291,9 @@ else if (_item is not null)
                         @if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
                         {
                             <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
-                                The issue exists but is not assigned to Copilot yet. Check the assignment and try again.
+                                @(IsWorker
+                                    ? "The issue exists but the DGHSF agent worker has no run for it. Check the assignment and try again."
+                                    : "The issue exists but is not assigned to Copilot yet. Check the assignment and try again.")
                             </MudAlert>
                         }
                         @if (!_type.CanBeAssigned)
@@ -366,8 +370,17 @@ else if (_item is not null)
                         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                             <MudText Typo="Typo.h6">Assignment</MudText>
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                                On accept, the issue is assigned to the Copilot cloud agent with these settings.
+                                @(IsWorker
+                                    ? "On accept, the DGHSF agent worker implements the issue with these settings and opens the pull request."
+                                    : "On accept, the issue is assigned to the Copilot cloud agent with these settings.")
                             </MudText>
+                            <MudSelect T="AgentExecutor" Variant="Variant.Outlined" @bind-Value="_item.Executor" Label="Runs on" ReadOnly="!_item.CanEditAssignment"
+                                       HelperText="@_item.Executor.Description" AnchorOrigin="Origin.BottomCenter" aria-label="Runs on">
+                                @foreach (var executor in AgentExecutors.All)
+                                {
+                                    <MudSelectItem T="AgentExecutor" Value="executor">@executor.DisplayName</MudSelectItem>
+                                }
+                            </MudSelect>
                             <AgentPicker @bind-Value="_item.CustomAgent" ReadOnly="!_item.CanEditAssignment"
                                          HelperText="A custom agent from .github/agents, or the default Copilot agent." />
                             <ModelPicker @bind-Value="_item.Model" ReadOnly="!_item.CanEditAssignment" DefaultText="Auto (Copilot picks the model)"
@@ -402,6 +415,12 @@ else if (_item is not null)
                                           Lines="3" MaxLength="10000"
                                           HelperText="Extra guidance for Copilot on top of the issue." />
                         </MudPaper>
+                    }
+
+                    @if (IsWorker && _item.HasIssue)
+                    {
+                        <AgentRunsPanel @ref="_agentRuns" RepositoryFullName="@RepositoryName" WorkItemId="_item.Id"
+                                        CanStart="@(_item.Status == WorkItemStatus.InProgress)" Changed="RefreshAsync" />
                     }
                 </MudStack>
             </MudItem>
@@ -1203,6 +1222,17 @@ else if (_item is not null)
         }
     }
 
+    private AgentRunsPanel? _agentRuns;
+
+    /// <summary>Whether the item's agent is the DGHSF agent worker instead of the Copilot cloud agent.</summary>
+    private bool IsWorker
+    {
+        get
+        {
+            return _type.CanBeAssigned && _item?.Executor == AgentExecutor.DghsfWorker;
+        }
+    }
+
     private async Task AssignAsync()
     {
         _busy = true;
@@ -1254,6 +1284,7 @@ else if (_item is not null)
             _item = result.WorkItem;
             if (_item.CanEditAssignment)
             {
+                _item.Executor = form.Executor;
                 _item.CustomAgent = form.CustomAgent;
                 _item.Model = form.Model;
                 _item.BaseBranch = form.BaseBranch;
@@ -1261,6 +1292,10 @@ else if (_item is not null)
             }
             WorkItemActions.Report(Snackbar, result);
             ScheduleModelSuggestion();
+            if (_agentRuns is not null)
+            {
+                await _agentRuns.ReloadAsync();
+            }
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {

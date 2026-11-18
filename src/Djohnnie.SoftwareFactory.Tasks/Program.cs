@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.Services.AddSoftwareFactory(builder.Configuration);
+builder.Services.AddSingleton<AgentRunQueueSender>();
 builder.Services.AddSingleton<IGitHubTokenProvider>(sp => new ConfiguredGitHubTokenProvider(sp.GetRequiredService<IOptions<GitHubTasksOptions>>().Value.TasksToken));
 builder.Services.AddOptions<GitHubTasksOptions>()
     .Bind(builder.Configuration.GetSection(GitHubTasksOptions.SectionName))

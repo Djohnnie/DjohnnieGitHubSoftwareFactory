@@ -30,6 +30,40 @@ internal static class ContractMapping
         }
     }
 
+    extension(Entities.AgentRun value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.AgentRuns.AgentRun ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                WorkItemId = value.WorkItemId,
+                RepositoryFullName = value.RepositoryFullName,
+                Status = value.Status,
+                Attempts = value.Attempts,
+                MaxAttempts = value.MaxAttempts,
+                RequestedModel = value.RequestedModel,
+                Models = value.Models,
+                Branch = value.Branch,
+                PullRequestNumber = value.PullRequestNumber,
+                PullRequestUrl = value.PullRequestUrl,
+                Summary = value.Summary,
+                Error = value.Error,
+                NanoAiu = value.NanoAiu,
+                UsageComplete = value.UsageComplete,
+                PremiumRequests = value.PremiumRequests,
+                InputTokens = value.InputTokens,
+                OutputTokens = value.OutputTokens,
+                CacheReadTokens = value.CacheReadTokens,
+                CacheWriteTokens = value.CacheWriteTokens,
+                CreatedAt = value.CreatedAt,
+                QueuedAt = value.QueuedAt,
+                StartedAt = value.StartedAt,
+                CompletedAt = value.CompletedAt
+            };
+        }
+    }
+
     extension(Entities.SyncLogEvent value)
     {
         public Djohnnie.SoftwareFactory.Contracts.SyncLog.SyncLogEvent ToContract()
@@ -134,6 +168,7 @@ internal static class ContractMapping
                 Description = value.Description,
                 TechnicalDetails = value.TechnicalDetails,
                 Status = value.Status,
+                Executor = value.Executor,
                 CustomAgent = value.CustomAgent,
                 Model = value.Model,
                 BaseBranch = value.BaseBranch,

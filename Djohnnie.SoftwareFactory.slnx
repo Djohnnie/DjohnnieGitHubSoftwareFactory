@@ -7,6 +7,7 @@
     <Project Path="src/Djohnnie.SoftwareFactory.Sync/Djohnnie.SoftwareFactory.Sync.csproj" />
     <Project Path="src/Djohnnie.SoftwareFactory.Tasks/Djohnnie.SoftwareFactory.Tasks.csproj" />
     <Project Path="src/Djohnnie.SoftwareFactory.Web/Djohnnie.SoftwareFactory.Web.csproj" />
+    <Project Path="src/Djohnnie.SoftwareFactory.Worker/Djohnnie.SoftwareFactory.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Djohnnie.SoftwareFactory.Web.Tests/Djohnnie.SoftwareFactory.Web.Tests.csproj" />

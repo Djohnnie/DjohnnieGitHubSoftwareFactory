@@ -8,6 +8,7 @@ DGHSF is a personal software factory for GitHub: a single-user web app to plan w
 
 - **Plan work items** per repository: epics, features, user stories, bugs and tasks, with templates per type.
 - **Accept** an item to create a labelled GitHub issue, linked to its parent and children as sub-issues. Stories, bugs and tasks are then assigned to the Copilot cloud agent, optionally with a custom agent, model, base branch and extra instructions.
+- **Or run the agent yourself**: an item that runs on the DGHSF agent worker is implemented by a container job with the GitHub Copilot SDK. The job clones the repository, lets the agent work on a new branch, opens the pull request, and records the AI credits and tokens of every run.
 - **Manage custom agents** (`.github/agents/*.agent.md`) and the repository's `.github/copilot-instructions.md`, and share agent templates across repositories.
 - **DGHSF Agent** chats on every editor (including the Copilot Skills Agent on the skill editor) help fill in the form. Background agents suggest a model per item and write suggestion chips. Their prompts are editable on the internal agents page.
 - **Chat** about the whole project: the DGHSF Agent on `/chat` answers questions about the selected repository from everything DGHSF stores about it, the repository's files and (with the GitHub MCP server) its GitHub activity. Conversations are kept per repository in a history list and named in two words; every 10 messages a summary replaces the older messages in what the agent gets, while the chat keeps showing them all.
@@ -25,7 +26,8 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 | --- | --- |
 | `Djohnnie.SoftwareFactory.Web` | Blazor UI, GitHub sign-in, the selected repository |
 | `Djohnnie.SoftwareFactory.Sync` | Azure Function that refreshes accepted work items from GitHub on a CRON schedule |
-| `Djohnnie.SoftwareFactory.Tasks` | Azure Function that runs the background tasks in SQL: a timer dispatcher queues them on Azure Service Bus, a queue-triggered executor runs them |
+| `Djohnnie.SoftwareFactory.Tasks` | Azure Function that runs the background tasks in SQL: a timer dispatcher queues them on Azure Service Bus, a queue-triggered executor runs them. It also queues the agent worker's runs |
+| `Djohnnie.SoftwareFactory.Worker` | Console app for an event-driven Azure Container Apps job: takes one agent run from Service Bus and runs it with the GitHub Copilot SDK |
 | `Djohnnie.SoftwareFactory.Application` | MediatR commands and queries per feature, validation, GitHub API client, workflows |
 | `Djohnnie.SoftwareFactory.DataAccess.Sql` | EF Core entities, stores, migrations |
 | `Djohnnie.SoftwareFactory.Agents` | DGHSF's internal agents and their form tools |
@@ -134,6 +136,29 @@ Then run `func start --port 7072` in that directory, so it can run next to the s
 
 `RepositorySnapshots__ConnectionString` is optional. With it, a run downloads the repository once as an archive into the private `repository-snapshots` blob container (Azurite locally), and all its tasks read their files from there. Without it, every task reads from the GitHub API.
 
+### The agent worker
+
+`Djohnnie.SoftwareFactory.Worker` runs one agent run per start and then exits; in Azure a Container Apps job starts it for every message on the `agent-runs` queue. It needs git on the `PATH` and a GitHub Copilot plan; the build downloads the Copilot runtime it starts. To try it locally, set `AgentRuns__QueueName` in the tasks function (so it queues the runs) and create `src/Djohnnie.SoftwareFactory.Worker/appsettings.Development.json`, which is gitignored:
+
+```json
+{
+  "ConnectionStrings": {
+    "Database": "Server=(localdb)\\MSSQLLocalDB;Database=DGHSF;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "ServiceBus": "<Service Bus connection string>",
+  "AgentRuns": {
+    "QueueName": "agent-runs"
+  },
+  "AgentWorker": {
+    "GitHubToken": "<fine-grained token: contents and pull requests read and write, issues read>",
+    "CopilotToken": "<optional: fine-grained token with the Copilot Requests permission; defaults to GitHubToken>",
+    "MaxAiCreditsPerRun": 500
+  }
+}
+```
+
+Then accept a story, bug or task with **Runs on** set to *DGHSF agent worker* and run `dotnet run --project src/Djohnnie.SoftwareFactory.Worker --environment Development` once it is queued. The agent may run any command on your machine, so prefer the container image (`src/Djohnnie.SoftwareFactory.Worker/Dockerfile`).
+
 ## Tests
 
 ```shell
@@ -148,4 +173,4 @@ Most tests use bUnit and the EF Core InMemory provider. `SqlServerStoreTests` ru
 
 ## Deployment
 
-Every push to `main` builds, tests, migrates Azure SQL and deploys to Azure App Service and Azure Functions. See [`docs/azure-deployment.md`](docs/azure-deployment.md).
+Every push to `main` builds, tests, migrates Azure SQL and deploys to Azure App Service and Azure Functions, and (once it is set up) the agent worker's image to its Azure Container Apps job. See [`docs/azure-deployment.md`](docs/azure-deployment.md).

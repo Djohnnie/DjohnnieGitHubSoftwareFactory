@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
@@ -35,6 +36,37 @@ public static class CopilotProgressEvaluator
             _ => OpenProgress(pullRequest, run)
         };
         return new(progress, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), run?.HtmlUrl, pullRequest.HeadRefName);
+    }
+
+    /// <summary>
+    /// How far the DGHSF agent worker got: its latest run while that hasn't succeeded, then the pull request it opened. A
+    /// merged or closed pull request wins over a run that ended, and a run that succeeded shows its own pull request until
+    /// GitHub links it to the issue.
+    /// </summary>
+    /// <param name="run">The item's latest run that wasn't cancelled, or <c>null</c> when it has none.</param>
+    public static WorkItemProgressSnapshot EvaluateWorker(bool issueClosed, AgentRun? run, GitHubLinkedPullRequest? pullRequest)
+    {
+        if (run is null || (pullRequest is { IsOpen: false } && !run.IsActive))
+        {
+            return Evaluate(issueClosed, assignedToCopilot: false, pullRequest, run: null);
+        }
+
+        CopilotProgress? progress = run.Status switch
+        {
+            AgentRunStatus.Pending or AgentRunStatus.Queued => CopilotProgress.Queued,
+            AgentRunStatus.Running => CopilotProgress.Working,
+            AgentRunStatus.Failed => CopilotProgress.Stopped,
+            _ => null
+        };
+        if (progress is { } working)
+        {
+            return pullRequest is null
+                ? new(working)
+                : new(working, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), null, pullRequest.HeadRefName);
+        }
+        return pullRequest is null
+            ? new(CopilotProgress.ReadyForReview, run.PullRequestNumber, run.PullRequestUrl, PullRequestChecks.None, null, run.Branch)
+            : Evaluate(issueClosed, assignedToCopilot: true, pullRequest, run: null);
     }
 
     private static CopilotProgress OpenProgress(GitHubLinkedPullRequest pullRequest, GitHubWorkflowRun? run)

@@ -48,6 +48,13 @@ public sealed record AssignRequest(
 
 public sealed record AddSubIssueRequest([property: JsonPropertyName("sub_issue_id")] long SubIssueId);
 
+public sealed record CreatePullRequestRequest(
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("head")] string Head,
+    [property: JsonPropertyName("base")] string Base,
+    [property: JsonPropertyName("body")] string Body,
+    [property: JsonPropertyName("draft")] bool Draft);
+
 /// <summary>A Copilot usage metrics report: signed links to its NDJSON files.</summary>
 public sealed record MetricsReportResponse(
     [property: JsonPropertyName("download_links")] IReadOnlyList<string>? DownloadLinks);

@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Djohnnie.SoftwareFactory.Web\Djohnnie.SoftwareFactory.Web.csproj" />
+    <ProjectReference Include="..\..\src\Djohnnie.SoftwareFactory.Worker\Djohnnie.SoftwareFactory.Worker.csproj" />
   </ItemGroup>
 
 </Project>

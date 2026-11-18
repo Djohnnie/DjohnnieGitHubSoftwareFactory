@@ -1,0 +1,220 @@
+@using Djohnnie.SoftwareFactory.Application.Features.AgentRuns
+@using Djohnnie.SoftwareFactory.Contracts.AgentRuns
+@using Djohnnie.SoftwareFactory.Web.Components.Pages
+@inject AgentRunService AgentRuns
+@inject ISnackbar Snackbar
+
+@* The DGHSF agent worker's runs of one work item, newest first, with what each one cost. *@
+<MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Agent worker runs">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+        <MudText Typo="Typo.h6">Agent worker runs</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Reload the runs">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadAsync" Disabled="_busy" aria-label="Reload the runs" />
+        </MudTooltip>
+    </MudStack>
+
+    @if (_runs is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        @if (_runs.Count > 0)
+        {
+            <MudText Typo="Typo.body2" Class="mb-2" aria-label="Total cost">
+                @_runs.Count @(_runs.Count == 1 ? "run" : "runs") · @AiModel.FormatCredits(TotalCredits)@(_runs.Any(r => r.NanoAiu is not null && !r.UsageComplete) ? " (at least)" : null)
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">No runs yet.</MudText>
+        }
+
+        <MudStack Spacing="2">
+            @foreach (var run in _runs)
+            {
+                <div class="agent-run" @key="run.Id">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@ColorOf(run.Status)" Icon="@IconOf(run.Status)">@run.Status.DisplayName</MudChip>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary"><TimeAgo At="@(run.StartedAt ?? run.CreatedAt)" /></MudText>
+                        @if (run.Duration is { } duration)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">· @FormatDuration(duration)</MudText>
+                        }
+                        @if (run.PullRequestNumber is { } number)
+                        {
+                            <MudLink Href="@run.PullRequestUrl" Target="_blank" Typo="Typo.caption">#@number</MudLink>
+                        }
+                    </MudStack>
+                    @if (run.AiCredits is { } credits)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block" title="@TokenDetails(run)">
+                            @AiModel.FormatCredits(credits)@(run.UsageComplete ? null : " (at least)")
+                            @if (run.Models is not null)
+                            {
+                                <span> · @run.Models</span>
+                            }
+                        </MudText>
+                    }
+                    else if (run.RequestedModel is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@run.RequestedModel</MudText>
+                    }
+                    @if (run.Error is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="@(run.Status == AgentRunStatus.Succeeded ? Color.Warning : Color.Error)" Class="d-block agent-run-error">@run.Error</MudText>
+                    }
+                    @if (run.IsActive)
+                    {
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Stop"
+                                   OnClick="() => CancelAsync(run)" Disabled="_busy">Cancel run</MudButton>
+                    }
+                </div>
+            }
+        </MudStack>
+
+        @if (CanStart && !_runs.Any(r => r.IsActive))
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Replay" Class="mt-2"
+                       OnClick="StartAsync" Disabled="_busy">Run again</MudButton>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public string RepositoryFullName { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Guid WorkItemId { get; set; }
+
+    /// <summary>Whether another run can be started (the item is in progress).</summary>
+    [Parameter]
+    public bool CanStart { get; set; }
+
+    /// <summary>Called after a run was started or cancelled, so the page can refresh the item.</summary>
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+    private IReadOnlyList<AgentRun>? _runs;
+    private bool _busy;
+
+    private decimal TotalCredits
+    {
+        get
+        {
+            return _runs?.Sum(r => r.AiCredits ?? 0) ?? 0;
+        }
+    }
+
+    private (string, Guid)? _loaded;
+
+    /// <summary>Loads once per work item; the page re-renders the panel often (the callback counts as a changed parameter).</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded != (RepositoryFullName, WorkItemId))
+        {
+            _loaded = (RepositoryFullName, WorkItemId);
+            await LoadAsync();
+        }
+    }
+
+    /// <summary>Reads the runs again, e.g. after the page refreshed the item.</summary>
+    public async Task ReloadAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _runs = await AgentRuns.GetRunsAsync(RepositoryFullName, WorkItemId);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _runs ??= [];
+            Snackbar.Add($"Could not load the agent worker's runs: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        _busy = true;
+        try
+        {
+            await AgentRuns.StartRunAsync(RepositoryFullName, WorkItemId);
+            Snackbar.Add("The agent worker will start a new run shortly.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not start a run: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CancelAsync(AgentRun run)
+    {
+        _busy = true;
+        try
+        {
+            await AgentRuns.CancelRunAsync(RepositoryFullName, run.Id);
+            Snackbar.Add("Cancelled the run. A worker that is running it stops within a few minutes and pushes nothing.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not cancel the run: {ex.Message}", Severity.Error);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public static Color ColorOf(AgentRunStatus status)
+    {
+        return status switch
+        {
+            AgentRunStatus.Succeeded => Color.Success,
+            AgentRunStatus.Failed => Color.Error,
+            AgentRunStatus.Running => Color.Info,
+            AgentRunStatus.Cancelled => Color.Default,
+            _ => Color.Secondary
+        };
+    }
+
+    private static string IconOf(AgentRunStatus status)
+    {
+        return status switch
+        {
+            AgentRunStatus.Succeeded => Icons.Material.Filled.CheckCircle,
+            AgentRunStatus.Failed => Icons.Material.Filled.Error,
+            AgentRunStatus.Running => Icons.Material.Filled.SmartToy,
+            AgentRunStatus.Cancelled => Icons.Material.Filled.Block,
+            _ => Icons.Material.Filled.Schedule
+        };
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 1 ? $"{(int)duration.TotalHours} h {duration.Minutes} min"
+            : duration.TotalMinutes >= 1 ? $"{(int)duration.TotalMinutes} min"
+            : $"{duration.Seconds} s";
+    }
+
+    private static string TokenDetails(AgentRun run)
+    {
+        var premium = run.PremiumRequests is { } requests ? $", {requests:#,0.##} premium requests" : string.Empty;
+        return $"{run.InputTokens:#,0} input, {run.OutputTokens:#,0} output, {run.CacheReadTokens:#,0} cached, {run.CacheWriteTokens:#,0} cache write tokens{premium}";
+    }
+}

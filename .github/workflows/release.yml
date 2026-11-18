@@ -18,6 +18,8 @@ env:
   SYNC_FUNCTION_APP: softwarefactory-sync
   TASKS_PROJECT: src/Djohnnie.SoftwareFactory.Tasks/Djohnnie.SoftwareFactory.Tasks.csproj
   TASKS_FUNCTION_APP: softwarefactory-tasks
+  WORKER_DOCKERFILE: src/Djohnnie.SoftwareFactory.Worker/Dockerfile
+  WORKER_IMAGE: dghsf-agent-worker
   DATA_PROJECT: src/Djohnnie.SoftwareFactory.DataAccess.Sql
   TEST_PROJECT: tests/Djohnnie.SoftwareFactory.Web.Tests/Djohnnie.SoftwareFactory.Web.Tests.csproj
   # The EF design-time factory requires a connection string; build-time EF commands never connect to it.
@@ -118,7 +120,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
-    name: Migrate database and deploy web and function apps
+    name: Migrate database and deploy web, function apps and agent worker
     needs: build
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -208,3 +210,53 @@ jobs:
           app-name: ${{ env.TASKS_FUNCTION_APP }}
           package: tasks
           sku: flexconsumption
+
+      # The agent worker is optional: its image is built and pushed once the AZURE_CONTAINER_REGISTRY variable exists,
+      # and the Container Apps job is updated once AZURE_WORKER_JOB_NAME exists too (see docs/azure-deployment.md).
+      # The registry's admin account signs in (ACR_USERNAME and ACR_PASSWORD secrets).
+      - name: Check out the source for the agent worker image
+        if: vars.AZURE_CONTAINER_REGISTRY != ''
+        uses: actions/checkout@v5
+        with:
+          path: source
+
+      - name: Resolve the registry's login server
+        id: registry
+        if: vars.AZURE_CONTAINER_REGISTRY != ''
+        run: |
+          # Accept the registry name ("myregistry") as well as its login server ("myregistry.azurecr.io").
+          server="${{ vars.AZURE_CONTAINER_REGISTRY }}"
+          [[ "$server" == *.* ]] || server="$server.azurecr.io"
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "image=$server/${{ env.WORKER_IMAGE }}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to the container registry
+        if: vars.AZURE_CONTAINER_REGISTRY != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.registry.outputs.server }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - uses: docker/setup-buildx-action@v3
+        if: vars.AZURE_CONTAINER_REGISTRY != ''
+
+      - name: Build and push agent worker image
+        if: vars.AZURE_CONTAINER_REGISTRY != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: source
+          file: source/${{ env.WORKER_DOCKERFILE }}
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.image }}:${{ github.sha }}
+            ${{ steps.registry.outputs.image }}:latest
+
+      - name: Deploy agent worker job
+        if: vars.AZURE_CONTAINER_REGISTRY != '' && vars.AZURE_WORKER_JOB_NAME != ''
+        run: |
+          az containerapp job update \
+            --name "${{ vars.AZURE_WORKER_JOB_NAME }}" \
+            --resource-group "${{ vars.AZURE_WORKER_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ steps.registry.outputs.image }}:${{ github.sha }}" \
+            --output none

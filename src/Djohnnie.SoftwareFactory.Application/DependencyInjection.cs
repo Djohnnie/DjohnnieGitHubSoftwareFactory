@@ -1,5 +1,6 @@
 using Djohnnie.SoftwareFactory.Agents;
 using Djohnnie.SoftwareFactory.Application.Common;
+using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.AgentTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.AiModels;
@@ -63,12 +64,16 @@ public static class DependencyInjection
             services.TryAddSingleton<IRepositorySnapshotStorage, AzureBlobRepositorySnapshotStorage>();
             services.AddScoped<ITodoTaskHandler, AnalyzeRepositoryHandler>();
             services.AddScoped<ITodoTaskHandler, WriteFeatureWorkItemsHandler>();
+            services.AddScoped<AgentRunService>();
+            services.AddScoped<AgentRunDispatcher>();
             var todoTasks = services.AddOptions<TodoTaskOptions>();
             var snapshots = services.AddOptions<RepositorySnapshotOptions>();
+            var agentRuns = services.AddOptions<AgentRunOptions>();
             if (configuration is not null)
             {
                 todoTasks.Bind(configuration.GetSection(TodoTaskOptions.SectionName));
                 snapshots.Bind(configuration.GetSection(RepositorySnapshotOptions.SectionName));
+                agentRuns.Bind(configuration.GetSection(AgentRunOptions.SectionName));
             }
             services.AddScoped<AgentTemplateService>();
             services.AddScoped<SkillService>();

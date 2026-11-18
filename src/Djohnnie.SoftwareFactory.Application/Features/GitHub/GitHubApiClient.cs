@@ -441,6 +441,17 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         return (parts[0], parts[1]);
     }
 
+    /// <summary>Opens a pull request from <paramref name="head"/> (a branch of the same repository) into <paramref name="baseBranch"/>.</summary>
+    public async Task<GitHubPullRequestDetails> CreatePullRequestAsync(string repositoryFullName, string title, string head, string baseBranch, string body,
+        bool draft, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls",
+            JsonContent.Create(new Api.CreatePullRequestRequest(title, head, baseBranch, body, draft)), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<GitHubPullRequestDetails>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
     public async Task<GitHubPullRequestDetails> GetPullRequestAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}/pulls/{number}", null, cancellationToken);

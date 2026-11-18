@@ -9,6 +9,7 @@ The `Build and release` workflow (`.github/workflows/release.yml`) builds, tests
 5. Deploys the published web app to Azure App Service.
 6. Deploys the sync function app to the Function App `softwarefactory-sync`.
 7. Deploys the tasks function app to the Function App `softwarefactory-tasks`.
+8. When the agent worker is set up (the `AZURE_CONTAINER_REGISTRY` variable), builds its Docker image on the runner and pushes it to Azure Container Registry. With the `AZURE_WORKER_JOB_NAME` variable, it also updates the Container Apps job to that image. See [Agent worker](#agent-worker-container-apps-job).
 
 The deployment is skipped when migrations fail.
 
@@ -124,6 +125,113 @@ Configure these app settings on the Function App:
 | `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
 
 `host.json` runs at most 4 tasks at a time per instance (`maxConcurrentCalls`), which keeps a run within the model's and GitHub's rate limits. Each feature of a run costs a few model calls with the repository outline and the files the agent reads, so a run's token spend grows with the number of features. Limit it with the folder and the maximum number of features when you start the run.
+
+The function app also has **AgentRunDispatch** (timer, on `TodoTaskDispatchSchedule`), which puts the runs of the [agent worker](#agent-worker-container-apps-job) on their own queue. It does nothing until `AgentRuns__QueueName` is set:
+
+| Setting | Notes |
+| --- | --- |
+| `AgentRuns__QueueName` | Optional; the agent worker's queue, e.g. `agent-runs`. Uses the same `ServiceBus` connection; with a managed identity, also give it **Azure Service Bus Data Sender** on this queue |
+| `AgentRuns__QueuedTimeout`, `AgentRuns__Lease`, `AgentRuns__MaxAttempts` | Optional; default `00:15:00`, `00:10:00` and 2. Use the same values on the worker job |
+
+## Agent worker (Container Apps job)
+
+Stories, bugs and tasks can run on the **DGHSF agent worker** instead of the Copilot cloud agent ("Runs on" in the work item's assignment). Then accepting the item doesn't assign Copilot on GitHub. DGHSF stores an *agent run* in the `AgentRuns` table, and a container job runs the agent with the [GitHub Copilot SDK](https://github.com/github/copilot-sdk):
+
+1. The Tasks function app's **AgentRunDispatch** moves pending runs to the `agent-runs` Service Bus queue. Only the run's id travels; SQL is the source of truth.
+2. The queue's length scales an **event-driven Azure Container Apps job** (KEDA `azure-servicebus` scaler). Every execution takes one message, starts that run with a lease and completes the message right away: an agent works far longer than a Service Bus lock lasts. It renews the lease every few minutes while the agent works.
+3. The execution clones the base branch (shallow), creates the branch `dghsf/<issue>-<title>-<run>`, and runs one Copilot session in the clone. Every tool is approved, because the container is the sandbox.
+4. It commits whatever the agent changed, pushes the branch, opens a pull request with the agent's summary and `Closes #<issue>`, and stores the session's **AI credits** and token counts with the run. The work item page lists every run with its cost.
+
+A run that fails before the agent starts (for example the clone) is retried once. After the agent ran, it isn't, because a retry would pay for the agent again: use **Run again** on the work item. When the agent hits the credit limit or the time limit, its work is pushed as a draft pull request. **Cancel run** stops the agent at its next lease renewal and pushes nothing. When an execution dies (its replica timeout, a crash), the dispatcher takes the run back once its lease has ended.
+
+The sync and the Refresh button follow these items through their run (queued, working, stopped) and then through the pull request, like Copilot's.
+
+### Resources
+
+```powershell
+# The queue (the Basic tier is enough; keep the default lock duration and max delivery count).
+az servicebus queue create -g <rg> --namespace-name <namespace> -n agent-runs
+
+# A registry with the admin account (CI pushes with it, the job pulls with it), and a Container Apps environment.
+az acr create -g <rg> -n <registry> --sku Basic --admin-enabled true
+az acr credential show -n <registry> --query "{username:username, password:passwords[0].value}"
+az containerapp env create -g <rg> -n dghsf-env -l westeurope
+
+# The first image; later the release workflow builds and pushes it. (Or run the workflow once before creating the job,
+# and use the :latest tag it pushes.)
+az acr build -r <registry> -t dghsf-agent-worker:initial -f src/Djohnnie.SoftwareFactory.Worker/Dockerfile .
+
+az containerapp job create -g <rg> -n dghsf-agent-worker --environment dghsf-env `
+    --trigger-type Event --replica-timeout 5400 --replica-retry-limit 0 --replica-completion-count 1 --parallelism 1 `
+    --min-executions 0 --max-executions 4 --polling-interval 30 `
+    --scale-rule-name agent-runs --scale-rule-type azure-servicebus `
+    --scale-rule-metadata "queueName=agent-runs" "namespace=<namespace>" "messageCount=1" `
+    --scale-rule-auth "connection=service-bus" `
+    --image <registry>.azurecr.io/dghsf-agent-worker:initial `
+    --registry-server <registry>.azurecr.io --registry-username <admin username> --registry-password <admin password> `
+    --cpu 2 --memory 4Gi `
+    --secrets "service-bus=<Service Bus connection string>" "database=<SQL connection string>" `
+              "github-token=<repository token>" "copilot-token=<Copilot token>" `
+    --env-vars "ServiceBus=secretref:service-bus" "ConnectionStrings__Database=secretref:database" `
+               "AgentWorker__GitHubToken=secretref:github-token" "AgentWorker__CopilotToken=secretref:copilot-token" `
+               "AgentRuns__QueueName=agent-runs" "AgentWorker__RunTimeout=01:15:00" "AgentWorker__MaxAiCreditsPerRun=1000"
+```
+
+- `--registry-username` and `--registry-password` let the job pull with the registry's admin account (stored as a secret of the job). Without the admin account, use `--registry-identity system` instead: the job then pulls with its own identity.
+- Keep `--replica-timeout` (seconds) well above `AgentWorker__RunTimeout`. The worker then still has time to push a draft when the agent runs out of time.
+- `--max-executions` is how many agents work at the same time.
+- To use a managed identity for Service Bus instead of a connection string, set `ServiceBus__fullyQualifiedNamespace` (plus `ServiceBus__clientId` for a user-assigned identity). Give the identity **Azure Service Bus Data Receiver** on the queue, and use `--scale-rule-identity` instead of `--scale-rule-auth`.
+- The database must accept connections from the environment's outbound IP addresses.
+
+Then add these to the `production` environment of the repository (**Settings > Environments > production**). The release workflow then builds the image on the runner, pushes it as `dghsf-agent-worker:<commit sha>` and `:latest` with the registry's admin account, and updates the job after every deployment:
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `AZURE_CONTAINER_REGISTRY` | variable | The registry's login server, e.g. `myregistry.azurecr.io` (the name alone works too). Without it, no image is built |
+| `ACR_USERNAME` | secret | The admin username (**Access keys** of the registry, or `az acr credential show`) |
+| `ACR_PASSWORD` | secret | One of the two admin passwords |
+| `AZURE_WORKER_JOB_NAME` | variable | Optional; the job, e.g. `dghsf-agent-worker`. Without it, the image is pushed but no job is updated |
+| `AZURE_WORKER_RESOURCE_GROUP` | variable | Optional; the job's resource group when it isn't `AZURE_RESOURCE_GROUP` |
+
+Or with the GitHub CLI:
+
+```powershell
+gh variable set AZURE_CONTAINER_REGISTRY --env production --body "<registry>.azurecr.io"
+gh secret set ACR_USERNAME --env production --body "<admin username>"
+gh secret set ACR_PASSWORD --env production   # prompts, so the password stays out of your shell history
+gh variable set AZURE_WORKER_JOB_NAME --env production --body "dghsf-agent-worker"
+```
+
+Pushing needs no Azure role. Updating the job does: give the workflow's app registration **Contributor** on the job:
+
+```powershell
+az role assignment create --assignee <AZURE_CLIENT_ID> --role Contributor --scope $(az containerapp job show -g <rg> -n dghsf-agent-worker --query id -o tsv)
+```
+
+When you regenerate an admin password, update `ACR_PASSWORD` and the job's registry password (`az containerapp job registry set -g <rg> -n dghsf-agent-worker --server <registry>.azurecr.io --username <admin username> --password <new password>`).
+
+### Settings
+
+| Setting | Notes |
+| --- | --- |
+| `ServiceBus` | The Service Bus connection string (or `ServiceBus__fullyQualifiedNamespace`, see above) |
+| `AgentRuns__QueueName` | The queue, e.g. `agent-runs` |
+| `ConnectionStrings__Database` | The same database as the Web App. The worker reads work items and writes runs but doesn't migrate |
+| `AgentWorker__GitHubToken` | The token the worker clones, pushes, opens pull requests and refreshes work items with: a fine-grained token with read and write access to **Contents** and **Pull requests** and read access to **Issues** of the repositories |
+| `AgentWorker__CopilotToken` | Optional; the token the Copilot SDK runs with, whose Copilot plan pays the AI credits: a fine-grained token with the account permission **Copilot Requests** (classic `ghp_` tokens aren't accepted). Without it, `AgentWorker__GitHubToken` is used, which then needs that permission too |
+| `AgentWorker__MaxAiCreditsPerRun` | Optional; a soft limit per run (checked between model calls). Without it a run has no limit |
+| `AgentWorker__RunTimeout` | Optional; default `01:00:00` |
+| `AgentWorker__DraftPullRequests` | Optional; `true` to open every pull request as a draft |
+| `AgentWorker__CommitAuthorName`, `AgentWorker__CommitAuthorEmail` | Optional; the author of the agent's commit |
+| `AgentRuns__Lease`, `AgentRuns__MaxAttempts` | Optional; the same values as the Tasks function app |
+| `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
+
+### Cost and security
+
+- **Cost.** The SDK reports each session's cost in nano AI units; DGHSF divides by 10<sup>9</sup> to get AI credits, as the SDK's documentation does. That conversion is defined by GitHub's billing, so compare it with the billing usage on the overview page now and then. A run whose cost GitHub only partly reported is shown as "at least". The image runs on the Container Apps consumption plan, so you also pay for the job's CPU and memory while the agent works.
+- **The agent can run any command in the container**, and it reads repository content that may try to talk it into things. DGHSF starts the Copilot runtime without the worker's secrets in its environment: no database or Service Bus connection, no repository token and no managed identity endpoint. It passes the token to git only for the clone and the push. The Copilot token is available to the runtime, so give it nothing but **Copilot Requests**. The container can reach the internet; restrict outbound traffic of the environment if your repositories need that.
+- The image is the .NET SDK image with git. Add the tool chains your repositories need (Node.js, Python, …) to `src/Djohnnie.SoftwareFactory.Worker/Dockerfile`, so the agent can build and test.
+- Custom agents (`.github/agents/<name>.agent.md` on the base branch) give the session their instructions and model; their `tools` list is ignored, because GitHub's tool aliases aren't the runtime's tool names.
 
 ## Image uploads
 

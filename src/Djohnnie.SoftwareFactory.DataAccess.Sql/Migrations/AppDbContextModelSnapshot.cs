@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118164629_AddProjectChatSummaries";
+    public override string LastMigrationId => "20261118213438_AddAgentRuns";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -62,6 +62,116 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsUnique();
 
                 b.ToTable("Agents");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRun", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<int>("Attempts")
+                    .HasColumnType("int");
+
+                b.Property<string>("Branch")
+                    .HasMaxLength(250)
+                    .HasColumnType("nvarchar(250)");
+
+                b.Property<long>("CacheReadTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("CacheWriteTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Error")
+                    .HasMaxLength(4000)
+                    .HasColumnType("nvarchar(4000)");
+
+                b.Property<long>("InputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<DateTimeOffset?>("LeaseUntil")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<int>("MaxAttempts")
+                    .HasColumnType("int");
+
+                b.Property<string>("Models")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
+
+                b.Property<long?>("NanoAiu")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("OutputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<decimal?>("PremiumRequests")
+                    .HasPrecision(18, 4)
+                    .HasColumnType("decimal(18,4)");
+
+                b.Property<int?>("PullRequestNumber")
+                    .HasColumnType("int");
+
+                b.Property<string>("PullRequestUrl")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
+
+                b.Property<DateTimeOffset?>("QueuedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("RepositoryFullName")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
+
+                b.Property<string>("RequestedModel")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
+
+                b.Property<DateTimeOffset?>("StartedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasColumnType("nvarchar(20)");
+
+                b.Property<string>("Summary")
+                    .HasMaxLength(20000)
+                    .HasColumnType("nvarchar(max)");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<bool>("UsageComplete")
+                    .HasColumnType("bit");
+
+                b.Property<Guid>("WorkItemId")
+                    .HasColumnType("uniqueidentifier");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("Status");
+
+                b.HasIndex("WorkItemId");
+
+                b.ToTable("AgentRuns");
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentTemplate", b =>
@@ -1143,6 +1253,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasMaxLength(60000)
                     .HasColumnType("nvarchar(max)");
+
+                b.Property<int>("Executor")
+                    .HasColumnType("int");
 
                 b.Property<Guid?>("GeneratedByTaskId")
                     .HasColumnType("uniqueidentifier");

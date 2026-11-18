@@ -76,6 +76,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
 
         // Epics and features only give structure; they are never assigned to an agent.
         var assignable = entity.Type.CanBeAssigned;
+        entity.Executor = assignable ? item.Executor : AgentExecutor.CopilotCloudAgent;
         entity.CustomAgent = assignable ? NullIfEmpty(item.CustomAgent) : null;
         entity.Model = assignable ? NullIfEmpty(item.Model) : null;
         entity.BaseBranch = assignable ? NullIfEmpty(item.BaseBranch) : null;

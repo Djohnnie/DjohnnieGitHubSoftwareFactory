@@ -29,6 +29,9 @@ public class WorkItem : Entity
 
     public WorkItemStatus Status { get; set; } = WorkItemStatus.Draft;
 
+    /// <summary>Where the coding agent runs; stored as a number.</summary>
+    public AgentExecutor Executor { get; set; }
+
     /// <summary>The custom agent id (file name without <c>.agent.md</c>), or <c>null</c> for the default Copilot agent.</summary>
     [MaxLength(100)]
     public string? CustomAgent { get; set; }

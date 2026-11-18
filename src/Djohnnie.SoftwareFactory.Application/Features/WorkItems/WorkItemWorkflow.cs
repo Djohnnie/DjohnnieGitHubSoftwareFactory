@@ -1,15 +1,21 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
+using Microsoft.Extensions.Options;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
-/// <summary>Turns accepted work items into GitHub issues and hands stories, bugs and tasks to the Copilot cloud agent.</summary>
-public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHub)
+/// <summary>
+/// Turns accepted work items into GitHub issues and hands stories, bugs and tasks to their agent: the Copilot cloud agent
+/// (assigned on GitHub) or the DGHSF agent worker (a run in <see cref="IAgentRunStore"/> that the worker picks up).
+/// </summary>
+public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClient gitHub, IAgentRunStore agentRuns, IOptions<AgentRunOptions> agentRunOptions)
 {
     /// <summary>
     /// Only accepts an item whose parent (if any) is accepted, so its issue can always be linked to the parent's.
@@ -99,6 +105,26 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         return await TryAssignAsync(item, cancellationToken);
     }
 
+    /// <summary>
+    /// Starts another run of the DGHSF agent worker on an item it already worked on, e.g. after a failed run. The new run
+    /// branches from the base branch again and opens its own pull request.
+    /// </summary>
+    public async Task<AgentRun> StartWorkerRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        var item = await FindAsync(repositoryFullName, id, cancellationToken);
+        if (item.Executor != AgentExecutor.DghsfWorker || !item.Type.CanBeAssigned)
+        {
+            throw new DomainRuleException("Only user stories, bugs and tasks that run on the DGHSF agent worker can start a worker run.");
+        }
+        if (item.Status != WorkItemStatus.InProgress || item.IssueNumber is null)
+        {
+            throw new DomainRuleException(item.Status == WorkItemStatus.Accepted
+                ? "Assign the agent first."
+                : "Only an item that is in progress can start another worker run.");
+        }
+        return await agentRuns.CreateAsync(repositoryFullName, id, item.Model, agentRunOptions.Value.MaxAttempts, cancellationToken);
+    }
+
     /// <summary>Stores the current title, description and state of the item's GitHub issue; nothing is sent to GitHub.</summary>
     public async Task<WorkItemRefreshResult> RefreshFromIssueAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
@@ -124,10 +150,15 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
             throw new DomainRuleException($"The description of GitHub issue #{number} is longer than the {WorkItem.MaxDescriptionLength:N0} characters DGHSF can store, so nothing was refreshed.");
         }
 
-        var assignedToCopilot = GitHubApiClient.IsAssignedToCopilot(issue);
-        var (progress, progressWarning) = item.Type.CanBeAssigned
-            ? await GetProgressAsync(repositoryFullName, number, issue.IsClosed, assignedToCopilot, cancellationToken)
-            : (WorkItemProgressSnapshot.None, null);
+        // The worker doesn't assign anyone on GitHub: its item is being worked on while it has a run that wasn't cancelled.
+        var worker = item.Type.CanBeAssigned && item.Executor == AgentExecutor.DghsfWorker;
+        var latestRun = worker ? await agentRuns.GetLatestAsync(repositoryFullName, id, cancellationToken) : null;
+        var assignedToCopilot = worker ? latestRun is not null : GitHubApiClient.IsAssignedToCopilot(issue);
+        var (progress, progressWarning) = !item.Type.CanBeAssigned
+            ? (WorkItemProgressSnapshot.None, null)
+            : worker
+                ? await GetWorkerProgressAsync(repositoryFullName, number, issue.IsClosed, latestRun, cancellationToken)
+                : await GetProgressAsync(repositoryFullName, number, issue.IsClosed, assignedToCopilot, cancellationToken);
 
         var refreshed = await store.ApplyIssueAsync(repositoryFullName, id,
             new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, assignedToCopilot, progress),
@@ -161,6 +192,21 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
         catch (GitHubApiException ex) when (!StopsEveryRequest(ex))
         {
             return (null, $"Copilot's progress was kept as it was, because GitHub refused to show the linked pull requests: {ex.Message}");
+        }
+    }
+
+    /// <summary>The worker's latest run and the linked pull requests (one GraphQL request); no Actions run to look up.</summary>
+    private async Task<(WorkItemProgressSnapshot? Progress, string? Warning)> GetWorkerProgressAsync(string repositoryFullName, int issueNumber, bool issueClosed,
+        AgentRun? run, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pullRequest = CopilotProgressEvaluator.SelectPullRequest(await gitHub.GetLinkedPullRequestsAsync(repositoryFullName, issueNumber, cancellationToken));
+            return (CopilotProgressEvaluator.EvaluateWorker(issueClosed, run, pullRequest), null);
+        }
+        catch (GitHubApiException ex) when (!StopsEveryRequest(ex))
+        {
+            return (null, $"The agent's progress was kept as it was, because GitHub refused to show the linked pull requests: {ex.Message}");
         }
     }
 
@@ -379,6 +425,19 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
 
     private async Task<WorkItemAcceptResult> TryAssignAsync(WorkItem item, CancellationToken cancellationToken)
     {
+        if (item.Executor == AgentExecutor.DghsfWorker)
+        {
+            try
+            {
+                await agentRuns.CreateAsync(item.RepositoryFullName, item.Id, item.Model, agentRunOptions.Value.MaxAttempts, cancellationToken);
+            }
+            catch (DomainRuleException ex)
+            {
+                return new(item, ex.Message);
+            }
+            return new(await store.MarkAssignedAsync(item.RepositoryFullName, item.Id, cancellationToken), null);
+        }
+
         try
         {
             var assignment = new CopilotAssignment(item.RepositoryFullName, item.BaseBranch, item.CustomInstructions, item.CustomAgent, item.Model);

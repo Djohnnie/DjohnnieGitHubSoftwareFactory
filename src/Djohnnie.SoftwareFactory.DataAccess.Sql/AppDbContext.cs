@@ -26,6 +26,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProjectChatMessage> ProjectChatMessages => Set<ProjectChatMessage>();
     public DbSet<SyncLogEvent> SyncLogEvents => Set<SyncLogEvent>();
     public DbSet<TodoTask> TodoTasks => Set<TodoTask>();
+    public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -61,6 +62,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureProjectChat()
             .ConfigureSyncLog()
             .ConfigureTodoTask()
+            .ConfigureAgentRun()
             .ConfigureEntityKeys();
     }
 }

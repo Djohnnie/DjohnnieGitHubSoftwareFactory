@@ -1,0 +1,410 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Djohnnie.SoftwareFactory.Application;
+using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
+using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
+using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
+using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.DataAccess.Sql;
+using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
+using Djohnnie.SoftwareFactory.Worker;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+namespace Djohnnie.SoftwareFactory.Web.Tests;
+
+/// <summary>
+/// The DGHSF agent worker's runs against a real SQL Server: the store's conditional updates (claims, leases) keep duplicate
+/// Service Bus messages and crashed job executions harmless, and the executor records what each run cost.
+/// </summary>
+public class AgentRunTests
+{
+    private const string Repo = "owner/repo";
+    private static readonly TimeSpan Lease = TimeSpan.FromMinutes(10);
+    private static readonly AgentRunUsage Usage = new(2_500_000_000, true, 1.5m, 1200, 300, 800, 100, "claude-sonnet-4.5");
+    private readonly CancellationToken _cancellationToken = TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task ARun_IsClaimedOnce_StartedOnce_AndStoresItsPullRequestAndCost()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var workItem = Guid.NewGuid();
+        var run = await store.CreateAsync("Owner/Repo", workItem, "claude-sonnet-4.5", 2, _cancellationToken);
+        await Assert.ThrowsAsync<DomainRuleException>(() => store.CreateAsync(Repo, workItem, null, 2, _cancellationToken));
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() => store.ClaimDueAsync(10, _cancellationToken))));
+        Assert.Equal([run.Id], claims.SelectMany(ids => ids));
+        var starts = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() => store.TryStartAsync(run.Id, Lease, _cancellationToken))));
+        var started = Assert.Single(starts, s => s is not null)!;
+        Assert.Equal((AgentRunStatus.Running, 1), (started.Status, started.Attempts));
+        Assert.True(await store.RenewLeaseAsync(run.Id, Lease, _cancellationToken));
+
+        Assert.True(await store.CompleteAsync(run.Id, new AgentRunResult("dghsf/42-task-1a2b3c4d", 7, "https://github.com/owner/repo/pull/7", "Did it.", Usage), _cancellationToken));
+
+        var done = (await store.GetLatestAsync(Repo, workItem, _cancellationToken))!;
+        Assert.Equal((AgentRunStatus.Succeeded, 7, "dghsf/42-task-1a2b3c4d", "Did it."), (done.Status, done.PullRequestNumber, done.Branch, done.Summary));
+        Assert.Equal(2.5m, done.AiCredits);
+        Assert.Equal((1200L, 300L, 800L, 100L, 1.5m), (done.InputTokens, done.OutputTokens, done.CacheReadTokens, done.CacheWriteTokens, done.PremiumRequests));
+        Assert.True(done.UsageComplete);
+        Assert.NotNull(done.CompletedAt);
+        Assert.False(await store.RenewLeaseAsync(run.Id, Lease, _cancellationToken));
+        Assert.Equal(AgentRunStatus.Pending, (await store.CreateAsync(Repo, workItem, null, 2, _cancellationToken)).Status);
+    }
+
+    [Fact]
+    public async Task Fail_WithRetry_QueuesTheRunAgainWhileItHasAttempts_AndAddsUpWhatEveryAttemptCost()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var run = await StartedAsync(store, maxAttempts: 2);
+
+        Assert.Equal(AgentRunStatus.Pending, await store.FailAsync(run.Id, "git clone failed (128).", null, retry: true, _cancellationToken));
+        await store.ClaimDueAsync(10, _cancellationToken);
+        Assert.Equal(2, (await store.TryStartAsync(run.Id, Lease, _cancellationToken))!.Attempts);
+        Assert.Equal(AgentRunStatus.Failed, await store.FailAsync(run.Id, "The agent finished without changing any files.", Usage, retry: true, _cancellationToken));
+
+        var failed = (await store.GetAsync(run.Id, _cancellationToken))!;
+        Assert.Equal((AgentRunStatus.Failed, "The agent finished without changing any files."), (failed.Status, failed.Error));
+        Assert.Equal(2.5m, failed.AiCredits);
+        Assert.Null(await store.FailAsync(run.Id, "Again.", null, retry: false, _cancellationToken));
+    }
+
+    [Fact]
+    public async Task Recover_TakesBackLostMessagesAndExpiredLeases_AndCancel_StopsTheLease()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var time = new TodoTaskTests.ManualTime(DateTimeOffset.UtcNow);
+        var store = new AgentRunStore(database.Factory, time);
+        var run = await store.CreateAsync(Repo, Guid.NewGuid(), null, 1, _cancellationToken);
+        await store.ClaimDueAsync(10, _cancellationToken);
+
+        // The message got lost: after the queued timeout the run is pending again.
+        time.Advance(TimeSpan.FromMinutes(20));
+        Assert.Equal(1, await store.RecoverAsync(TimeSpan.FromMinutes(15), _cancellationToken));
+        Assert.Single(await store.ClaimDueAsync(10, _cancellationToken));
+
+        // The job execution died on the last attempt: when its lease ends, the run fails.
+        await store.TryStartAsync(run.Id, Lease, _cancellationToken);
+        time.Advance(Lease + TimeSpan.FromMinutes(1));
+        Assert.Equal(1, await store.RecoverAsync(TimeSpan.FromMinutes(15), _cancellationToken));
+        var failed = (await store.GetAsync(run.Id, _cancellationToken))!;
+        Assert.Equal(AgentRunStatus.Failed, failed.Status);
+        Assert.Contains("attempt 1 of 1", failed.Error);
+
+        var other = await StartedAsync(store, maxAttempts: 1);
+        Assert.True(await store.CancelAsync("OWNER/repo", other.Id, _cancellationToken));
+        Assert.False(await store.RenewLeaseAsync(other.Id, Lease, _cancellationToken));
+        Assert.False(await store.CancelAsync(Repo, other.Id, _cancellationToken));
+        Assert.Null(await store.GetLatestAsync(Repo, other.WorkItemId, _cancellationToken));
+    }
+
+    [Fact]
+    public async Task Execute_ClonesRunsTheAgentPushesAndOpensThePullRequest_AndRecordsTheCost()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        worker.Agent.Outcome = new("Added the endpoint and its tests.", Usage, null);
+
+        var status = await worker.ExecuteAsync(_cancellationToken);
+
+        Assert.Equal(AgentRunStatus.Succeeded, status);
+        var run = (await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!;
+        Assert.Equal((7, 2.5m), (run.PullRequestNumber, run.AiCredits));
+        Assert.StartsWith("dghsf/42-add-the-endpoint-", run.Branch);
+        Assert.Equal(["clone main " + run.Branch, "changes", "commit", "push " + run.Branch], worker.Git.Commands);
+        var request = worker.Agent.Request!;
+        Assert.Equal(("claude-sonnet-4.5", AgentRunPrompt.Instructions), (request.Model, request.Instructions));
+        Assert.Contains("# Add the endpoint", request.Prompt);
+        Assert.Contains("Implement GitHub issue #42", request.Prompt);
+
+        var pullRequest = JsonDocument.Parse(worker.GitHub.PullRequestBody!).RootElement;
+        Assert.Equal((run.Branch, "main", false), (pullRequest.GetProperty("head").GetString(), pullRequest.GetProperty("base").GetString(), pullRequest.GetProperty("draft").GetBoolean()));
+        var body = pullRequest.GetProperty("body").GetString()!;
+        Assert.Contains("Added the endpoint and its tests.", body);
+        Assert.Contains("Closes #42", body);
+        Assert.Contains("2.5 AI credits", body);
+        Assert.False(Directory.Exists(worker.Folder));
+    }
+
+    [Fact]
+    public async Task Execute_WhenTheAgentStoppedEarly_PushesADraft_AndWithoutChangesFailsWithoutRetry()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        worker.Agent.Outcome = new("Half way.", Usage, "The agent reached the limit of 2 AI credits per run (2.5 used) before it finished.");
+
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        Assert.True(JsonDocument.Parse(worker.GitHub.PullRequestBody!).RootElement.GetProperty("draft").GetBoolean());
+        Assert.Contains("reached the limit", (await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!.Error);
+
+        await using var second = await WorkerAsync(database);
+        second.Git.HasChanges = false;
+        second.Agent.Outcome = new("Nothing to do: it already works.", Usage, null);
+
+        Assert.Equal(AgentRunStatus.Failed, await second.ExecuteAsync(_cancellationToken));
+        var failed = (await second.Runs.GetAsync(second.Run.Id, _cancellationToken))!;
+        Assert.Contains("without changing any files. It said: Nothing to do", failed.Error);
+        Assert.Equal(2.5m, failed.AiCredits);
+        Assert.DoesNotContain("push", string.Join(" ", second.Git.Commands));
+    }
+
+    [Fact]
+    public async Task Execute_WhenTheCloneFails_GivesTheRunBackForAnotherAttempt()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        worker.Git.CloneError = new GitCommandException("git clone failed (128): could not resolve host");
+
+        Assert.Equal(AgentRunStatus.Pending, await worker.ExecuteAsync(_cancellationToken));
+        Assert.Null(worker.Agent.Request);
+        Assert.Null((await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!.NanoAiu);
+    }
+
+    [Fact]
+    public async Task Execute_ACancelledRun_StopsTheAgentAndPushesNothing()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database, lease: TimeSpan.FromMilliseconds(300));
+        worker.Agent.OnRun = async cancellationToken =>
+        {
+            await worker.Runs.CancelAsync(Repo, worker.Run.Id, CancellationToken.None);
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        };
+
+        Assert.Equal(AgentRunStatus.Cancelled, await worker.ExecuteAsync(_cancellationToken));
+        Assert.Equal(AgentRunStatus.Cancelled, (await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!.Status);
+        Assert.DoesNotContain("push", string.Join(" ", worker.Git.Commands));
+        Assert.Null(worker.GitHub.PullRequestBody);
+    }
+
+    [Fact]
+    public void Prompt_BranchAndPullRequest_DescribeTheIssue()
+    {
+        var item = new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Story, Title = "Log in with a passkey (WebAuthn) — the whole flow, end to end!",
+            Description = "As a user…", TechnicalDetails = "Use the existing AuthController.", CustomInstructions = "Keep it small.", IssueNumber = 42
+        };
+        var epic = new WorkItem { Type = WorkItemType.Epic, Title = "Passkeys", IssueNumber = 10 };
+        var feature = new WorkItem { Type = WorkItemType.Feature, Title = "Passkey login", IssueNumber = 11 };
+        var runId = Guid.Parse("1a2b3c4d-0000-0000-0000-000000000000");
+
+        var branch = AgentRunPrompt.BranchName(item, runId);
+        Assert.Equal("dghsf/42-log-in-with-a-passkey-webauthn-the-whole-1a2b3c4d", branch);
+
+        var prompt = AgentRunPrompt.Build(item, [feature, epic], branch, "main");
+        Assert.Contains("Implement GitHub issue #42 of the repository owner/repo: a user story.", prompt);
+        Assert.Contains("## Technical details\n\nUse the existing AuthController.", prompt);
+        Assert.Contains("## Additional instructions\n\nKeep it small.", prompt);
+        Assert.Contains("- Epic #10: Passkeys\n- Feature #11: Passkey login\n", prompt);
+
+        var body = AgentRunPrompt.PullRequestBody(item, runId, null, Usage with { Complete = false }, "Stopped early.");
+        Assert.StartsWith("> [!WARNING]\n> Stopped early.", body);
+        Assert.Contains("_The agent didn't write a summary._", body);
+        Assert.Contains("2.5 AI credits (at least)", body);
+    }
+
+    [Fact]
+    public void TheAgentsEnvironment_LeavesOutTheWorkersSecrets()
+    {
+        var environment = AgentEnvironment.Sanitized(new System.Collections.Hashtable
+        {
+            ["PATH"] = "/usr/bin", ["HOME"] = "/home/app", ["DOTNET_NOLOGO"] = "1",
+            ["ConnectionStrings__Database"] = "Server=sql", ["ServiceBus"] = "Endpoint=sb://x", ["ServiceBus__fullyQualifiedNamespace"] = "x",
+            ["AgentWorker__GitHubToken"] = "ghp", ["IDENTITY_ENDPOINT"] = "http://localhost:42356", ["IDENTITY_HEADER"] = "h",
+            ["NPM_TOKEN"] = "t", ["MY_API_KEY"] = "k", ["Some__Password"] = "p", ["GH_TOKEN"] = "g"
+        });
+
+        Assert.Equal(["DOTNET_NOLOGO", "HOME", "PATH"], environment.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void QueueMessages_CarryTheRunId()
+    {
+        var id = Guid.NewGuid();
+
+        Assert.Equal(id.ToString(), AgentRunQueue.Message(id).MessageId);
+        Assert.Equal(id, AgentRunQueue.RunId(AgentRunQueue.Message(id).Body.ToString()));
+        Assert.Equal(id, AgentRunQueue.RunId($"\"{id}\""));
+        Assert.Null(AgentRunQueue.RunId("hello"));
+    }
+
+    [Fact]
+    public void EvaluateWorker_FollowsTheRunUntilItSucceeds_ThenThePullRequest()
+    {
+        static AgentRun Run(AgentRunStatus status)
+        {
+            return new AgentRun { Status = status, PullRequestNumber = 7, PullRequestUrl = "https://github.com/owner/repo/pull/7", Branch = "dghsf/42-x" };
+        }
+        static GitHubLinkedPullRequest PullRequest(string state)
+        {
+            return new GitHubLinkedPullRequest(7, "https://github.com/owner/repo/pull/7", "Task", state, false, "dghsf/42-x", DateTimeOffset.UtcNow, null, [], "SUCCESS");
+        }
+
+        Assert.Equal(CopilotProgress.None, CopilotProgressEvaluator.EvaluateWorker(false, null, null).Progress);
+        Assert.Equal(CopilotProgress.Queued, CopilotProgressEvaluator.EvaluateWorker(false, Run(AgentRunStatus.Queued), null).Progress);
+        Assert.Equal(CopilotProgress.Working, CopilotProgressEvaluator.EvaluateWorker(false, Run(AgentRunStatus.Running), PullRequest("OPEN")).Progress);
+        Assert.Equal(CopilotProgress.Stopped, CopilotProgressEvaluator.EvaluateWorker(false, Run(AgentRunStatus.Failed), null).Progress);
+        Assert.Equal((CopilotProgress.ReadyForReview, 7), Pick(CopilotProgressEvaluator.EvaluateWorker(false, Run(AgentRunStatus.Succeeded), null)));
+        Assert.Equal((CopilotProgress.Merged, 7), Pick(CopilotProgressEvaluator.EvaluateWorker(true, Run(AgentRunStatus.Failed), PullRequest("MERGED"))));
+        // A new run that works on an item whose earlier pull request was closed shows the new run.
+        Assert.Equal(CopilotProgress.Working, CopilotProgressEvaluator.EvaluateWorker(false, Run(AgentRunStatus.Running), PullRequest("CLOSED")).Progress);
+
+        static (CopilotProgress, int?) Pick(WorkItemProgressSnapshot snapshot)
+        {
+            return (snapshot.Progress, snapshot.PullRequestNumber);
+        }
+    }
+
+    private async Task<AgentRun> StartedAsync(AgentRunStore store, int maxAttempts)
+    {
+        var run = await store.CreateAsync(Repo, Guid.NewGuid(), null, maxAttempts, _cancellationToken);
+        await store.ClaimDueAsync(10, _cancellationToken);
+        return (await store.TryStartAsync(run.Id, Lease, _cancellationToken))!;
+    }
+
+    /// <summary>A started run of an in-progress task with issue #42, and an executor with fake git, agent and GitHub.</summary>
+    private async Task<WorkerFixture> WorkerAsync(SqlServerDatabase database, TimeSpan? lease = null)
+    {
+        var gitHub = new FakeGitHub();
+        var git = new FakeGit();
+        var agent = new FakeAgent();
+        var folder = Path.Combine(Path.GetTempPath(), "dghsf-agent-worker-tests", Guid.NewGuid().ToString("N"));
+        var services = new ServiceCollection().AddLogging().AddApplication()
+            .AddSingleton(database.Factory)
+            .AddSingleton(new GitHubApiClient(new HttpClient(gitHub) { BaseAddress = new Uri("https://api.github.com/") }, new ConfiguredGitHubTokenProvider("token")))
+            .Configure<AgentRunOptions>(o => o.Lease = lease ?? Lease)
+            .Configure<AgentWorkerOptions>(o =>
+            {
+                o.GitHubToken = "token";
+                o.WorkDirectory = folder;
+            })
+            .AddSingleton<IGitWorkspace>(git)
+            .AddSingleton<ICodingAgent>(agent)
+            .AddScoped<AgentRunExecutor>()
+            .BuildServiceProvider();
+
+        var item = await services.GetRequiredService<IWorkItemStore>().SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Add the endpoint", Description = "An endpoint.",
+            Executor = AgentExecutor.DghsfWorker, Model = "claude-sonnet-4.5"
+        }, _cancellationToken);
+        await using (var db = await database.Factory.CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(e => e.Id == item.Id, _cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.IssueNumber = 42;
+            entity.IssueId = 1042;
+            entity.IssueUrl = "https://github.com/owner/repo/issues/42";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+
+        var runs = services.GetRequiredService<IAgentRunStore>();
+        var created = await runs.CreateAsync(Repo, item.Id, item.Model, 2, _cancellationToken);
+        await runs.ClaimDueAsync(10, _cancellationToken);
+        var run = (await runs.TryStartAsync(created.Id, lease ?? Lease, _cancellationToken))!;
+        return new WorkerFixture(services, run, runs, git, agent, gitHub, Path.Combine(folder, run.Id.ToString("N")));
+    }
+
+    private sealed record WorkerFixture(ServiceProvider Services, AgentRun Run, IAgentRunStore Runs, FakeGit Git, FakeAgent Agent, FakeGitHub GitHub, string Folder)
+        : IAsyncDisposable
+    {
+        public async Task<AgentRunStatus?> ExecuteAsync(CancellationToken cancellationToken)
+        {
+            await using var scope = Services.CreateAsyncScope();
+            return await scope.ServiceProvider.GetRequiredService<AgentRunExecutor>().ExecuteAsync(Run, cancellationToken);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Services.DisposeAsync();
+        }
+    }
+
+    private sealed class FakeGit : IGitWorkspace
+    {
+        public List<string> Commands { get; } = [];
+        public bool HasChanges { get; set; } = true;
+        public Exception? CloneError { get; set; }
+
+        public Task CloneAsync(string repositoryFullName, string branch, string newBranch, string directory, string token, CancellationToken cancellationToken)
+        {
+            if (CloneError is not null)
+            {
+                throw CloneError;
+            }
+            Commands.Add($"clone {branch} {newBranch}");
+            Directory.CreateDirectory(directory);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> HasChangesAsync(string directory, string baseBranch, CancellationToken cancellationToken)
+        {
+            Commands.Add("changes");
+            return Task.FromResult(HasChanges);
+        }
+
+        public Task CommitAllAsync(string directory, string message, string authorName, string authorEmail, CancellationToken cancellationToken)
+        {
+            Commands.Add("commit");
+            return Task.CompletedTask;
+        }
+
+        public Task PushAsync(string directory, string branch, string token, CancellationToken cancellationToken)
+        {
+            Commands.Add($"push {branch}");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeAgent : ICodingAgent
+    {
+        public CodingAgentRequest? Request { get; private set; }
+        public CodingAgentOutcome Outcome { get; set; } = new(null, AgentRunUsage.None, null);
+        public Func<CancellationToken, Task>? OnRun { get; set; }
+
+        public async Task<CodingAgentOutcome> RunAsync(CodingAgentRequest request, CancellationToken cancellationToken)
+        {
+            Request = request;
+            if (OnRun is not null)
+            {
+                await OnRun(cancellationToken);
+            }
+            return Outcome;
+        }
+    }
+
+    /// <summary>The repository and pull request endpoints; everything else (the refresh) is a 404, which the worker shrugs off.</summary>
+    private sealed class FakeGitHub : HttpMessageHandler
+    {
+        public string? PullRequestBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path == "/repos/owner/repo")
+            {
+                return Json("""{"id":1,"name":"repo","full_name":"owner/repo","owner":{"login":"owner","avatar_url":null},"html_url":"https://github.com/owner/repo","description":null,"private":false,"fork":false,"archived":false,"language":"C#","default_branch":"main","pushed_at":null}""");
+            }
+            if (request.Method == HttpMethod.Post && path == "/repos/owner/repo/pulls")
+            {
+                PullRequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                return Json("""{"number":7,"title":"Add the endpoint","html_url":"https://github.com/owner/repo/pull/7","state":"open","draft":false,"user":null,"merged_at":null,"additions":1,"deletions":0,"changed_files":1}""",
+                    HttpStatusCode.Created);
+            }
+            return Json("""{"message":"Not Found"}""", HttpStatusCode.NotFound);
+        }
+
+        private static HttpResponseMessage Json(string json, HttpStatusCode status = HttpStatusCode.OK)
+        {
+            return new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        }
+    }
+}

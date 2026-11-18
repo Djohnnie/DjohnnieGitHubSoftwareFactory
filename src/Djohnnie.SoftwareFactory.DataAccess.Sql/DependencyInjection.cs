@@ -36,6 +36,7 @@ public static class DependencyInjection
             services.TryAddScoped<IProjectChatStore, ProjectChatStore>();
             services.TryAddScoped<ISyncLogStore, SyncLogStore>();
             services.TryAddScoped<ITodoTaskStore, TodoTaskStore>();
+            services.TryAddScoped<IAgentRunStore, AgentRunStore>();
             return services;
         }
     }

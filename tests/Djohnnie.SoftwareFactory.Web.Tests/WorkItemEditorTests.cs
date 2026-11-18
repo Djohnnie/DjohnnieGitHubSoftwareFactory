@@ -338,6 +338,51 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task TaskOnTheWorker_ShowsItsRunsWithTheirCost_AndStartsAnotherRunAfterAFailedOne()
+    {
+        await SelectRepositoryAsync();
+        var task = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Worker task", Description = "About it.", Executor = AgentExecutor.DghsfWorker
+        }, _cancellationToken);
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.IssueNumber = 7;
+            entity.IssueUrl = "https://github.com/owner/repo/issues/7";
+            entity.AssignedAt = DateTimeOffset.UtcNow.AddMinutes(-31);
+            db.AgentRuns.Add(new DataAccess.Sql.Entities.AgentRun
+            {
+                Id = Guid.NewGuid(), WorkItemId = task.Id, RepositoryFullName = Repo, Status = Contracts.AgentRuns.AgentRunStatus.Failed,
+                Attempts = 1, MaxAttempts = 2, NanoAiu = 2_500_000_000, UsageComplete = true, Models = "claude-sonnet-4.5",
+                Error = "The agent finished without changing any files.", CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-29), CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-20)
+            });
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Agent worker runs", cut.Markup));
+        var panel = cut.FindComponent<AgentRunsPanel>();
+        Assert.Contains("1 run · 2.5 AI credits", panel.Markup);
+        Assert.Contains("claude-sonnet-4.5", panel.Markup);
+        Assert.Contains("without changing any files", panel.Markup);
+        Assert.Contains("9 min", panel.Markup);
+        Assert.Contains("Handed to the DGHSF agent worker", cut.Markup);
+
+        await cut.InvokeAsync(() => panel.FindAll("button").Single(b => b.TextContent.Contains("Run again")).Click());
+
+        panel.WaitForAssertion(() => Assert.Contains("2 runs", panel.Markup));
+        Assert.Contains("Waiting", panel.Markup);
+        Assert.Contains(panel.FindAll("button"), b => b.TextContent.Contains("Cancel run"));
+        Assert.DoesNotContain(panel.FindAll("button"), b => b.TextContent.Contains("Run again"));
+    }
+
+    [Fact]
     public async Task Draft_HasNoRefreshButtons()
     {
         await SelectRepositoryAsync();
