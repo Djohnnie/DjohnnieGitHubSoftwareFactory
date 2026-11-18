@@ -19,6 +19,11 @@ public static class InternalAgentKeys
     public const string MindmapWorkItemWriter = "mindmap-work-item-writer";
     public const string RepositoryAnalyst = "repository-analyst";
     public const string RepositoryWorkItemWriter = "repository-work-item-writer";
+    public const string ChatTitleWriter = "chat-title-writer";
+    public const string ChatSummarizer = "chat-summarizer";
+
+    /// <summary>The chat agent of the chat page, which can read everything DGHSF and GitHub know about the repository.</summary>
+    public const string DghsfAgent = "dghsf-agent";
 
     /// <summary>The chat agent of the work item pages of a type, e.g. <c>story-copilot</c>.</summary>
     public static string ForWorkItem(WorkItemType type)

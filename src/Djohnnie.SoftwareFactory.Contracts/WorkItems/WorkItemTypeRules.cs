@@ -53,6 +53,19 @@ public static class WorkItemTypeRules
             }
         }
 
+        /// <summary>The first segment of the type's pages in DGHSF, e.g. <c>stories</c> for <c>/stories/{id}</c>.</summary>
+        public string PathSegment
+        {
+            get
+            {
+                return type switch
+                {
+                    WorkItemType.Story => "stories",
+                    _ => type.Label + "s"
+                };
+            }
+        }
+
         public string PluralName
         {
             get

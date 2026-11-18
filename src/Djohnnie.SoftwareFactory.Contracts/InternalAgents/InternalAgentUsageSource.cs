@@ -28,5 +28,11 @@ public enum InternalAgentUsageSource
     [Description("Mindmap Work Item Writer")] MindmapWorkItemWriter,
     [Description("Copilot Skills Agent Chat")] CopilotSkillsAgentChat,
     [Description("Repository Analyst")] RepositoryAnalyst,
-    [Description("Repository Work Item Writer")] RepositoryWorkItemWriter
+    [Description("Repository Work Item Writer")] RepositoryWorkItemWriter,
+    [Description("DGHSF Agent Chat")] DghsfAgentChat,
+
+    /// <summary>A chat title written with the DGHSF Agent's model, before the Chat Title Writer was its own agent.</summary>
+    [Description("Chat title")] ChatTitle,
+    [Description("Chat Title Writer")] ChatTitleWriter,
+    [Description("Chat Summarizer")] ChatSummarizer
 }

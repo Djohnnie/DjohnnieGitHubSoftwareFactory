@@ -23,16 +23,16 @@ public sealed class InternalAgentService(ISender mediator)
         return (await mediator.Send(new SaveInternalAgentCommand(new(agent)), cancellationToken)).Dto;
     }
 
-    /// <summary>The most recent model requests of the agent, newest first.</summary>
-    public async Task<IReadOnlyList<InternalAgentUsage>> GetUsageAsync(string key, CancellationToken cancellationToken = default)
+    /// <summary>A page of the model requests of one agent, or of all agents, newest first.</summary>
+    public async Task<PagedResult<InternalAgentUsage>> GetUsagePageAsync(InternalAgentUsageQuery query, CancellationToken cancellationToken = default)
     {
-        return (await mediator.Send(new GetInternalAgentUsageQuery(new(key)), cancellationToken)).Dto.Items;
+        return (await mediator.Send(new GetInternalAgentUsageQuery(query), cancellationToken)).Dto;
     }
 
-    /// <summary>The most recent model requests of all agents, newest first.</summary>
-    public async Task<IReadOnlyList<InternalAgentUsage>> GetAllUsageAsync(CancellationToken cancellationToken = default)
+    /// <summary>The most recent model requests of the agent (at most one full page), newest first.</summary>
+    public async Task<IReadOnlyList<InternalAgentUsage>> GetUsageAsync(string key, CancellationToken cancellationToken = default)
     {
-        return (await mediator.Send(new GetAllInternalAgentUsageQuery(new()), cancellationToken)).Dto.Items;
+        return (await GetUsagePageAsync(new(key, 0, InternalAgentUsageQuery.MaxPageSize), cancellationToken)).Items;
     }
 
     /// <summary>Checks that the model responds on the configured endpoint; the request counts towards the usage of the agent.</summary>

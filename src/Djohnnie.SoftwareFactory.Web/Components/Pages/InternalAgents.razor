@@ -55,18 +55,17 @@
     </MudTabPanel>
     <MudTabPanel Icon="@Icons.Material.Filled.History">
         <TabContent>
-            Recent requests
-            @if (_usage.Count > 0)
+            Requests
+            @if (RequestCount > 0)
             {
-                <span class="tab-count">@_usage.Count</span>
+                <span class="tab-count">@RequestCount.ToString("N0")</span>
             }
         </TabContent>
         <ChildContent>
             <div class="tab-panel">
-                @if (_usage.Count > 0)
+                @if (RequestCount > 0)
                 {
-                    <UsageRequestsTable Items="_usage" ShowAgent="true" Label="All recent requests" />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">The latest @InternalAgentUsage.RecentOverallCount requests. The totals above include every request.</MudText>
+                    <UsageRequestsTable @ref="_requests" ShowAgent="true" Label="All requests" />
                 }
                 else if (!_loading)
                 {
@@ -136,10 +135,13 @@
 @code {
     private int _tab;
     private List<InternalAgent> _agents = [];
-    private IReadOnlyList<InternalAgentUsage> _usage = [];
+    private UsageRequestsTable? _requests;
     private bool _loading = true;
     private bool _saving;
     private string? _error;
+
+    /// <summary>Every request of every agent: the running totals of the agents count each request they store.</summary>
+    private long RequestCount => _agents.Sum(a => a.RequestCount);
 
     protected override async Task OnInitializedAsync()
     {
@@ -153,7 +155,10 @@
         try
         {
             _agents = await Agents.GetAllAsync();
-            _usage = await Agents.GetAllUsageAsync();
+            if (_requests is not null)
+            {
+                await _requests.ReloadAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -204,10 +209,13 @@
             InternalAgentKeys.AgentTemplateCopilot => "Agent template editor",
             InternalAgentKeys.CopilotInstructionsCopilot => "Copilot instructions editor",
             InternalAgentKeys.CopilotSkillsAgent => "Skill editor",
+            InternalAgentKeys.DghsfAgent => "Chat",
             InternalAgentKeys.ModelSelector => "After description edits (debounced)",
             InternalAgentKeys.ChatSuggestions => "When an agent chat opens",
             InternalAgentKeys.DescriptionWriter => "After dictating a description",
             InternalAgentKeys.WorkItemBreakdown => "When generating child items",
+            InternalAgentKeys.ChatTitleWriter => "When a chat starts",
+            InternalAgentKeys.ChatSummarizer => $"Every {ProjectChat.SummaryInterval} chat messages",
             _ => string.Empty
         };
     }

@@ -5,4 +5,4 @@ using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.InternalAgents;
 
-public sealed record GetInternalAgentUsageQuery(InternalAgentKeyRequest Dto) : IRequest<Response<CollectionResult<InternalAgentUsage>>>;
+public sealed record GetInternalAgentUsageQuery(InternalAgentUsageQuery Dto) : IRequest<Response<PagedResult<InternalAgentUsage>>>;

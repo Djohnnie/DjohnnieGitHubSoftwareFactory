@@ -28,7 +28,21 @@ public sealed class AssistantConversation
         _webFetch = webFetch;
     }
 
-    /// <summary>Continues a stored conversation.</summary>
+    /// <summary>
+    /// A summary as a stored message (see <see cref="RestoreAsync"/>): replayed to the model instead of the messages it
+    /// covers, as context rather than as something the user said.
+    /// </summary>
+    public static string SummaryPayload(string summary)
+    {
+        var message = new ChatMessage(ChatRole.System, $"""
+            The earlier part of this conversation was summarized; the messages after this summary follow it.
+
+            {summary.Trim()}
+            """);
+        return JsonSerializer.Serialize(message, AIJsonUtilities.DefaultOptions);
+    }
+
+    /// <summary>Continues a stored conversation; called again, it starts over from the given messages.</summary>
     /// <param name="payloads">The messages as <see cref="TakeNewMessages"/> serialized them, in order.</param>
     /// <param name="cancellationToken">Cancels loading the session.</param>
     public async Task RestoreAsync(IReadOnlyList<string> payloads, CancellationToken cancellationToken = default)

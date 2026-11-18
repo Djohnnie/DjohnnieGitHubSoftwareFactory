@@ -54,13 +54,27 @@ public class InternalAgentTests : BunitContext
         await agents.SaveAsync((await agents.GetAsync(key)) with { IsEnabled = false });
     }
 
+    /// <summary>The sources are stored by name: renaming or removing one makes the stored usage unreadable.</summary>
+    [Fact]
+    public void UsageSources_KeepTheirStoredNames()
+    {
+        Assert.Equal(
+        [
+            "Unknown", "ModelTest", "EpicCopilotChat", "FeatureCopilotChat", "StoryCopilotChat", "BugCopilotChat", "TaskCopilotChat",
+            "EpicTemplateCopilotChat", "FeatureTemplateCopilotChat", "StoryTemplateCopilotChat", "BugTemplateCopilotChat", "TaskTemplateCopilotChat",
+            "AgentCopilotChat", "AgentTemplateCopilotChat", "CopilotInstructionsCopilotChat", "ModelSelector", "ChatSuggestions", "DescriptionWriter",
+            "WorkItemBreakdown", "MindmapWorkItemWriter", "CopilotSkillsAgentChat", "RepositoryAnalyst", "RepositoryWorkItemWriter", "DghsfAgentChat",
+            "ChatTitle", "ChatTitleWriter", "ChatSummarizer"
+        ], Enum.GetNames<InternalAgentUsageSource>().Take(27));
+    }
+
     [Fact]
     public void Defaults_HaveACopilotPerWorkItemTypeTemplateAgentAndInstructionsPage_AndTheBackgroundAgents()
     {
         var keys = InternalAgentDefaults.All.Select(a => a.Key).ToList();
 
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.Equal(21, keys.Count);
+        Assert.Equal(24, keys.Count);
         foreach (var type in WorkItemTypeRules.All)
         {
             Assert.Contains("`update_work_item_form`", InternalAgentDefaults.Find(InternalAgentKeys.ForWorkItem(type))!.Instructions);
@@ -70,7 +84,7 @@ public class InternalAgentTests : BunitContext
         Assert.Contains("This is an agent template", InternalAgentDefaults.Find(InternalAgentKeys.AgentTemplateCopilot)!.Instructions);
         Assert.Contains("`update_skill_form`", InternalAgentDefaults.Find(InternalAgentKeys.CopilotSkillsAgent)!.Instructions);
         Assert.Equal([InternalAgentKeys.ModelSelector, InternalAgentKeys.ChatSuggestions, InternalAgentKeys.DescriptionWriter, InternalAgentKeys.WorkItemBreakdown, InternalAgentKeys.MindmapWorkItemWriter,
-                InternalAgentKeys.RepositoryAnalyst, InternalAgentKeys.RepositoryWorkItemWriter],
+                InternalAgentKeys.RepositoryAnalyst, InternalAgentKeys.RepositoryWorkItemWriter, InternalAgentKeys.ChatTitleWriter, InternalAgentKeys.ChatSummarizer],
             InternalAgentDefaults.All.Where(a => a.Kind == InternalAgentKind.Background).Select(a => a.Key));
         Assert.Equal("User Story Agent", InternalAgentDefaults.Find("story-copilot")!.Name);
         Assert.StartsWith("You are User Story Agent,", InternalAgentDefaults.Find("story-copilot")!.Instructions);
@@ -261,7 +275,7 @@ public class InternalAgentTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Model Selector", cut.Markup));
 
         var copilots = cut.Find("[aria-label='Chat agents']");
-        Assert.Equal(14, copilots.QuerySelectorAll("tbody tr").Length);
+        Assert.Equal(15, copilots.QuerySelectorAll("tbody tr").Length);
         Assert.Contains("Epic Template Agent", copilots.TextContent);
         var background = cut.Find("[aria-label='Background agents']");
         Assert.Contains("Chat Suggestions", background.TextContent);
@@ -432,11 +446,52 @@ public class InternalAgentTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Equal("€3.000", cut.Find(".usage-total .usage-value").TextContent.Trim()));
         Assert.Equal("2", cut.Find(".usage-requests .usage-value").TextContent.Trim());
-        var rows = cut.Find("[aria-label='All recent requests']").QuerySelectorAll("tbody tr");
+        var rows = cut.Find("[aria-label='All requests']").QuerySelectorAll("tbody tr");
         Assert.Equal(2, rows.Length);
         Assert.Contains("Custom Agent Agent Chat", rows[0].TextContent);
         Assert.Equal("Custom Agent Agent", rows[0].QuerySelector("td[data-label='Agent']")!.TextContent.Trim());
         Assert.Equal("Model Selector", rows[1].QuerySelector("td[data-label='Source']")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task ListPage_CountsEveryRequestInTheTab_AndPagesThroughThem()
+    {
+        await Agents.SeedAsync(_cancellationToken);
+        var store = Services.GetRequiredService<IInternalAgentStore>();
+        for (var i = 0; i < 30; i++)
+        {
+            await store.RecordUsageAsync(InternalAgentKeys.ModelSelector, $"m{i}", new ModelUsage(1, 0), InternalAgentUsageSource.ModelSelector, _cancellationToken);
+        }
+        Render<MudPopoverProvider>();
+
+        var cut = Render<InternalAgents>();
+
+        cut.WaitForAssertion(() => Assert.Equal(25, cut.Find("[aria-label='All requests']").QuerySelectorAll("tbody tr").Length));
+        Assert.Contains(cut.FindAll(".tab-count"), count => count.TextContent.Trim() == "30");
+        Assert.Contains("m29", cut.Find("[aria-label='All requests'] tbody tr").TextContent);
+
+        await cut.InvokeAsync(() => cut.FindComponent<MudTable<InternalAgentUsage>>().Instance.NavigateTo(Page.Next));
+
+        cut.WaitForAssertion(() => Assert.Equal(5, cut.Find("[aria-label='All requests']").QuerySelectorAll("tbody tr").Length));
+        Assert.Contains("m4", cut.Find("[aria-label='All requests'] tbody tr").TextContent);
+    }
+
+    [Fact]
+    public async Task UsagePage_ReturnsTheTotalOfTheAgent_AndRejectsAnInvalidPage()
+    {
+        await Agents.SeedAsync(_cancellationToken);
+        var store = Services.GetRequiredService<IInternalAgentStore>();
+        await store.RecordUsageAsync(InternalAgentKeys.ModelSelector, "m", new ModelUsage(1, 0), InternalAgentUsageSource.ModelSelector, _cancellationToken);
+        await store.RecordUsageAsync(InternalAgentKeys.ModelSelector, "m", new ModelUsage(1, 0), InternalAgentUsageSource.ModelSelector, _cancellationToken);
+        await store.RecordUsageAsync(InternalAgentKeys.AgentCopilot, "m", new ModelUsage(1, 0), InternalAgentUsageSource.AgentCopilotChat, _cancellationToken);
+
+        var page = await Agents.GetUsagePageAsync(new(InternalAgentKeys.ModelSelector, 1, 1), _cancellationToken);
+        var all = await Agents.GetUsagePageAsync(new(null, 0, 10), _cancellationToken);
+
+        Assert.Equal((1, 2), (page.Items.Count, page.TotalCount));
+        Assert.Equal((3, 3), (all.Items.Count, all.TotalCount));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.GetUsagePageAsync(new(null, 0, InternalAgentUsageQuery.MaxPageSize + 1), _cancellationToken));
+        await Assert.ThrowsAsync<ValidationFailedException>(() => Agents.GetUsagePageAsync(new("unknown", 0, 10), _cancellationToken));
     }
 
     [Fact]
@@ -450,8 +505,8 @@ public class InternalAgentTests : BunitContext
 
         var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.ModelSelector));
 
-        cut.WaitForAssertion(() => Assert.Single(cut.Find("[aria-label='Recent requests']").QuerySelectorAll("tbody tr")));
-        Assert.Empty(cut.Find("[aria-label='Recent requests']").QuerySelectorAll("td[data-label='Agent']"));
+        cut.WaitForAssertion(() => Assert.Single(cut.Find("[aria-label='Requests']").QuerySelectorAll("tbody tr")));
+        Assert.Empty(cut.Find("[aria-label='Requests']").QuerySelectorAll("td[data-label='Agent']"));
     }
 
     [Fact]
@@ -668,8 +723,8 @@ public class InternalAgentTests : BunitContext
 
         var editor = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.ModelSelector));
         editor.WaitForAssertion(() => Assert.Contains("€1.500",editor.Find("[aria-label='Usage']").TextContent));
-        Assert.Contains("gpt-shown", editor.Find("[aria-label='Recent requests']").TextContent);
-        Assert.Contains("Of which reasoning", editor.Find("[aria-label='Recent requests']").TextContent);
+        Assert.Contains("gpt-shown", editor.Find("[aria-label='Requests']").TextContent);
+        Assert.Contains("Of which reasoning", editor.Find("[aria-label='Requests']").TextContent);
     }
 
     [Fact]
@@ -715,8 +770,8 @@ public class InternalAgentTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Equal("€2.000", cut.Find(".usage-input .usage-value").TextContent.Trim()));
         Assert.Equal("1", cut.Find(".usage-requests .usage-value").TextContent.Trim());
-        Assert.Contains("tested", cut.Find("[aria-label='Recent requests']").TextContent);
-        Assert.Contains("Model test", cut.Find("[aria-label='Recent requests']").TextContent);
+        Assert.Contains("tested", cut.Find("[aria-label='Requests']").TextContent);
+        Assert.Contains("Model test", cut.Find("[aria-label='Requests']").TextContent);
         Assert.Equal("Unsaved prompt.", cut.FindComponent<MarkdownEditor>().Instance.Value);
     }
 

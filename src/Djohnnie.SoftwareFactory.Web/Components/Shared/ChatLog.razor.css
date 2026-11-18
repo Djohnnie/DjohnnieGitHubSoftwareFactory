@@ -6,6 +6,13 @@
     overflow-y: auto;
 }
 
+/* Fills its container (e.g. the chat page) instead of stopping at the maximum height. */
+.chat-log.fill {
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .chat-message {
     white-space: pre-wrap;
     overflow-wrap: anywhere;

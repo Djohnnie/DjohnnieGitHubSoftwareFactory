@@ -1,4 +1,5 @@
 using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Microsoft.EntityFrameworkCore;
 
@@ -88,16 +89,23 @@ public sealed class InternalAgentStore(IDbContextFactory<AppDbContext> dbFactory
         }
     }
 
-    public async Task<List<InternalAgentUsage>> GetRecentUsageAsync(string? key, int count, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<InternalAgentUsage>> GetUsagePageAsync(InternalAgentUsageQuery query, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var usages = await db.InternalAgentUsages.AsNoTracking()
+        var usages = db.InternalAgentUsages.AsNoTracking();
+        if (query.Key is { } key)
+        {
+            usages = usages.Where(u => u.InternalAgent.Key == key);
+        }
+
+        var total = await usages.CountAsync(cancellationToken);
+        var page = await usages
             .Include(u => u.InternalAgent)
-            .Where(u => key == null || u.InternalAgent.Key == key)
             .OrderByDescending(u => u.SysId)
-            .Take(count)
+            .Skip(query.Page * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(cancellationToken);
-        return usages.Select(u => u.ToContract()).ToList();
+        return new(page.Select(u => u.ToContract()).ToList(), total);
     }
 
     public async Task<int> EnsureAsync(IReadOnlyList<InternalAgent> defaults, CancellationToken cancellationToken = default)

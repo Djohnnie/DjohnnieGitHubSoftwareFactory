@@ -22,12 +22,6 @@ public sealed record InternalAgentUsage(
     decimal InputCost,
     decimal OutputCost)
 {
-    /// <summary>How many requests the agent's page shows.</summary>
-    public const int RecentCount = 25;
-
-    /// <summary>How many requests the overview of all agents shows.</summary>
-    public const int RecentOverallCount = 50;
-
     public decimal TotalCost => InputCost + OutputCost;
 
     public static string FormatCost(decimal cost)

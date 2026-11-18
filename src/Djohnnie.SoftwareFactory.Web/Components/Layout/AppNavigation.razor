@@ -7,6 +7,7 @@
         @if (HasRepository)
         {
             <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
+            <MudButton Href="@ChatRoutes.Path" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Forum">Chat</MudButton>
             <MudButton Href="/mindmaps" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Hub">Mindmaps</MudButton>
             <MudButton Href="/work-item-map" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.BubbleChart">Work item map</MudButton>
             <MudButton Href="@KnowledgeBaseRoutes.Path" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.LocalLibrary">Knowledge base</MudButton>
@@ -52,6 +53,7 @@ else
         @if (HasRepository)
         {
             @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
+            @IconLink(ChatRoutes.Path, Icons.Material.Filled.Forum, "Chat")
             @IconLink("/mindmaps", Icons.Material.Filled.Hub, "Mindmaps")
             @IconLink("/work-item-map", Icons.Material.Filled.BubbleChart, "Work item map")
             @IconLink(KnowledgeBaseRoutes.Path, Icons.Material.Filled.LocalLibrary, "Knowledge base")

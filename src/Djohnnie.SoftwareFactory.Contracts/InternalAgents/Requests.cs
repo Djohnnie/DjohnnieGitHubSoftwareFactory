@@ -7,6 +7,14 @@ public sealed record SaveInternalAgentRequest(InternalAgent Agent);
 public sealed record SelectWorkItemModelRequest(WorkItem WorkItem);
 public sealed record TestInternalAgentModelRequest(string Key, string Model);
 
+/// <summary>A page of the model requests, newest first.</summary>
+/// <param name="Key">The agent; <c>null</c> for the requests of all agents.</param>
+/// <param name="Page">Zero-based.</param>
+public sealed record InternalAgentUsageQuery(string? Key, int Page, int PageSize)
+{
+    public const int MaxPageSize = 100;
+}
+
 /// <param name="Error">Why the model could not be used, or <c>null</c> when it responded.</param>
 public sealed record ModelTestResult(string? Error);
 

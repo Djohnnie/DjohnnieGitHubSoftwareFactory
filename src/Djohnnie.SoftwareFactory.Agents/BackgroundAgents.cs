@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
+using Djohnnie.SoftwareFactory.Contracts.Assistant;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
+using Djohnnie.SoftwareFactory.Contracts.ProjectChats;
 using Djohnnie.SoftwareFactory.Contracts.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Contracts.Speech;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
@@ -423,6 +425,78 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
         return Truncate(builder.ToString().TrimEnd(), MaxDescriptionLength);
     }
 
+    public const int ChatTitleWords = 2;
+    private static readonly char[] TitlePunctuation = ['"', '\'', '`', '*', '.', ',', ';', ':', '!', '?', '“', '”', '‘', '’'];
+    private const int MaxChatMessageLength = 4_000;
+
+    /// <summary>Names a conversation from its first message; <c>null</c> when the model returns nothing usable.</summary>
+    /// <param name="agent">The Chat Title Writer agent.</param>
+    /// <param name="firstMessage">What the user wrote first.</param>
+    public async Task<string?> WriteChatTitleAsync(InternalAgent agent, string firstMessage, CancellationToken cancellationToken = default)
+    {
+        var message = $"""
+            The first message:
+            ```text
+            {Truncate(firstMessage.Trim(), MaxChatMessageLength)}
+            ```
+            """;
+        var response = await CreateAgent(agent, InternalAgentUsageSource.ChatTitleWriter).RunAsync<ChatTitleOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        return CleanChatTitle(response.Result?.Title);
+    }
+
+    private const int MaxTranscriptLength = 60_000;
+
+    /// <summary>
+    /// Summarizes a conversation: the previous summary merged with the messages after it; <c>null</c> when the model
+    /// returns nothing usable.
+    /// </summary>
+    /// <param name="agent">The Chat Summarizer agent.</param>
+    /// <param name="previousSummary">The last summary of the conversation; <c>null</c> before the first one.</param>
+    /// <param name="messages">The chat messages after it, in order.</param>
+    public async Task<string?> SummarizeChatAsync(InternalAgent agent, string? previousSummary, IReadOnlyList<ChatDisplayMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        var transcript = new System.Text.StringBuilder();
+        foreach (var entry in messages)
+        {
+            transcript.Append(entry.Role == ChatMessageRole.User ? "### User\n" : "### DGHSF Agent\n");
+            transcript.Append(Truncate(entry.Text.Trim(), MaxChatMessageLength)).Append("\n\n");
+        }
+
+        var message = $"""
+            Summarize the conversation so far.
+
+            ## Previous summary
+            {(string.IsNullOrWhiteSpace(previousSummary) ? "(none: this is the first summary)" : previousSummary.Trim())}
+
+            ## Messages after it
+            {TruncateStart(transcript.ToString().TrimEnd(), MaxTranscriptLength)}
+            """;
+        var response = await CreateAgent(agent, InternalAgentUsageSource.ChatSummarizer)
+            .RunAsync<ChatSummaryOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        var summary = response.Result?.Summary?.Trim();
+        return string.IsNullOrEmpty(summary) ? null : Truncate(summary, ProjectChat.MaxSummaryLength);
+    }
+
+    /// <summary>The first <see cref="ChatTitleWords"/> words without quotes or trailing punctuation; <c>null</c> when none are left.</summary>
+    public static string? CleanChatTitle(string? title)
+    {
+        var words = (title ?? string.Empty)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Select(word => word.Trim(TitlePunctuation))
+            .Where(word => word.Length > 0)
+            .Take(ChatTitleWords)
+            .ToList();
+        if (words.Count == 0)
+        {
+            return null;
+        }
+
+        var joined = string.Join(' ', words);
+        joined = char.ToUpper(joined[0], System.Globalization.CultureInfo.CurrentCulture) + joined[1..];
+        return Truncate(joined, 60);
+    }
+
     private AIAgent CreateAgent(InternalAgent agent, InternalAgentUsageSource source, IList<AITool>? tools = null)
     {
         return factory.CreateAgent(agent.Name, agent.Instructions, tools, agent.Model, usage => usageRecorder.RecordAsync(agent, usage, source));
@@ -438,6 +512,20 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     {
         return value.Length <= maxLength ? value : string.Concat(value.AsSpan(0, maxLength - 1), "…");
     }
+
+    /// <summary>Keeps the end, the most recent part of a transcript.</summary>
+    private static string TruncateStart(string value, int maxLength)
+    {
+        return value.Length <= maxLength ? value : string.Concat("…", value.AsSpan(value.Length - maxLength + 1));
+    }
+
+    [Description("The summary of the conversation so far.")]
+    internal sealed record ChatSummaryOutput(
+        [property: Description("The summary of the whole conversation as Markdown.")] string? Summary);
+
+    [Description("The title of the conversation.")]
+    internal sealed record ChatTitleOutput(
+        [property: Description("Exactly two words.")] string? Title);
 
     [Description("The chosen model and the estimated complexity of the work.")]
     internal sealed record ModelSelectorOutput(

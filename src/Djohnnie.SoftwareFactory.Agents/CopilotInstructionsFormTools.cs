@@ -24,7 +24,9 @@ public sealed class CopilotInstructionsFormTools(
     IReadOnlyList<AITool>? gitHubTools = null)
 {
     /// <summary>Files longer than this are cut off, so a single file doesn't flood the conversation.</summary>
-    public const int MaxFileLength = 20_000;
+    public const int MaxFileLength = RepositoryFileTools.MaxFileLength;
+
+    private readonly RepositoryFileTools _files = new(listDirectory, readFile);
 
     public const int MaxContentLength = 50_000;
 
@@ -127,27 +129,7 @@ public sealed class CopilotInstructionsFormTools(
         [Description("The directory path relative to the repository root, e.g. 'src' or '.github/workflows'. Empty for the root.")] string? path = null,
         CancellationToken cancellationToken = default)
     {
-        if (!TryNormalizePath(path, out var directory))
-        {
-            return OutsideRepository;
-        }
-
-        try
-        {
-            var entries = await listDirectory(directory, cancellationToken);
-            if (entries.Count == 0)
-            {
-                return $"'{DisplayPath(directory)}' is empty or does not exist.";
-            }
-            return string.Join("\n", entries
-                .OrderBy(e => e.Type == "dir" ? 0 : 1)
-                .ThenBy(e => e.Path, StringComparer.OrdinalIgnoreCase)
-                .Select(e => e.Type == "dir" ? $"{e.Path}/" : e.Path));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return $"Could not list '{DisplayPath(directory)}': {ex.Message}";
-        }
+        return await _files.ListRepositoryFilesAsync(path, cancellationToken);
     }
 
     [Description("Reads a text file of the selected repository (default branch). Long files are cut off.")]
@@ -155,51 +137,14 @@ public sealed class CopilotInstructionsFormTools(
         [Description("The file path relative to the repository root, e.g. 'README.md' or 'src/App/App.csproj'.")] string path,
         CancellationToken cancellationToken = default)
     {
-        if (!TryNormalizePath(path, out var file))
-        {
-            return OutsideRepository;
-        }
-        if (file.Length == 0)
-        {
-            return "Pass the path of a file; use list_repository_files to list a directory.";
-        }
-
-        try
-        {
-            var content = await readFile(file, cancellationToken);
-            if (content is null)
-            {
-                return $"'{file}' does not exist.";
-            }
-            if (content.Contains('\0'))
-            {
-                return $"'{file}' is a binary file.";
-            }
-            return content.Length <= MaxFileLength
-                ? content
-                : $"{content[..MaxFileLength]}\n\n[Cut off: the file has {content.Length} characters; only the first {MaxFileLength} are shown.]";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return $"Could not read '{file}': {ex.Message}";
-        }
+        return await _files.ReadRepositoryFileAsync(path, cancellationToken);
     }
 
-    internal const string OutsideRepository = "Paths are relative to the repository root and can't contain '..'.";
+    internal const string OutsideRepository = RepositoryFileTools.OutsideRepository;
 
     /// <summary>Normalizes a repository path; <c>false</c> for paths with '..', which could reach other GitHub API endpoints.</summary>
     internal static bool TryNormalizePath(string? path, out string normalized)
     {
-        var segments = (path ?? string.Empty).Replace('\\', '/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(segment => segment != ".")
-            .ToList();
-        normalized = string.Join('/', segments);
-        return !segments.Contains("..");
-    }
-
-    private static string DisplayPath(string path)
-    {
-        return path.Length == 0 ? "/" : path;
+        return RepositoryFileTools.TryNormalizePath(path, out normalized);
     }
 }

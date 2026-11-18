@@ -1,3 +1,4 @@
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using Djohnnie.SoftwareFactory.Contracts.InternalAgents;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
@@ -23,11 +24,8 @@ public interface IInternalAgentStore
     /// <param name="cancellationToken">Cancels the save.</param>
     Task RecordUsageAsync(string key, string model, ModelUsage usage, InternalAgentUsageSource source, CancellationToken cancellationToken = default);
 
-    /// <summary>The most recent requests, newest first.</summary>
-    /// <param name="key">The agent; <c>null</c> for the requests of all agents.</param>
-    /// <param name="count">The maximum number of requests.</param>
-    /// <param name="cancellationToken">Cancels the query.</param>
-    Task<List<InternalAgentUsage>> GetRecentUsageAsync(string? key, int count, CancellationToken cancellationToken = default);
+    /// <summary>A page of the requests, newest first, with the number of requests of the agent (or of all agents).</summary>
+    Task<PagedResult<InternalAgentUsage>> GetUsagePageAsync(InternalAgentUsageQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Adds the agents that don't exist yet with their default prompt and the default model, and refreshes the name,

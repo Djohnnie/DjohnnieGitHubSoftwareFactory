@@ -1,4 +1,5 @@
 using System.Text;
+using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
 namespace Djohnnie.SoftwareFactory.Agents;
@@ -11,7 +12,10 @@ public static class WorkItemBacklog
 {
     public const int DefaultMaxLength = 30_000;
 
-    public static string Outline(IReadOnlyList<WorkItem> items, int maxLength = DefaultMaxLength)
+    /// <param name="items">The items.</param>
+    /// <param name="maxLength">Where the outline is cut off.</param>
+    /// <param name="withPages">Adds the page of each item in DGHSF, for a chat reply to link to.</param>
+    public static string Outline(IReadOnlyList<WorkItem> items, int maxLength = DefaultMaxLength, bool withPages = false)
     {
         if (items.Count == 0)
         {
@@ -23,7 +27,7 @@ public static class WorkItemBacklog
         var lines = new List<string>();
         void Write(WorkItem item, int depth)
         {
-            lines.Add($"{new string(' ', depth * 2)}- {Line(item)}");
+            lines.Add($"{new string(' ', depth * 2)}- {Line(item, withPages)}");
             foreach (var child in Ordered(children[item.Id]))
             {
                 Write(child, depth + 1);
@@ -48,11 +52,15 @@ public static class WorkItemBacklog
         return builder.ToString().TrimEnd();
     }
 
-    /// <summary>E.g. <c>User story [accepted, #12] Return problem details (id: 3f2a…)</c>.</summary>
-    public static string Line(WorkItem item)
+    /// <summary>
+    /// E.g. <c>User story [accepted, #12] Return problem details (id: 3f2a…)</c>, with <paramref name="withPage"/>
+    /// followed by <c>, page: /stories/3f2a…</c>.
+    /// </summary>
+    public static string Line(WorkItem item, bool withPage = false)
     {
         var status = Status(item.Status) + (item.IssueNumber is { } number ? $", #{number}" : string.Empty);
-        return $"{item.Type.DisplayName} [{status}] {item.Title.ReplaceLineEndings(" ")} (id: {item.Id})";
+        var page = withPage ? $", page: {AppPaths.WorkItem(item.Type, item.Id)}" : string.Empty;
+        return $"{item.Type.DisplayName} [{status}] {item.Title.ReplaceLineEndings(" ")} (id: {item.Id}{page})";
     }
 
     public static string Status(WorkItemStatus status)

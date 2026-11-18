@@ -184,7 +184,7 @@ public class ActionsPageTests : BunitContext
 
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
 
-        Assert.Equal(["/", "/mindmaps", "/work-item-map", "/knowledge-base", "/actions"], links.Take(5));
+        Assert.Equal(["/", "/chat", "/mindmaps", "/work-item-map", "/knowledge-base", "/actions"], links.Take(6));
     }
 
     [Fact]

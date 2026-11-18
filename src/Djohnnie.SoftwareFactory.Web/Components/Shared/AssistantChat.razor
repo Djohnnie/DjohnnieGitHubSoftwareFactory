@@ -48,28 +48,7 @@ else
         {
             @if (_messages.Count > 0)
             {
-                <div class="chat-log mt-3">
-                    <div>
-                        @foreach (var message in _messages)
-                        {
-                            <div class="@($"chat-message {(message.FromUser ? "from-user" : "from-assistant")}{(message.IsError ? " is-error" : string.Empty)}")">
-                                @if (message.Text.Length == 0 && _busy)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                }
-                                else if (message.FromUser || message.IsError)
-                                {
-                                    @message.Text
-                                }
-                                else
-                                {
-                                    @* Agent replies are Markdown; ChatMarkdown escapes raw HTML and keeps only safe links. *@
-                                    <div class="chat-markdown">@((MarkupString)ChatMarkdown.ToHtml(message.Text))</div>
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
+                <ChatLog Messages="_messages" Busy="_busy" Class="mt-3" />
             }
             else if (_suggesting)
             {
@@ -103,13 +82,6 @@ else
 }
 
 @code {
-    private sealed record ChatEntry(bool fromUser, string text)
-    {
-        public bool FromUser { get; } = fromUser;
-        public string Text { get; set; } = text;
-        public bool IsError { get; set; }
-    }
-
     /// <summary>The internal chat agent, see <see cref="InternalAgentKeys"/>.</summary>
     [Parameter, EditorRequired] public string CopilotKey { get; set; } = string.Empty;
 
@@ -129,7 +101,7 @@ else
     /// <summary>The selected repository; the Chat Suggestions agent gets its mindmaps and parent work items as context.</summary>
     [Parameter] public string? SuggestionRepository { get; set; }
 
-    private readonly List<ChatEntry> _messages = [];
+    private readonly List<ChatLogEntry> _messages = [];
     private InternalAgent? _copilot;
     private string? _loadedKey;
     private ChatOwner? _loadedOwner;
@@ -162,7 +134,7 @@ else
                 if (Owner is not null)
                 {
                     var history = await Assistant.GetHistoryAsync(Owner);
-                    _messages.AddRange(history.Select(m => new ChatEntry(m.Role == ChatMessageRole.User, m.Text) { IsError = m.IsError }));
+                    _messages.AddRange(history.Select(m => new ChatLogEntry(m.Role == ChatMessageRole.User, m.Text) { IsError = m.IsError }));
                 }
 
                 // Last: the suggestions wait for it, and aren't written for a conversation that continues.
@@ -244,8 +216,8 @@ else
         CancelSuggestions();
         _input = null;
         _busy = true;
-        _messages.Add(new ChatEntry(true, text));
-        var reply = new ChatEntry(false, string.Empty);
+        _messages.Add(new ChatLogEntry(true, text));
+        var reply = new ChatLogEntry(false, string.Empty);
         _messages.Add(reply);
         _cancellation = new CancellationTokenSource();
 
@@ -285,7 +257,7 @@ else
         }
     }
 
-    private async Task SaveTurnAsync(string text, ChatEntry reply)
+    private async Task SaveTurnAsync(string text, ChatLogEntry reply)
     {
         if (_conversation is null)
         {

@@ -158,11 +158,11 @@ else if (_agent is not null)
                 </MudPaper>
             </MudItem>
         }
-        @if (_usage.Count > 0)
+        @if (_stored.RequestCount > 0)
         {
             <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mb-2">Recent requests</MudText>
-                <UsageRequestsTable Items="_usage" />
+                <MudText Typo="Typo.h6" Class="mb-2">Requests <span class="tab-count">@_stored.RequestCount.ToString("N0")</span></MudText>
+                <UsageRequestsTable @ref="_requests" AgentKey="@Key" />
             </MudItem>
         }
     </MudGrid>
@@ -182,7 +182,7 @@ else if (_agent is not null)
     private string? _error;
     private string? _loadedKey;
     private List<InternalModel> _models = [];
-    private IReadOnlyList<InternalAgentUsage> _usage = [];
+    private UsageRequestsTable? _requests;
 
     private string CurrentModel => _models.FirstOrDefault(m => m.Id == _agent?.ModelId)?.Name ?? string.Empty;
     private string DefaultModelLabel => string.IsNullOrEmpty(Assistant.DefaultModel) ? "Configured model" : $"Configured model ({Assistant.DefaultModel})";
@@ -202,6 +202,8 @@ else if (_agent is not null)
             InternalAgentKeys.ModelSelector => "When disabled, the assignment settings show no model suggestion.",
             InternalAgentKeys.DescriptionWriter => "When disabled, a dictated description is added as it was recognized, at the end of the description.",
             InternalAgentKeys.WorkItemBreakdown => "When disabled, epics, features and user stories don't offer to generate their child items.",
+            InternalAgentKeys.ChatTitleWriter => "When disabled, a new chat keeps the start of its first message as its title.",
+            InternalAgentKeys.ChatSummarizer => "When disabled, the DGHSF Agent gets every message of a conversation again, after the last summary.",
             _ => "When disabled, agent chats show their built-in example suggestions."
         };
 
@@ -219,7 +221,6 @@ else if (_agent is not null)
         {
             _stored = await Agents.GetAsync(Key);
             _models = await Models.GetAllAsync();
-            _usage = await Agents.GetUsageAsync(Key);
             _agent = Editable(_stored);
         }
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException)
@@ -302,7 +303,11 @@ else if (_agent is not null)
         try
         {
             _stored = await Agents.GetAsync(Key);
-            _usage = await Agents.GetUsageAsync(Key);
+            // A table that isn't shown yet loads when the first request makes it appear.
+            if (_requests is not null)
+            {
+                await _requests.ReloadAsync();
+            }
         }
         catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
         {

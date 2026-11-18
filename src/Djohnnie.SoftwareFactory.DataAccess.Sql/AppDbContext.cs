@@ -22,6 +22,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AuthSession> AuthSessions => Set<AuthSession>();
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ProjectChat> ProjectChats => Set<ProjectChat>();
+    public DbSet<ProjectChatMessage> ProjectChatMessages => Set<ProjectChatMessage>();
     public DbSet<SyncLogEvent> SyncLogEvents => Set<SyncLogEvent>();
     public DbSet<TodoTask> TodoTasks => Set<TodoTask>();
 
@@ -56,6 +58,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .ConfigureInternalAgent()
             .ConfigureAuthSession()
             .ConfigureChatConversation()
+            .ConfigureProjectChat()
             .ConfigureSyncLog()
             .ConfigureTodoTask()
             .ConfigureEntityKeys();

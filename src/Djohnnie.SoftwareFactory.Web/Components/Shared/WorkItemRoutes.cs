@@ -37,7 +37,7 @@ public static class WorkItemRoutes
 
     public static string ItemPath(WorkItemType type, Guid id)
     {
-        return $"{ListPath(type)}/{id}";
+        return Contracts.AppPaths.WorkItem(type, id);
     }
 
     /// <summary>The page that generates and reviews the child items of a stored item.</summary>
@@ -116,11 +116,7 @@ public static class WorkItemRoutes
 
     private static string Segment(WorkItemType type)
     {
-        return type switch
-        {
-            WorkItemType.Story => "stories",
-            _ => type.Label + "s"
-        };
+        return type.PathSegment;
     }
 
     private static string TemplateSegment(WorkItemType type)

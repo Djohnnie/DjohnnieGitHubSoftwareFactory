@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261116154218_AddKnowledgeFolderRepository";
+    public override string LastMigrationId => "20261118164629_AddProjectChatSummaries";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -742,6 +742,98 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("Mindmaps");
             });
 
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChat", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<DateTimeOffset>("LastUsedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<Guid>("RepositoryId")
+                    .HasColumnType("uniqueidentifier");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("RepositoryId", "LastUsedAt");
+
+                b.ToTable("ProjectChats");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChatMessage", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<Guid>("ChatId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("DisplayText")
+                    .HasColumnType("nvarchar(max)");
+
+                b.Property<bool>("IsError")
+                    .HasColumnType("bit");
+
+                b.Property<bool>("IsSummarized")
+                    .HasColumnType("bit");
+
+                b.Property<bool>("IsSummary")
+                    .HasColumnType("bit");
+
+                b.Property<string>("Payload")
+                    .HasColumnType("nvarchar(max)");
+
+                b.Property<int>("Role")
+                    .HasColumnType("int");
+
+                b.Property<int>("Sequence")
+                    .HasColumnType("int");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("ChatId", "Sequence")
+                    .IsUnique();
+
+                b.ToTable("ProjectChatMessages");
+            });
+
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", b =>
             {
                 b.Property<Guid>("Id")
@@ -1314,6 +1406,28 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.Navigation("Repository");
             });
 
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChat", b =>
+            {
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.Repository", "Repository")
+                    .WithMany()
+                    .HasForeignKey("RepositoryId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+
+                b.Navigation("Repository");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChatMessage", b =>
+            {
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChat", "Chat")
+                    .WithMany("Messages")
+                    .HasForeignKey("ChatId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Chat");
+            });
+
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", b =>
             {
                 b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.WorkItem", "Parent")
@@ -1333,6 +1447,11 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>
+            {
+                b.Navigation("Messages");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ProjectChat", b =>
             {
                 b.Navigation("Messages");
             });

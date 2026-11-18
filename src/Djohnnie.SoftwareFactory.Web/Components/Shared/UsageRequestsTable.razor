@@ -1,6 +1,8 @@
-@* The recent model requests of one internal agent, or of all of them together. *@
+@* The model requests of one internal agent, or of all of them together, newest first, a page at a time. *@
+@inject InternalAgentService Agents
 
-<MudTable Outlined="true" Striped="true" Dense="true" T="InternalAgentUsage" Items="Items" Elevation="0" aria-label="@Label">
+<MudTable @ref="_table" T="InternalAgentUsage" ServerData="LoadAsync" RowsPerPage="25" Outlined="true" Striped="true" Dense="true" Hover="true"
+          Elevation="0" LoadingProgressColor="Color.Primary" aria-label="@Label">
     <HeaderContent>
         <MudTh>When</MudTh>
         @if (ShowAgent)
@@ -33,13 +35,48 @@
         <MudTd DataLabel="Output cost" Style="text-align:right">@InternalAgentUsage.FormatCost(context.OutputCost)</MudTd>
         <MudTd DataLabel="Total" Style="text-align:right">@InternalAgentUsage.FormatCost(context.TotalCost)</MudTd>
     </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">@(_error ?? "No requests yet.")</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="[25, 50, 100]" />
+    </PagerContent>
 </MudTable>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<InternalAgentUsage> Items { get; set; } = [];
+    /// <summary>The agent whose requests are listed; <c>null</c> for the requests of all agents.</summary>
+    [Parameter] public string? AgentKey { get; set; }
 
     /// <summary>Adds a column with the agent of each request, for a list that combines agents.</summary>
     [Parameter] public bool ShowAgent { get; set; }
 
-    [Parameter] public string Label { get; set; } = "Recent requests";
+    [Parameter] public string Label { get; set; } = "Requests";
+
+    private MudTable<InternalAgentUsage>? _table;
+    private string? _error;
+
+    /// <summary>Loads the newest requests again, back on the first page so a new request shows.</summary>
+    public async Task ReloadAsync()
+    {
+        if (_table is not null)
+        {
+            _table.NavigateTo(Page.First);
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task<TableData<InternalAgentUsage>> LoadAsync(TableState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var page = await Agents.GetUsagePageAsync(new InternalAgentUsageQuery(AgentKey, state.Page, state.PageSize), cancellationToken);
+            _error = null;
+            return new TableData<InternalAgentUsage> { Items = page.Items, TotalItems = page.TotalCount };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = $"Could not load the requests: {ex.Message}";
+            return new TableData<InternalAgentUsage> { Items = [], TotalItems = 0 };
+        }
+    }
 }

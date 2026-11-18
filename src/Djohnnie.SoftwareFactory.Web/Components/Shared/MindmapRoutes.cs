@@ -10,6 +10,7 @@ public static class MindmapRoutes
     /// <param name="ideaId">An idea to select and bring into view.</param>
     public static string MapPath(Guid id, Guid? ideaId = null)
     {
-        return ideaId is { } idea ? $"/mindmaps/{id}?idea={idea}" : $"/mindmaps/{id}";
+        var path = Contracts.AppPaths.Mindmap(id);
+        return ideaId is { } idea ? $"{path}?idea={idea}" : path;
     }
 }

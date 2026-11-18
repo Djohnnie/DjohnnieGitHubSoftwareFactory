@@ -21,7 +21,8 @@ public static class InternalAgentUsageSources
         [InternalAgentKeys.AgentCopilot] = InternalAgentUsageSource.AgentCopilotChat,
         [InternalAgentKeys.AgentTemplateCopilot] = InternalAgentUsageSource.AgentTemplateCopilotChat,
         [InternalAgentKeys.CopilotInstructionsCopilot] = InternalAgentUsageSource.CopilotInstructionsCopilotChat,
-        [InternalAgentKeys.CopilotSkillsAgent] = InternalAgentUsageSource.CopilotSkillsAgentChat
+        [InternalAgentKeys.CopilotSkillsAgent] = InternalAgentUsageSource.CopilotSkillsAgentChat,
+        [InternalAgentKeys.DghsfAgent] = InternalAgentUsageSource.DghsfAgentChat
     };
 
     /// <summary>The source of a chat with the chat agent with this key.</summary>

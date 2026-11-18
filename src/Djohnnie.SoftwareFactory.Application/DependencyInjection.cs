@@ -12,6 +12,7 @@ using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItemTemplates;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Mindmaps;
+using Djohnnie.SoftwareFactory.Application.Features.ProjectChats;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Application.Features.RepositoryAnalysis;
 using Djohnnie.SoftwareFactory.Application.Features.Speech;
@@ -78,6 +79,7 @@ public static class DependencyInjection
             services.AddScoped<AuthSessionService>();
             services.AddScoped<AgentService>();
             services.AddScoped<AssistantService>();
+            services.AddScoped<ProjectChatService>();
             services.AddScoped<InternalAgentRegistry>();
             services.AddScoped<InternalAgentService>();
             services.AddScoped<InternalModelService>();

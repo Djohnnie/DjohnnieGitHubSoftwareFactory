@@ -1,0 +1,104 @@
+/* The conversations on the left, the open conversation on the right, filling the rest of the window. */
+.project-chat {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 16px;
+    height: calc(100vh - 280px);
+    min-height: 480px;
+}
+
+.project-chat ::deep .project-chat-list {
+    overflow-y: auto;
+    padding: 8px 0;
+}
+
+.project-chat ::deep .project-chat-conversation {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.project-chat-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 4px;
+    border-left: 3px solid transparent;
+}
+
+.project-chat-item:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.project-chat-item.selected {
+    border-left-color: var(--mud-palette-primary);
+    background: var(--mud-palette-action-default-hover);
+}
+
+.project-chat-link {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 4px 8px 12px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.project-chat-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.project-chat-time {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The delete button only shows on hover or focus, and always on the selected conversation and on touch screens. */
+.project-chat-item ::deep .project-chat-delete {
+    opacity: 0;
+}
+
+.project-chat-item:hover ::deep .project-chat-delete,
+.project-chat-item:focus-within ::deep .project-chat-delete,
+.project-chat-item.selected ::deep .project-chat-delete {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .project-chat-item ::deep .project-chat-delete {
+        opacity: 1;
+    }
+}
+
+.project-chat-empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+}
+
+/* On small screens the list sits above the conversation. */
+@media (max-width: 959.98px) {
+    .project-chat {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        height: auto;
+    }
+
+    .project-chat ::deep .project-chat-list {
+        max-height: 200px;
+    }
+
+    .project-chat ::deep .project-chat-conversation {
+        height: 70vh;
+        min-height: 420px;
+    }
+}

@@ -1,0 +1,44 @@
+@*
+    The messages of a chat with an internal agent, newest at the bottom and kept scrolled there. Agent replies are
+    Markdown; ChatMarkdown escapes raw HTML and keeps only safe links. An empty reply shows a spinner while Busy.
+*@
+<div class="@($"chat-log {Class}".TrimEnd())">
+    <div>
+        @foreach (var message in Messages)
+        {
+            <div class="@($"chat-message {(message.FromUser ? "from-user" : "from-assistant")}{(message.IsError ? " is-error" : string.Empty)}")">
+                @if (message.Text.Length == 0 && Busy)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else if (message.FromUser || message.IsError)
+                {
+                    @message.Text
+                }
+                else
+                {
+                    <div class="chat-markdown">@((MarkupString)ChatMarkdown.ToHtml(message.Text, AppLinks, AppLinkFor))</div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChatLogEntry> Messages { get; set; } = [];
+
+    /// <summary>Whether a reply is being written; an empty reply then shows a spinner.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>
+    /// Keeps the links of replies to the pages of work items and mindmaps. They navigate away from the chat, so only for
+    /// a chat that is stored and has no form to lose.
+    /// </summary>
+    [Parameter] public bool AppLinks { get; set; }
+
+    /// <summary>With <see cref="AppLinks"/>: the page in DGHSF for a URL in a reply (e.g. a work item's GitHub issue), or <c>null</c>.</summary>
+    [Parameter] public Func<string, string?>? AppLinkFor { get; set; }
+
+    /// <summary>Extra classes, e.g. to let the log fill its container instead of its default maximum height.</summary>
+    [Parameter] public string? Class { get; set; }
+}

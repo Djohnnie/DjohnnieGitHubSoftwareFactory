@@ -1,0 +1,582 @@
+@page "/chat"
+@page "/chat/{Id:guid}"
+@using Djohnnie.SoftwareFactory.Application.Features.Speech
+@implements IAsyncDisposable
+@inject ProjectChatService Chats
+@inject WorkItemService WorkItems
+@inject GitHubMcpService GitHubMcp
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject SpeechService Speech
+@inject IJSRuntime JS
+@inject ILogger<Chat> Logger
+
+@*
+    A chat with the DGHSF Agent about the whole project of the selected repository, with the repository's conversations on
+    the left, most recently used first. The first message starts a stored conversation, which the Chat Title Writer names
+    in two words while the agent answers. Every ProjectChat.SummaryInterval messages the Chat Summarizer summarizes the
+    conversation in the background; the agent then gets the summary and the messages after it, the chat still shows them all.
+*@
+
+<PageTitle>Chat</PageTitle>
+
+<PageBreadcrumbs Current="Chat" />
+
+<MudStack Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4">Chat</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@Subtitle</MudText>
+    </div>
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddComment"
+                   Href="@ChatRoutes.Path" Disabled="_busy || Id is null">New chat</MudButton>
+    </MudStack>
+</MudStack>
+
+@if (!Chats.IsConfigured)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
+        DGHSF Agent is not configured yet. Set <code>OpenAI:Endpoint</code>, <code>OpenAI:Model</code> and
+        <code>OpenAI:ApiKey</code> (for example with <code>dotnet user-secrets</code>) and restart the app.
+    </MudAlert>
+}
+else if (_agent is { IsEnabled: false })
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">
+        The DGHSF Agent is disabled. Enable it on the <MudLink Href="@($"/internal-agents/{InternalAgentKeys.DghsfAgent}")">internal agents</MudLink> page to chat.
+    </MudAlert>
+}
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Class="mb-4">@_error</MudAlert>
+}
+
+<div class="project-chat">
+    <MudPaper Class="project-chat-list" Outlined="true" Elevation="0">
+        @if (_loadingList)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_chats.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">No conversations yet. Ask a question to start one.</MudText>
+        }
+        else
+        {
+            <nav aria-label="Conversations">
+                @foreach (var chat in _chats)
+                {
+                    var selected = chat.Id == Id;
+                    <div class="@($"project-chat-item{(selected ? " selected" : string.Empty)}")" @key="chat.Id">
+                        <a href="@ChatRoutes.ChatPath(chat.Id)" class="project-chat-link" aria-current="@(selected ? "page" : null)">
+                            <span class="project-chat-title">@chat.Title</span>
+                            <span class="project-chat-time"><TimeAgo At="chat.LastUsedAt" /></span>
+                        </a>
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Class="project-chat-delete"
+                                       aria-label="@($"Delete {chat.Title}")" Disabled="_busy && selected"
+                                       OnClick="() => DeleteAsync(chat)" />
+                    </div>
+                }
+            </nav>
+        }
+    </MudPaper>
+
+    <MudPaper Class="project-chat-conversation pa-4" Outlined="true" Elevation="0">
+        @if (_loadingChat)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_messages.Count > 0)
+        {
+            <ChatLog Messages="_messages" Busy="_busy" Class="fill" AppLinks="true" AppLinkFor="AppLinkFor" />
+        }
+        else
+        {
+            <div class="project-chat-empty">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" Size="Size.Large" />
+                <MudText Typo="Typo.h6">@(_agent?.Name ?? "DGHSF Agent")</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                    Ask anything about @Repository.Current?.FullName: its work items, mindmaps, knowledge base, code, Copilot setup and activity on GitHub.
+                </MudText>
+                <div class="mt-2">
+                    @foreach (var suggestion in Suggestions)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Disabled="!CanSend" OnClick="() => SendAsync(suggestion)">@suggestion</MudChip>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Read-only rather than disabled while busy, so the Stop adornment stays clickable. While the input is empty the
+           adornment is a microphone (with Azure AI Speech): what is said fills the input, to send with Enter. *@
+        <MudTextField Variant="Variant.Outlined" @bind-Value="_input" Label="Ask DGHSF Agent about this project" Immediate="true"
+                      Class="@(IsDictating ? "mt-2 flex-grow-0 dictation-listening" : "mt-2 flex-grow-0")" ReadOnly="_busy" Disabled="!CanSend && !_busy" OnKeyDown="OnKeyDownAsync"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@AdornmentIcon"
+                      AdornmentColor="@AdornmentColor"
+                      AdornmentAriaLabel="@AdornmentLabel"
+                      OnAdornmentClick="OnAdornmentClickAsync" />
+    </MudPaper>
+</div>
+
+@code {
+    private static readonly string[] Suggestions =
+    [
+        "What is the current state of the backlog?",
+        "Which work items is Copilot working on?",
+        "Summarize what changed in the repository recently"
+    ];
+
+    /// <summary>The conversation to show; <c>null</c> for a new one.</summary>
+    [Parameter] public Guid? Id { get; set; }
+
+    private readonly CancellationTokenSource _disposed = new();
+    private readonly List<ProjectChatSummary> _chats = [];
+    private readonly List<ChatLogEntry> _messages = [];
+    private Task<AssistantTools>? _tools;
+    private RepositoryGitHubTools? _gitHubTools;
+    private InternalAgent? _agent;
+    private WorkItemIssueLinks? _issueLinks;
+    private ProjectConversation? _conversation;
+    private CancellationTokenSource? _cancellation;
+    private SpeechDictation? _dictation;
+    private Guid? _loadedId;
+    private bool _loadingList = true;
+    private bool _loadingChat;
+    private bool _busy;
+    private bool _isDisposed;
+    private string? _input;
+    private string? _error;
+
+    private string Repo => Repository.Current!.FullName;
+
+    private bool CanSend => Chats.IsConfigured && _agent is { IsEnabled: true } && !_loadingChat;
+
+    private string Subtitle
+    {
+        get
+        {
+            var gitHub = _gitHubTools is not null ? ", its commits, issues, pull requests and workflow runs" : string.Empty;
+            return $"Ask the DGHSF Agent about the whole project: it reads everything DGHSF knows about {Repository.Current?.FullName}, " +
+                   $"the repository's files{gitHub}. It can't change anything.";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Connect to the GitHub MCP server while the rest loads; the first message waits for it.
+        _tools = CreateToolsAsync();
+        try
+        {
+            _agent = await Chats.GetAgentAsync(_disposed.Token);
+            _chats.AddRange(await Chats.GetAllAsync(Repo, _disposed.Token));
+            await LoadIssueLinksAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = $"Could not load the conversations: {ex.Message}";
+        }
+        finally
+        {
+            _loadingList = false;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _loadedId)
+        {
+            return;
+        }
+
+        _loadedId = Id;
+        // The conversation that was just started here navigates to its own address: keep it as it is.
+        if (Id is not null && _conversation?.ChatId == Id)
+        {
+            return;
+        }
+
+        _cancellation?.Cancel();
+        if (_dictation is { IsListening: true })
+        {
+            await _dictation.CancelAsync();
+        }
+        _conversation = null;
+        _messages.Clear();
+        _input = null;
+        if (Id is not { } id)
+        {
+            return;
+        }
+
+        _loadingChat = true;
+        try
+        {
+            var chat = await Chats.GetAsync(Repo, id, _disposed.Token);
+            if (chat is null)
+            {
+                Snackbar.Add("That conversation no longer exists.", Severity.Warning);
+                Navigation.NavigateTo(ChatRoutes.Path, replace: true);
+                return;
+            }
+
+            _messages.AddRange(chat.Messages.Select(m => new ChatLogEntry(m.Role == ChatMessageRole.User, m.Text) { IsError = m.IsError }));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = $"Could not load the conversation: {ex.Message}";
+        }
+        finally
+        {
+            _loadingChat = false;
+        }
+    }
+
+    /// <summary>The page in DGHSF for a URL in a reply: a work item's GitHub issue opens the work item.</summary>
+    private string? AppLinkFor(string url)
+    {
+        return _issueLinks?.PageFor(url);
+    }
+
+    private async Task LoadIssueLinksAsync()
+    {
+        try
+        {
+            _issueLinks = new WorkItemIssueLinks(await WorkItems.GetAllAsync(Repo, cancellationToken: _disposed.Token));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The issue links then stay links to GitHub.
+            Logger.LogWarning(ex, "Could not load the work items of {Repository} to link their issues in the chat.", Repo);
+        }
+    }
+
+    private async Task<AssistantTools> CreateToolsAsync()
+    {
+        try
+        {
+            _gitHubTools = await GitHubMcp.ConnectAsync(Repo, _disposed.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _gitHubTools = null;
+        }
+
+        if (_isDisposed && _gitHubTools is not null)
+        {
+            // The page closed while connecting.
+            await _gitHubTools.DisposeAsync();
+            _gitHubTools = null;
+        }
+
+        await InvokeAsync(StateHasChanged);
+        return Chats.CreateTools(Repo, _gitHubTools);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_busy)
+        {
+            await SendAsync(_input);
+        }
+    }
+
+    private bool IsDictating
+    {
+        get
+        {
+            return _dictation?.IsListening == true;
+        }
+    }
+
+    private bool ShowsMicrophone
+    {
+        get
+        {
+            return !_busy && CanSend && Speech.IsEnabled && (IsDictating || string.IsNullOrWhiteSpace(_input));
+        }
+    }
+
+    private string AdornmentIcon
+    {
+        get
+        {
+            if (_busy)
+            {
+                return Icons.Material.Filled.Stop;
+            }
+
+            if (ShowsMicrophone)
+            {
+                return IsDictating ? Icons.Material.Filled.Mic : Icons.Material.Outlined.Mic;
+            }
+
+            return Icons.Material.Filled.Send;
+        }
+    }
+
+    private Color AdornmentColor
+    {
+        get
+        {
+            if (_busy || IsDictating)
+            {
+                return Color.Error;
+            }
+
+            return string.IsNullOrWhiteSpace(_input) ? Color.Default : Color.Primary;
+        }
+    }
+
+    private string AdornmentLabel
+    {
+        get
+        {
+            if (_busy)
+            {
+                return "Stop";
+            }
+
+            if (ShowsMicrophone)
+            {
+                return IsDictating ? "Stop dictating" : "Dictate a message";
+            }
+
+            return "Send (Enter)";
+        }
+    }
+
+    private async Task OnAdornmentClickAsync()
+    {
+        if (_busy)
+        {
+            _cancellation?.Cancel();
+        }
+        else if (ShowsMicrophone)
+        {
+            await DictateAsync();
+        }
+        else
+        {
+            await SendAsync(_input);
+        }
+    }
+
+    /// <summary>The microphone: listens until the speaker pauses and puts what was said in the input, to send with Enter.</summary>
+    private async Task DictateAsync()
+    {
+        _dictation ??= new SpeechDictation(Speech, JS, Snackbar, Logger);
+        if (_dictation.IsListening)
+        {
+            await _dictation.CancelAsync();
+            return;
+        }
+
+        var listening = _dictation.ListenOnceAsync();
+        StateHasChanged();
+        if (await listening is { } spoken)
+        {
+            _input = spoken;
+        }
+    }
+
+    private async Task SendAsync(string? text)
+    {
+        text = text?.Trim();
+        if (string.IsNullOrEmpty(text) || _busy || !CanSend || _agent is not { } agent)
+        {
+            return;
+        }
+
+        _input = null;
+        _busy = true;
+        _error = null;
+        var question = new ChatLogEntry(true, text);
+        var reply = new ChatLogEntry(false, string.Empty);
+        _messages.Add(question);
+        _messages.Add(reply);
+        var cancellation = new CancellationTokenSource();
+        _cancellation = cancellation;
+
+        try
+        {
+            ProjectConversation conversation;
+            try
+            {
+                conversation = _conversation ?? await OpenConversationAsync(agent, text, cancellation.Token);
+            }
+            catch (Exception ex)
+            {
+                // Nothing was sent: take the message back into the input.
+                _messages.Remove(question);
+                _messages.Remove(reply);
+                if (ex is not OperationCanceledException)
+                {
+                    _input = text;
+                    Snackbar.Add($"Could not start the conversation: {ex.Message}", Severity.Error);
+                }
+                return;
+            }
+
+            try
+            {
+                await foreach (var update in conversation.RunStreamingAsync(text, cancellation.Token))
+                {
+                    reply.Text += update;
+                    StateHasChanged();
+                }
+
+                if (reply.Text.Length == 0)
+                {
+                    reply.Text = "Done.";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                reply.Text += reply.Text.Length == 0 ? "(stopped)" : " (stopped)";
+            }
+            catch (Exception ex)
+            {
+                reply.IsError = true;
+                reply.Text = $"Something went wrong: {ex.Message}";
+            }
+
+            if (await SaveTurnAsync(conversation, text, reply))
+            {
+                _ = SummarizeAsync(conversation);
+            }
+            // Items may have been accepted as issues since the page opened.
+            await LoadIssueLinksAsync();
+        }
+        finally
+        {
+            _busy = false;
+            if (_cancellation == cancellation)
+            {
+                _cancellation = null;
+            }
+            cancellation.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Continues the conversation that is shown, or else stores a new one, shows it at the top of the list and lets the
+    /// title writer name it meanwhile.
+    /// </summary>
+    private async Task<ProjectConversation> OpenConversationAsync(InternalAgent agent, string firstMessage, CancellationToken cancellationToken)
+    {
+        var tools = await _tools!.WaitAsync(cancellationToken);
+        if (Id is { } id)
+        {
+            _conversation = Chats.CreateConversation(agent, Repo, id, tools);
+            return _conversation;
+        }
+
+        var summary = await Chats.StartAsync(Repo, firstMessage, cancellationToken);
+        _conversation = Chats.CreateConversation(agent, Repo, summary.Id, tools);
+        _chats.Insert(0, summary);
+        _loadedId = summary.Id;
+        Navigation.NavigateTo(ChatRoutes.ChatPath(summary.Id), replace: true);
+        _ = WriteTitleAsync(summary.Id, firstMessage);
+        return _conversation;
+    }
+
+    private async Task WriteTitleAsync(Guid id, string firstMessage)
+    {
+        var named = await Chats.WriteTitleAsync(Repo, id, firstMessage, _disposed.Token);
+        if (named is null || _isDisposed)
+        {
+            return;
+        }
+
+        await InvokeAsync(() =>
+        {
+            // Keep the last used time of the list: the exchange may have been stored in the meantime.
+            Replace(id, chat => chat with { Title = named.Title });
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>Whether the exchange was stored.</summary>
+    private async Task<bool> SaveTurnAsync(ProjectConversation conversation, string text, ChatLogEntry reply)
+    {
+        try
+        {
+            var summary = await conversation.SaveTurnAsync(text, reply.Text, reply.IsError, _disposed.Token);
+            // The title writer may have renamed it after the summary was read; the list has the newest title.
+            var title = _chats.FirstOrDefault(c => c.Id == summary.Id)?.Title ?? summary.Title;
+            _chats.RemoveAll(c => c.Id == summary.Id);
+            _chats.Insert(0, summary with { Title = title });
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Could not save this message yet; it's tried again with the next one: {ex.Message}", Severity.Warning);
+            return false;
+        }
+    }
+
+    /// <summary>In the background, so the next message can be typed meanwhile; nothing to show, also not when it fails.</summary>
+    private async Task SummarizeAsync(ProjectConversation conversation)
+    {
+        try
+        {
+            await conversation.SummarizeIfDueAsync(_disposed.Token);
+        }
+        catch (Exception)
+        {
+            // Canceled because the page closed, or failed: the agent keeps getting the messages, and the next exchange tries again.
+        }
+    }
+
+    private void Replace(Guid id, Func<ProjectChatSummary, ProjectChatSummary> change)
+    {
+        var index = _chats.FindIndex(c => c.Id == id);
+        if (index >= 0)
+        {
+            _chats[index] = change(_chats[index]);
+        }
+    }
+
+    private async Task DeleteAsync(ProjectChatSummary chat)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete conversation", $"Delete \"{chat.Title}\" and all its messages? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await Chats.DeleteAsync(Repo, chat.Id, _disposed.Token);
+            _chats.RemoveAll(c => c.Id == chat.Id);
+            if (chat.Id == Id)
+            {
+                Navigation.NavigateTo(ChatRoutes.Path);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Could not delete the conversation: {ex.Message}", Severity.Error);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _isDisposed = true;
+        _cancellation?.Cancel();
+        _disposed.Cancel();
+        if (_dictation is not null)
+        {
+            await _dictation.DisposeAsync();
+        }
+        if (_gitHubTools is not null)
+        {
+            await _gitHubTools.DisposeAsync();
+            _gitHubTools = null;
+        }
+        _disposed.Dispose();
+    }
+}

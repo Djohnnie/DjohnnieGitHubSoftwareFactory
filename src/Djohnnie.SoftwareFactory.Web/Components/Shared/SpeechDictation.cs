@@ -6,7 +6,7 @@ using MudBlazor;
 namespace Djohnnie.SoftwareFactory.Web.Components.Shared;
 
 /// <summary>
-/// Speech-to-text for a text field (DictationTextField.razor, the chat input of AssistantChat.razor): wwwroot/js/dictation.js
+/// Speech-to-text for a text field (DictationTextField.razor, the chat inputs of AssistantChat.razor and Chat.razor): wwwroot/js/dictation.js
 /// recognizes the speech in the browser, directly with Azure AI Speech, using a short-lived token from
 /// <see cref="SpeechService"/> (the Speech key stays on the server). Problems are shown in a snackbar.
 /// </summary>
