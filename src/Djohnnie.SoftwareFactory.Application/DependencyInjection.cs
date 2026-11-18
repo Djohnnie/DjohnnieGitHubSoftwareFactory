@@ -127,11 +127,6 @@ public static class DependencyInjection
             {
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
-            services.AddHttpClient<EcbExchangeRates>(client =>
-            {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
-                client.Timeout = TimeSpan.FromSeconds(15);
-            });
             services.AddHttpClient<ModelPricingScraper>(client =>
             {
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");

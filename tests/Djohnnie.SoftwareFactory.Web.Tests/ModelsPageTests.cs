@@ -26,8 +26,7 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
         Services.AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(dbOptions));
         Services.AddSingleton(TimeProvider.System);
         Services.AddApplication();
-        var http = new HttpClient(new FakePricingHandler());
-        Services.AddSingleton(new ModelPricingScraper(http, new EcbExchangeRates(http)));
+        Services.AddSingleton(new ModelPricingScraper(new HttpClient(new FakePricingHandler())));
     }
 
     [Fact]
@@ -73,12 +72,9 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
             </body></html>
             """;
 
-        private const string Ecb = """<Envelope><Cube><Cube time="2026-11-18"><Cube currency="USD" rate="1.25"/></Cube></Cube></Envelope>""";
-
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var body = request.RequestUri!.Host.Contains("ecb.europa.eu") ? Ecb : Html;
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) });
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(Html) });
         }
     }
 
@@ -97,7 +93,7 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
         Render<MudPopoverProvider>();
         var cut = Render<Models>();
         cut.WaitForAssertion(() => Assert.Contains("grok-4.7", cut.Markup));
-        Assert.Contains("€6.000", cut.Markup);
+        Assert.Contains("6 AI credits", cut.Markup);
 
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("New model")).Click());
         provider.WaitForElement(".mud-dialog input");

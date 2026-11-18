@@ -46,8 +46,8 @@ public sealed record ModelChoice(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("provider")] string? Provider,
     [property: JsonPropertyName("category")] string? Category,
-    [property: JsonPropertyName("inputPricePer1MTokens")] decimal? InputPricePer1MTokens,
-    [property: JsonPropertyName("outputPricePer1MTokens")] decimal? OutputPricePer1MTokens);
+    [property: JsonPropertyName("inputAiCreditsPer1MTokens")] decimal? InputAiCreditsPer1MTokens,
+    [property: JsonPropertyName("outputAiCreditsPer1MTokens")] decimal? OutputAiCreditsPer1MTokens);
 
 public sealed record CustomAgentChoice(
     [property: JsonPropertyName("id")] string Id,

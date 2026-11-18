@@ -3,12 +3,15 @@ using System.ComponentModel.DataAnnotations;
 namespace Djohnnie.SoftwareFactory.Contracts.AiModels;
 
 /// <summary>
-/// An AI model that can be used by custom agents. Prices are in euro per 1 million tokens; importing them from GitHub's
-/// docs copies the amounts as they are, without converting from US dollars.
+/// An AI model that can be used by custom agents. Prices are in GitHub AI credits per 1 million tokens
+/// (1 AI credit = 0.01 USD); importing them from GitHub's docs converts the listed US dollar amounts to credits.
 /// </summary>
 public sealed record AiModel
 {
     public const string DefaultTier = "Default";
+
+    /// <summary>The number of GitHub AI credits in one US dollar.</summary>
+    public const decimal CreditsPerUsd = 100m;
 
     public Guid Id { get; set; }
 
@@ -56,9 +59,22 @@ public sealed record AiModel
     {
         return input is null && output is null
             ? "No pricing"
-            : $"{FormatPrice(input)} in / {FormatPrice(output)} out per 1M tokens";
+            : $"{FormatCredits(input)} in / {FormatCredits(output)} out per 1M tokens";
     }
 
+    /// <summary>Converts a US dollar amount to GitHub AI credits.</summary>
+    public static decimal? UsdToCredits(decimal? usd)
+    {
+        return usd * CreditsPerUsd;
+    }
+
+    /// <summary>Formats an amount of GitHub AI credits, e.g. "1,400 AI credits".</summary>
+    public static string FormatCredits(decimal? credits)
+    {
+        return credits is null ? "–" : $"{credits.Value.ToString("#,0.##", System.Globalization.CultureInfo.InvariantCulture)} AI credits";
+    }
+
+    /// <summary>Formats a euro amount, used for the Microsoft Foundry models DGHSF itself runs on.</summary>
     public static string FormatPrice(decimal? price)
     {
         return price is null ? "–" : price.Value.ToString("€#,0.000", System.Globalization.CultureInfo.InvariantCulture);

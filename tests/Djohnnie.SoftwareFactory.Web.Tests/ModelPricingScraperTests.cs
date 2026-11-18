@@ -39,47 +39,25 @@ public class ModelPricingScraperTests
         var codex = models[0];
         Assert.Equal(("OpenAI", "gpt-5.3-codex", "GA", "Powerful", AiModel.DefaultTier), (codex.Provider, codex.ModelId, codex.ReleaseStatus, codex.Category, codex.Tier));
         Assert.Null(codex.Threshold);
-        Assert.Equal((1.75m, 0.175m, (decimal?)null, 14.00m), (codex.InputPrice, codex.CachedInputPrice, codex.CacheWritePrice, codex.OutputPrice));
+        // USD prices are converted to AI credits (1 AI credit = $0.01).
+        Assert.Equal((175m, 17.5m, (decimal?)null, 1400m), (codex.InputPrice, codex.CachedInputPrice, codex.CacheWritePrice, codex.OutputPrice));
 
         var luna = models[1];
-        Assert.Equal(("Long context", "> 200K", 0.50m), (luna.Tier, luna.Threshold, luna.CacheWritePrice));
+        Assert.Equal(("Long context", "> 200K", 50m, 4m), (luna.Tier, luna.Threshold, luna.CacheWritePrice, luna.CachedInputPrice));
 
         var gemini = models[2];
-        Assert.Equal(("Google", "gemini-3.8-flash", "Public preview", AiModel.DefaultTier, 2.50m), (gemini.Provider, gemini.ModelId, gemini.ReleaseStatus, gemini.Tier, gemini.OutputPrice));
+        Assert.Equal(("Google", "gemini-3.8-flash", "Public preview", AiModel.DefaultTier, 250m), (gemini.Provider, gemini.ModelId, gemini.ReleaseStatus, gemini.Tier, gemini.OutputPrice));
         Assert.Null(gemini.CacheWritePrice);
     }
 
     [Fact]
-    public void ParseUsdPerEur_ReadsUsdRateFromEcbDailyXml()
+    public void FormatCredits_ShowsAmountInAiCredits()
     {
-        const string xml = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
-              <gesmes:subject>Reference rates</gesmes:subject>
-              <Cube><Cube time="2026-11-18"><Cube currency="JPY" rate="162.10"/><Cube currency="USD" rate="1.0850"/></Cube></Cube>
-            </gesmes:Envelope>
-            """;
-
-        Assert.Equal(1.0850m, EcbExchangeRates.ParseUsdPerEur(xml));
-    }
-
-    [Theory]
-    [InlineData("<Cube><Cube currency=\"JPY\" rate=\"162.10\"/></Cube>")]
-    [InlineData("<Cube><Cube currency=\"USD\" rate=\"abc\"/></Cube>")]
-    [InlineData("not xml")]
-    public void ParseUsdPerEur_RejectsMissingOrInvalidRates(string xml)
-    {
-        Assert.Throws<Djohnnie.SoftwareFactory.Contracts.DomainRuleException>(() => EcbExchangeRates.ParseUsdPerEur(xml));
-    }
-
-    [Fact]
-    public void ConvertToEur_DividesUsdPricesByRateAndKeepsMissingPrices()
-    {
-        var models = ModelPricingScraper.ConvertToEur(ModelPricingScraper.Parse(Html), 1.25m);
-
-        var codex = models[0];
-        Assert.Equal((1.4m, 0.14m, (decimal?)null, 11.2m), (codex.InputPrice, codex.CachedInputPrice, codex.CacheWritePrice, codex.OutputPrice));
-        Assert.Equal(0.0320m, models[1].CachedInputPrice);
+        Assert.Equal("1,400 AI credits", AiModel.FormatCredits(1400m));
+        Assert.Equal("17.5 AI credits", AiModel.FormatCredits(17.5m));
+        Assert.Equal("0 AI credits", AiModel.FormatCredits(0m));
+        Assert.Equal("–", AiModel.FormatCredits(null));
+        Assert.Equal("175 AI credits in / 1,400 AI credits out per 1M tokens", AiModel.FormatCost(175m, 1400m));
     }
 
     [Theory]
@@ -117,7 +95,7 @@ public class ModelPricingScraperTests
         Assert.Equal(new ModelImportResult(2, 1, 0), result);
         Assert.Equal(new ModelImportResult(0, 0, 3), again);
         var codex = (await service.GetAllAsync(TestContext.Current.CancellationToken)).Single(m => m.Name == "GPT-5.3-Codex");
-        Assert.Equal(("my-codex", false, 1.75m, 14.00m), (codex.ModelId, codex.IsEnabled, codex.InputPrice, codex.OutputPrice));
+        Assert.Equal(("my-codex", false, 175m, 1400m), (codex.ModelId, codex.IsEnabled, codex.InputPrice, codex.OutputPrice));
     }
 
     internal sealed class TestDbFactory(DbContextOptions<AppDbContext> options) : IDbContextFactory<AppDbContext>

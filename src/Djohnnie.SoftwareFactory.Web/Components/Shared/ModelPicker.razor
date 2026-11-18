@@ -28,7 +28,7 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@option.Provider · @option.Category</MudText>
                 </div>
                 <MudText Typo="Typo.caption" Align="Align.Right" Class="ml-4">
-                    @AiModel.FormatPrice(option.InputPrice) in<br />@AiModel.FormatPrice(option.OutputPrice) out
+                    @AiModel.FormatCredits(option.InputPrice) in<br />@AiModel.FormatCredits(option.OutputPrice) out
                 </MudText>
             </MudStack>
         </MudSelectItem>
@@ -98,6 +98,6 @@ else if (_loaded && _options.Count == 0)
             return DefaultText;
         }
         var option = _options.FirstOrDefault(o => o.ModelId == modelId);
-        return option is null ? modelId : $"{option.Name} — {AiModel.FormatPrice(option.InputPrice)} in / {AiModel.FormatPrice(option.OutputPrice)} out";
+        return option is null ? modelId : $"{option.Name} — {AiModel.FormatCredits(option.InputPrice)} in / {AiModel.FormatCredits(option.OutputPrice)} out";
     }
 }

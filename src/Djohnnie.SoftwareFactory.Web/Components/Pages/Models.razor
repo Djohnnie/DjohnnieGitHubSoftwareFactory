@@ -12,7 +12,7 @@
     <div>
         <MudText Typo="Typo.h4">GitHub Copilot Models</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            AI models available to custom agents, with their price in EUR per 1M tokens. Shared by all repositories.
+            AI models available to custom agents, with their price in AI credits per 1M tokens (1 AI credit = $0.01). Shared by all repositories.
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
@@ -36,7 +36,7 @@
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
             Paste the link to the Copilot "Models and pricing" page. New models are added; pricing of existing models
             (matched on name and tier) is refreshed. Model ids and enabled state you changed are kept. GitHub lists prices
-            in US dollars; they are converted to EUR at today's European Central Bank reference rate. Models that are no
+            in US dollars; they are converted to AI credits (1 AI credit = $0.01). Models that are no
             longer on the page are listed separately so you can remove them.
         </MudText>
         <MudStack Row="true" AlignItems="AlignItems.Center">
@@ -67,8 +67,8 @@
                     <MudTd>@context.Name <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText></MudTd>
                     <MudTd>@context.Provider</MudTd>
                     <MudTd>@TierLabel(context)</MudTd>
-                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
-                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatCredits(context.InputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatCredits(context.OutputPrice)</MudTd>
                     <MudTd>
                         @switch (ChangeOf(context))
                         {
@@ -114,8 +114,8 @@
                     <MudTd>@context.Name <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText></MudTd>
                     <MudTd>@context.Provider</MudTd>
                     <MudTd>@TierLabel(context)</MudTd>
-                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
-                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatCredits(context.InputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatCredits(context.OutputPrice)</MudTd>
                     <MudTd>
                         @if (string.IsNullOrEmpty(context.SourceUrl))
                         {
@@ -178,10 +178,10 @@
         </MudTd>
         <MudTd DataLabel="Category">@context.Category</MudTd>
         <MudTd DataLabel="Tier">@TierLabel(context)</MudTd>
-        <MudTd DataLabel="Input" Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
-        <MudTd DataLabel="Cached input" Style="text-align:right">@AiModel.FormatPrice(context.CachedInputPrice)</MudTd>
-        <MudTd DataLabel="Cache write" Style="text-align:right">@AiModel.FormatPrice(context.CacheWritePrice)</MudTd>
-        <MudTd DataLabel="Output" Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+        <MudTd DataLabel="Input" Style="text-align:right">@AiModel.FormatCredits(context.InputPrice)</MudTd>
+        <MudTd DataLabel="Cached input" Style="text-align:right">@AiModel.FormatCredits(context.CachedInputPrice)</MudTd>
+        <MudTd DataLabel="Cache write" Style="text-align:right">@AiModel.FormatCredits(context.CacheWritePrice)</MudTd>
+        <MudTd DataLabel="Output" Style="text-align:right">@AiModel.FormatCredits(context.OutputPrice)</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                 <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="v => SetEnabledAsync(context, v)" Color="Color.Primary" />
