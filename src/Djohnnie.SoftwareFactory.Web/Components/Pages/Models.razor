@@ -36,7 +36,8 @@
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
             Paste the link to the Copilot "Models and pricing" page. New models are added; pricing of existing models
             (matched on name and tier) is refreshed. Model ids and enabled state you changed are kept. GitHub lists prices
-            in US dollars; the amounts are imported as they are, without conversion.
+            in US dollars; they are converted to EUR at today's European Central Bank reference rate. Models that are no
+            longer on the page are listed separately so you can remove them.
         </MudText>
         <MudStack Row="true" AlignItems="AlignItems.Center">
             <MudTextField @bind-Value="_importUrl" Label="Documentation URL" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
@@ -86,9 +87,55 @@
             </MudTable>
             <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mt-2">
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@_selected.Count of @_scraped.Count selected</MudText>
-                <MudButton Variant="Variant.Outlined" OnClick="() => _scraped = null">Discard</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="Discard">Discard</MudButton>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ImportAsync" Disabled="_selected.Count == 0 || _importing"
                            StartIcon="@Icons.Material.Filled.Download">Import selected</MudButton>
+            </MudStack>
+        }
+
+        @if (_missing is { Count: > 0 })
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-6"><b>Not found on the page</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                These models are in DGHSF but not on the page, matched on name and tier. They may have been retired, renamed
+                or added manually. Select the ones to remove.
+            </MudText>
+            <MudTable Outlined="true" Striped="true" T="AiModel" Items="_missing" MultiSelection="true" @bind-SelectedItems="_toRemove" Dense="true" Hover="true"
+                      Elevation="0" Class="mt-2 missing-models" Height="300px" FixedHeader="true">
+                <HeaderContent>
+                    <MudTh>Model</MudTh>
+                    <MudTh>Provider</MudTh>
+                    <MudTh>Tier</MudTh>
+                    <MudTh Style="text-align:right">Input</MudTh>
+                    <MudTh Style="text-align:right">Output</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mono">@context.ModelId</MudText></MudTd>
+                    <MudTd>@context.Provider</MudTd>
+                    <MudTd>@TierLabel(context)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.InputPrice)</MudTd>
+                    <MudTd Style="text-align:right">@AiModel.FormatPrice(context.OutputPrice)</MudTd>
+                    <MudTd>
+                        @if (string.IsNullOrEmpty(context.SourceUrl))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">Added manually</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error">Not found</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_toRemove.Count of @_missing.Count selected</MudText>
+                @if (_scraped is null)
+                {
+                    <MudButton Variant="Variant.Outlined" OnClick="Discard">Dismiss</MudButton>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="RemoveMissingAsync" Disabled="_toRemove.Count == 0 || _removing"
+                           StartIcon="@Icons.Material.Filled.Delete">Remove selected</MudButton>
             </MudStack>
         }
     </MudPaper>
@@ -168,6 +215,9 @@
     private bool _importing;
     private List<AiModel>? _scraped;
     private HashSet<AiModel> _selected = [];
+    private bool _removing;
+    private List<AiModel>? _missing;
+    private HashSet<AiModel> _toRemove = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -268,13 +318,20 @@
     private async Task ScrapeAsync()
     {
         _scraping = true;
-        _scraped = null;
+        Discard();
         try
         {
             var scraped = await Scraper.ScrapeAsync(_importUrl);
             _scraped = scraped.ToList();
             _selected = _scraped.Where(m => ChangeOf(m) != "Unchanged").ToHashSet();
-            Snackbar.Add($"Found {_scraped.Count} models.", Severity.Info);
+            _missing = _models
+                .Where(m => !_scraped.Any(s => IsSameModel(m, s)))
+                .OrderBy(m => m.Provider ?? "Other")
+                .ThenBy(m => m.Name)
+                .ToList();
+            Snackbar.Add(_missing.Count == 0
+                ? $"Found {_scraped.Count} models."
+                : $"Found {_scraped.Count} models; {_missing.Count} existing models are not on the page.", Severity.Info);
         }
         catch (Exception ex) when (ex is ArgumentException or Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or HttpRequestException or TaskCanceledException)
         {
@@ -307,11 +364,73 @@
         }
     }
 
+    private void Discard()
+    {
+        _scraped = null;
+        _selected = [];
+        _missing = null;
+        _toRemove = [];
+    }
+
+    private async Task RemoveMissingAsync()
+    {
+        var models = _toRemove.ToList();
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Remove models",
+            models.Count == 1
+                ? $"Remove '{models[0].Name}' ({TierLabel(models[0])})? Existing agent files are not changed."
+                : $"Remove {models.Count} models that are not on the page? Existing agent files are not changed.",
+            yesText: "Remove", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _removing = true;
+        var removed = 0;
+        var failed = new List<string>();
+        try
+        {
+            foreach (var model in models)
+            {
+                try
+                {
+                    await ModelService.DeleteAsync(model.Id);
+                    _missing?.Remove(model);
+                    _toRemove.Remove(model);
+                    _models.RemoveAll(m => m.Id == model.Id);
+                    removed++;
+                }
+                catch (Exception ex)
+                {
+                    failed.Add($"'{model.Name}': {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            _removing = false;
+        }
+
+        if (removed > 0)
+        {
+            Snackbar.Add(removed == 1 ? "Removed 1 model." : $"Removed {removed} models.", Severity.Success);
+        }
+        if (failed.Count > 0)
+        {
+            Snackbar.Add($"Could not remove {string.Join("; ", failed)}", Severity.Error);
+        }
+    }
+
+    private static bool IsSameModel(AiModel a, AiModel b)
+    {
+        return string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(a.Tier, b.Tier, StringComparison.OrdinalIgnoreCase);
+    }
+
     private string ChangeOf(AiModel scraped)
     {
-        var existing = _models.FirstOrDefault(m =>
-            string.Equals(m.Name, scraped.Name, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(m.Tier, scraped.Tier, StringComparison.OrdinalIgnoreCase));
+        var existing = _models.FirstOrDefault(m => IsSameModel(m, scraped));
         if (existing is null)
         {
             return "New";

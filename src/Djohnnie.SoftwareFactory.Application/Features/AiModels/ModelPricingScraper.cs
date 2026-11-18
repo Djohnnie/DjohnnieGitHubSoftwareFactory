@@ -9,8 +9,9 @@ namespace Djohnnie.SoftwareFactory.Application.Features.AiModels;
 
 /// <summary>
 /// Scrapes the model pricing tables from the GitHub Copilot "Models and pricing" documentation page.
+/// The page lists prices in USD; <see cref="ScrapeAsync"/> converts them to EUR at today's ECB reference rate.
 /// </summary>
-public partial class ModelPricingScraper(HttpClient httpClient)
+public partial class ModelPricingScraper(HttpClient httpClient, EcbExchangeRates exchangeRates)
 {
     public const string DefaultUrl = "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing#pricing-tables";
 
@@ -30,6 +31,21 @@ public partial class ModelPricingScraper(HttpClient httpClient)
         if (models.Count == 0)
         {
             throw new DomainRuleException("No model pricing tables were found on that page.");
+        }
+
+        var usdPerEur = await exchangeRates.GetUsdPerEurAsync(cancellationToken);
+        return ConvertToEur(models, usdPerEur);
+    }
+
+    /// <summary>Converts the USD prices of scraped models to EUR.</summary>
+    public static IReadOnlyList<AiModel> ConvertToEur(IReadOnlyList<AiModel> models, decimal usdPerEur)
+    {
+        foreach (var model in models)
+        {
+            model.InputPrice = EcbExchangeRates.ToEur(model.InputPrice, usdPerEur);
+            model.CachedInputPrice = EcbExchangeRates.ToEur(model.CachedInputPrice, usdPerEur);
+            model.CacheWritePrice = EcbExchangeRates.ToEur(model.CacheWritePrice, usdPerEur);
+            model.OutputPrice = EcbExchangeRates.ToEur(model.OutputPrice, usdPerEur);
         }
         return models;
     }

@@ -49,6 +49,39 @@ public class ModelPricingScraperTests
         Assert.Null(gemini.CacheWritePrice);
     }
 
+    [Fact]
+    public void ParseUsdPerEur_ReadsUsdRateFromEcbDailyXml()
+    {
+        const string xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
+              <gesmes:subject>Reference rates</gesmes:subject>
+              <Cube><Cube time="2026-11-18"><Cube currency="JPY" rate="162.10"/><Cube currency="USD" rate="1.0850"/></Cube></Cube>
+            </gesmes:Envelope>
+            """;
+
+        Assert.Equal(1.0850m, EcbExchangeRates.ParseUsdPerEur(xml));
+    }
+
+    [Theory]
+    [InlineData("<Cube><Cube currency=\"JPY\" rate=\"162.10\"/></Cube>")]
+    [InlineData("<Cube><Cube currency=\"USD\" rate=\"abc\"/></Cube>")]
+    [InlineData("not xml")]
+    public void ParseUsdPerEur_RejectsMissingOrInvalidRates(string xml)
+    {
+        Assert.Throws<Djohnnie.SoftwareFactory.Contracts.DomainRuleException>(() => EcbExchangeRates.ParseUsdPerEur(xml));
+    }
+
+    [Fact]
+    public void ConvertToEur_DividesUsdPricesByRateAndKeepsMissingPrices()
+    {
+        var models = ModelPricingScraper.ConvertToEur(ModelPricingScraper.Parse(Html), 1.25m);
+
+        var codex = models[0];
+        Assert.Equal((1.4m, 0.14m, (decimal?)null, 11.2m), (codex.InputPrice, codex.CachedInputPrice, codex.CacheWritePrice, codex.OutputPrice));
+        Assert.Equal(0.0320m, models[1].CachedInputPrice);
+    }
+
     [Theory]
     [InlineData("Claude Sonnet 4.6", "claude-sonnet-4.6")]
     [InlineData("GPT-5.4 nano", "gpt-5.4-nano")]

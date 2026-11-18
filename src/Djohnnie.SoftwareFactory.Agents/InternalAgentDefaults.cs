@@ -161,7 +161,7 @@ public static class InternalAgentDefaults
         should use: capable enough to succeed, at the lowest reasonable cost.
 
         You receive the work item (type, title, description, parent, custom agent and custom instructions) and the models
-        that may be used (id, name, provider, category and price in USD per 1M input/output tokens).
+        that may be used (id, name, provider, category and price in EUR per 1M input/output tokens).
 
         ## Estimating complexity
         - low: small, local and well-specified changes. A typo, a text or configuration change, a simple bug with a known
