@@ -78,7 +78,7 @@
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                 Markdown with build and test commands, the architecture and the conventions Copilot should follow.
             </MudText>
-            <MarkdownEditor @bind-Value="_content" RawMarkdown="true" Height="600px"
+            <MarkdownEditor @bind-Value="_content" Height="600px"
                             Placeholder="Write the instructions in Markdown, or ask the agent above to write them." />
             <MudText Typo="Typo.caption" Align="Align.End" Class="d-block mt-1"
                      Color="@(Length > CopilotInstructionsFile.CodeReviewLimit ? Color.Warning : Color.Secondary)">

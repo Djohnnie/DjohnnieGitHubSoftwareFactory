@@ -11,7 +11,7 @@
 @inject ILogger<MarkdownEditor> Logger
 
 @*
-    WYSIWYG Markdown editor (Toast UI Editor), with a switch to raw Markdown at the bottom. MarkdownEditor.razor.js
+    WYSIWYG Markdown editor (Toast UI Editor); every editor in the application starts in WYSIWYG, with a switch to raw Markdown at the bottom. MarkdownEditor.razor.js
     creates the editor through Toast UI's public API and always reports Markdown (also in WYSIWYG mode).
     Pasted, dropped or picked images are uploaded to the image storage (when AllowImages is set and storage is
     configured) and linked by URL, instead of Toast UI's default base64 data URIs.
@@ -108,12 +108,6 @@
     /// <summary>Adds a toolbar button that inserts a link to a file of the knowledge base.</summary>
     [Parameter] public bool AllowFileLinks { get; set; }
 
-    /// <summary>
-    /// Starts in the raw Markdown mode with a side-by-side preview instead of WYSIWYG, e.g. for files in a repository,
-    /// where the WYSIWYG round trip would reformat the existing Markdown.
-    /// </summary>
-    [Parameter] public bool RawMarkdown { get; set; }
-
     /// <summary>Adds a microphone at the top right, next to the <see cref="Header"/> (when Azure AI Speech is configured).</summary>
     [Parameter] public DescriptionDictation? Dictation { get; set; }
 
@@ -175,7 +169,6 @@
                 Placeholder,
                 Height,
                 MinHeight = "200px",
-                RawMarkdown,
                 AllowImages = AllowImages && ImageUploads.IsEnabled,
                 ImageUploads.MaxImageSize,
                 AllowFileLinks

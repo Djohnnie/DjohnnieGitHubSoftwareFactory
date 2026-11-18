@@ -294,7 +294,6 @@ public class InternalAgentTests : BunitContext
         var dialogs = Render<MudDialogProvider>();
         var cut = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.AgentCopilot));
 
-        Assert.True(cut.FindComponent<MarkdownEditor>().Instance.RawMarkdown);
         await cut.InvokeAsync(() => cut.FindComponent<MarkdownEditor>().Instance.ValueChanged.InvokeAsync("Be brief."));
         await cut.InvokeAsync(() => Button(cut, "Save").Click());
         cut.WaitForAssertion(() => Assert.Contains("Customized", cut.Markup));
@@ -372,7 +371,6 @@ public class InternalAgentTests : BunitContext
         // A background agent may stay on the configured model, but a model it does choose must pass the test too.
         var background = Render<InternalAgentEditor>(p => p.Add(e => e.Key, InternalAgentKeys.ModelSelector));
         background.WaitForAssertion(() => Assert.False(Button(background, "Save").HasAttribute("disabled")));
-        Assert.True(background.FindComponent<MarkdownEditor>().Instance.RawMarkdown);
         await SelectModelAsync(background, model.Id);
         Assert.True(Button(background, "Save").HasAttribute("disabled"));
     }

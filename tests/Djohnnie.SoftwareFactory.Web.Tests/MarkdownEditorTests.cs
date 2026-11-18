@@ -44,13 +44,11 @@ public class MarkdownEditorTests : BunitContext
         Render<MarkdownEditor>(p => p
             .Add(e => e.Value, "# Hello")
             .Add(e => e.Placeholder, "Describe it")
-            .Add(e => e.RawMarkdown, true)
             .Add(e => e.AllowImages, true));
 
         var options = Assert.Single(_module.Invocations["create"]).Arguments[2]!;
         Assert.Equal("# Hello", Property(options, "Value"));
         Assert.Equal("Describe it", Property(options, "Placeholder"));
-        Assert.Equal(true, Property(options, "RawMarkdown"));
         Assert.Equal(true, Property(options, "AllowImages"));
         Assert.Equal(1L * 1024 * 1024, Property(options, "MaxImageSize"));
     }

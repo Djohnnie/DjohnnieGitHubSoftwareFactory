@@ -44,7 +44,7 @@ For each repository I can create, update and delete custom agents (the `.github/
 
 **Implemented (agent templates):** a **Templates** page (`/agent-templates`) stores agent templates in our own database, and doesn't need a repository to be selected. A template holds the full agent file (frontmatter + instructions). From a template I can create an agent in the current repository (the editor is prefilled), or **add it to several repositories at once**: I can optionally replace files that differ, and identical files are left untouched. On the Agents page, **Save as template** turns an existing agent into a template.
 
-**Implemented (Copilot instructions):** an **Instructions** page (`/copilot-instructions`) edits the repository's `.github/copilot-instructions.md` in a Markdown editor (raw Markdown with a live preview) and, like agents, commits it directly to the default branch on save (creating the file when it doesn't exist yet). The **Copilot Instructions Copilot** explores the repository (it can list and read files) and writes or improves the file in the editor; I still review and save.
+**Implemented (Copilot instructions):** an **Instructions** page (`/copilot-instructions`) edits the repository's `.github/copilot-instructions.md` in the WYSIWYG Markdown editor and, like agents, commits it directly to the default branch on save (creating the file when it doesn't exist yet). The **Copilot Instructions Copilot** explores the repository (it can list and read files) and writes or improves the file in the editor; I still review and save.
 ### 4.3 Work items
 
 I plan work in the app using five item types:

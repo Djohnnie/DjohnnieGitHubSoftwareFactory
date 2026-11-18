@@ -71,7 +71,7 @@ else if (_skill is not null)
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                             The Markdown below the frontmatter: the steps, examples and guidelines Copilot follows when it uses the skill.
                         </MudText>
-                        <MarkdownEditor @bind-Value="_skill.Instructions" RawMarkdown="true" MaxLength="Skill.MaxInstructionsLength" Height="500px"
+                        <MarkdownEditor @bind-Value="_skill.Instructions" MaxLength="Skill.MaxInstructionsLength" Height="500px"
                                         Placeholder="Describe step by step how Copilot should perform this task." />
                     </MudPaper>
 
