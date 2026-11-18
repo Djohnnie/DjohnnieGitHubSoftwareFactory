@@ -193,7 +193,7 @@
         };
     }
 
-    private static string IconOf(AgentRunStatus status)
+    public static string IconOf(AgentRunStatus status)
     {
         return status switch
         {
@@ -205,14 +205,14 @@
         };
     }
 
-    private static string FormatDuration(TimeSpan duration)
+    public static string FormatDuration(TimeSpan duration)
     {
         return duration.TotalHours >= 1 ? $"{(int)duration.TotalHours} h {duration.Minutes} min"
             : duration.TotalMinutes >= 1 ? $"{(int)duration.TotalMinutes} min"
             : $"{duration.Seconds} s";
     }
 
-    private static string TokenDetails(AgentRun run)
+    public static string TokenDetails(AgentRun run)
     {
         var premium = run.PremiumRequests is { } requests ? $", {requests:#,0.##} premium requests" : string.Empty;
         return $"{run.InputTokens:#,0} input, {run.OutputTokens:#,0} output, {run.CacheReadTokens:#,0} cached, {run.CacheWriteTokens:#,0} cache write tokens{premium}";

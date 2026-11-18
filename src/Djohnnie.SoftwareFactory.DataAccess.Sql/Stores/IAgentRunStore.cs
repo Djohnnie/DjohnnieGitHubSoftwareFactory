@@ -46,6 +46,9 @@ public interface IAgentRunStore
     /// <summary>The runs of a work item, newest first.</summary>
     Task<List<AgentRun>> GetForWorkItemAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default);
 
+    /// <summary>The newest runs of a repository, newest first, each with its work item.</summary>
+    Task<List<AgentRunOverview>> GetForRepositoryAsync(string repositoryFullName, int max, CancellationToken cancellationToken = default);
+
     /// <summary>The newest run of a work item that wasn't cancelled, or <c>null</c>.</summary>
     Task<AgentRun?> GetLatestAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default);
 }

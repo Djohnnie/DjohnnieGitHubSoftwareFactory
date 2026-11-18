@@ -53,6 +53,48 @@ public class BackgroundTasksPageTests : BunitContext
     }
 
     [Fact]
+    public async Task Page_ShowsTheAgentWorkersRunsOfTheRepository_WithTheirWorkItemCostAndPullRequest()
+    {
+        await Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(
+            1, "repo", "owner/repo", new GitHubOwner("owner", null), "https://github.com/owner/repo", null, false, false, false, null, "main", null));
+        var task = await Services.GetRequiredService<IWorkItemStore>().SaveAsync(new Contracts.WorkItems.WorkItem
+        {
+            RepositoryFullName = "owner/repo", Type = Contracts.WorkItems.WorkItemType.Task, Title = "Add the endpoint", Description = "An endpoint.",
+            Executor = Contracts.WorkItems.AgentExecutor.DghsfWorker
+        }, _cancellationToken);
+        var runs = Services.GetRequiredService<IAgentRunStore>();
+        var finished = await runs.CreateAsync("owner/repo", task.Id, null, 2, _cancellationToken);
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var run = await db.AgentRuns.SingleAsync(r => r.Id == finished.Id, _cancellationToken);
+            run.Status = Contracts.AgentRuns.AgentRunStatus.Succeeded;
+            run.NanoAiu = 12_500_000_000;
+            run.Models = "claude-sonnet-4.5";
+            run.PullRequestNumber = 7;
+            run.PullRequestUrl = "https://github.com/owner/repo/pull/7";
+            run.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+            run.CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-8);
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        await runs.CreateAsync("owner/repo", task.Id, null, 2, _cancellationToken);
+        await runs.CreateAsync("owner/other", Guid.NewGuid(), null, 2, _cancellationToken);
+
+        Render<MudPopoverProvider>();
+        var cut = Render<BackgroundTasks>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Agent worker runs", cut.Markup));
+        var rows = cut.FindComponent<MudTable<Contracts.AgentRuns.AgentRunOverview>>().FindAll("tbody tr");
+        Assert.Equal(2, rows.Count);
+        Assert.Contains("Waiting", rows[0].TextContent);
+        Assert.Contains("Cancel run", rows[0].TextContent);
+        Assert.Contains("Add the endpoint", rows[1].TextContent);
+        Assert.Contains("12.5 AI credits", rows[1].TextContent);
+        Assert.Contains("12 min", rows[1].TextContent);
+        Assert.Contains("#7", rows[1].TextContent);
+        Assert.Contains("The latest 2 runs", cut.Markup);
+    }
+
+    [Fact]
     public async Task Run_IsCollapsedByDefault_AndItsHeaderExpandsIt()
     {
         await Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(

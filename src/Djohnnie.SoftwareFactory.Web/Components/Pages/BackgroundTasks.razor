@@ -2,7 +2,10 @@
 @implements IDisposable
 @using Djohnnie.SoftwareFactory.Application.Features.TodoTasks
 @using Djohnnie.SoftwareFactory.Contracts.TodoTasks
+@using Djohnnie.SoftwareFactory.Application.Features.AgentRuns
+@using Djohnnie.SoftwareFactory.Contracts.AgentRuns
 @inject TodoTaskService TodoTaskService
+@inject AgentRunService AgentRunService
 @inject RepositoryContext Repository
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -124,11 +127,94 @@ else if (_runs.Count == 0)
     }
 </MudStack>
 
+@if (_agentRunsError is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mt-6">@_agentRunsError</MudAlert>
+}
+@if (_agentRuns.Count > 0)
+{
+    @* The DGHSF agent worker's runs: one per story, bug or task it implemented, executed by the Container Apps job. *@
+    <MudPaper Outlined="true" Class="pa-4 mt-6" aria-label="Agent worker runs">
+        <MudText Typo="Typo.h6">Agent worker runs</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            The latest @_agentRuns.Count runs of the DGHSF agent worker in this repository, newest first ·
+            @AiModel.FormatCredits(_agentRuns.Sum(r => r.Run.AiCredits ?? 0))@(_agentRuns.Any(r => r.Run.NanoAiu is not null && !r.Run.UsageComplete) ? " (at least)" : null)
+        </MudText>
+        <MudTable T="AgentRunOverview" Items="_agentRuns" Dense="true" Hover="true" Elevation="0" aria-label="Agent runs">
+            <HeaderContent>
+                <MudTh>Status</MudTh>
+                <MudTh>Work item</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Duration</MudTh>
+                <MudTh>AI credits</MudTh>
+                <MudTh>Pull request</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@AgentRunsPanel.ColorOf(context.Run.Status)"
+                             Icon="@AgentRunsPanel.IconOf(context.Run.Status)">@context.Run.Status.DisplayName</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Work item">
+                    @if (context.WorkItem is { } item)
+                    {
+                        <MudIcon Icon="@WorkItemRoutes.Icon(item.Type)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-1" />
+                        <MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)">@item.Title</MudLink>
+                        @if (item.IssueNumber is { } issue)
+                        {
+                            <span> (<MudLink Href="@item.IssueUrl" Target="_blank">#@issue</MudLink>)</span>
+                        }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Deleted work item</MudText>
+                    }
+                    @if (context.Run.Error is { } runError)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block" Color="@(context.Run.Status == AgentRunStatus.Succeeded ? Color.Warning : Color.Error)">@runError</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Started"><TimeAgo At="@(context.Run.StartedAt ?? context.Run.CreatedAt)" /></MudTd>
+                <MudTd DataLabel="Duration">@(context.Run.Duration is { } duration ? AgentRunsPanel.FormatDuration(duration) : "–")</MudTd>
+                <MudTd DataLabel="AI credits">
+                    @if (context.Run.AiCredits is { } credits)
+                    {
+                        <span title="@AgentRunsPanel.TokenDetails(context.Run)">@AiModel.FormatCredits(credits)@(context.Run.UsageComplete ? null : " (at least)")</span>
+                        @if (context.Run.Models is { } models)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@models</MudText>
+                        }
+                    }
+                    else
+                    {
+                        <span>–</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Pull request">
+                    @if (context.Run.PullRequestNumber is { } number)
+                    {
+                        <MudLink Href="@context.Run.PullRequestUrl" Target="_blank">#@number</MudLink>
+                    }
+                </MudTd>
+                <MudTd>
+                    @if (context.Run.IsActive)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Stop"
+                                   OnClick="() => CancelAgentRunAsync(context)" Disabled="_busy">Cancel run</MudButton>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
 @code {
     /// <summary>How often the page reloads while a run is active.</summary>
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
     private IReadOnlyList<TodoTaskRun> _runs = [];
+    private IReadOnlyList<AgentRunOverview> _agentRuns = [];
+    private string? _agentRunsError;
 
     /// <summary>The runs whose details and sub-tasks are shown; the others are collapsed to their header.</summary>
     private readonly HashSet<Guid> _expanded = [];
@@ -154,6 +240,16 @@ else if (_runs.Count == 0)
         {
             _error = $"Could not load the runs: {ex.Message}";
         }
+        // Independent of the background tasks: one failing doesn't hide the other.
+        try
+        {
+            _agentRuns = await AgentRunService.GetRepositoryRunsAsync(Repository.Current!.FullName);
+            _agentRunsError = null;
+        }
+        catch (Exception ex)
+        {
+            _agentRunsError = $"Could not load the agent worker's runs: {ex.Message}";
+        }
         finally
         {
             _loading = false;
@@ -166,7 +262,7 @@ else if (_runs.Count == 0)
     {
         _timer?.Dispose();
         _timer = null;
-        if (_runs.Any(run => run.IsActive))
+        if (_runs.Any(run => run.IsActive) || _agentRuns.Any(run => run.Run.IsActive))
         {
             _timer = new Timer(_ =>
             {
@@ -204,6 +300,22 @@ else if (_runs.Count == 0)
         {
             await TodoTaskService.CancelRunAsync(Repository.Current!.FullName, run.Root.Id);
             Snackbar.Add("The run is cancelled.", Severity.Info);
+        });
+    }
+
+    private async Task CancelAgentRunAsync(AgentRunOverview run)
+    {
+        var title = run.WorkItem?.Title ?? "this work item";
+        if (await Dialogs.ShowMessageBoxAsync("Cancel agent run", $"Cancel the agent worker's run on '{title}'? A worker that is running it stops within a few minutes and pushes nothing.",
+                yesText: "Cancel run", cancelText: "Keep running") != true)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await AgentRunService.CancelRunAsync(Repository.Current!.FullName, run.Run.Id);
+            Snackbar.Add("The agent run is cancelled.", Severity.Info);
         });
     }
 

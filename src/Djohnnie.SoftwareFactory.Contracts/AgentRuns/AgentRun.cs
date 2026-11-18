@@ -85,6 +85,9 @@ public sealed record AgentRun
     }
 }
 
+/// <summary>A run with the work item it belongs to, for lists of runs; <paramref name="WorkItem"/> is <c>null</c> when the item was deleted.</summary>
+public sealed record AgentRunOverview(AgentRun Run, WorkItems.WorkItemReference? WorkItem);
+
 /// <summary>What one session of the agent cost, as the Copilot SDK reported it at the end.</summary>
 public sealed record AgentRunUsage(
     long NanoAiu,

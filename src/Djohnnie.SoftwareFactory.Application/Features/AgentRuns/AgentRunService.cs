@@ -15,6 +15,12 @@ public sealed class AgentRunService(IMediator mediator)
         return (await mediator.Send(new GetAgentRunsQuery(new(repositoryFullName, workItemId)), cancellationToken)).Dto.Items;
     }
 
+    /// <summary>The newest runs of a repository (at most <see cref="GetRepositoryAgentRunsQueryHandler.MaxRuns"/>), newest first, with their work items.</summary>
+    public async Task<IReadOnlyList<AgentRunOverview>> GetRepositoryRunsAsync(string repositoryFullName, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetRepositoryAgentRunsQuery(new(repositoryFullName)), cancellationToken)).Dto.Items;
+    }
+
     /// <summary>Starts another run on a work item that is in progress, e.g. after a failed run.</summary>
     public async Task<AgentRun> StartRunAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)
     {
