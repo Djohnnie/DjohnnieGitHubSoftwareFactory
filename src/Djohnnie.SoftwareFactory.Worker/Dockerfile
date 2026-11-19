@@ -21,9 +21,10 @@ ENV DOTNET_NOLOGO=1 \
     NODE_PATH=/usr/local/lib/node_modules:/usr/lib/node_modules
 # Node.js, Playwright and a headless Chromium (with its system libraries), so the agent can start the app it changed and
 # take screenshots of its user interface for the pull request. The browsers go to a shared folder the app user can read.
+# The SDK image is Ubuntu 26.04, which Playwright supports from 1.61 on.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs npm \
-    && npm install -g playwright@1.55.0 \
+    && npm install -g playwright@1.61.0 \
     && playwright install --with-deps chromium \
     && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH" \
     && rm -rf /var/lib/apt/lists/* /root/.npm
