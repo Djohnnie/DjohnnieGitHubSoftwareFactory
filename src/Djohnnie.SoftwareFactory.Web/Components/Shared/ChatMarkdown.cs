@@ -9,7 +9,8 @@ namespace Djohnnie.SoftwareFactory.Web.Components.Shared;
 /// <summary>
 /// Renders the Markdown of agent replies and GitHub comments as safe HTML. Model output can be steered by prompt injection
 /// (e.g. from a repository file) and anyone who can comment writes GitHub comments, so both are treated as untrusted: raw HTML is escaped, only http(s) and mailto links are kept, links
-/// open in a new tab without a referrer, and images become links, so a reply can't make the browser load a URL.
+/// open in a new tab without a referrer, and images become links, so a reply can't make the browser load a URL. Only images
+/// that <c>showImage</c> trusts, such as the screenshots in DGHSF's own image storage, are shown, linked to the full image.
 /// With app links allowed, a relative link to the page of a work item or mindmap (see <see cref="Contracts.AppPaths"/>)
 /// is kept too and opens in the app itself; every other relative link is dropped. A link (or bare URL) that
 /// <c>appLinkFor</c> knows, such as the GitHub issue of a work item, is turned into a link to that page.
@@ -27,7 +28,8 @@ public static class ChatMarkdown
     /// <param name="markdown">The untrusted Markdown.</param>
     /// <param name="allowAppLinks">Keeps links to the pages of work items and mindmaps, for the replies of the DGHSF Agent.</param>
     /// <param name="appLinkFor">With <paramref name="allowAppLinks"/>: the page in DGHSF for a URL, or <c>null</c> to keep the URL.</param>
-    public static string ToHtml(string markdown, bool allowAppLinks = false, Func<string, string?>? appLinkFor = null)
+    /// <param name="showImage">Whether an image URL may be shown inline; every other image becomes a link.</param>
+    public static string ToHtml(string markdown, bool allowAppLinks = false, Func<string, string?>? appLinkFor = null, Func<string, bool>? showImage = null)
     {
         var document = Markdown.Parse(markdown, Pipeline);
         foreach (var link in document.Descendants<LinkInline>().ToList())
@@ -37,7 +39,7 @@ public static class ChatMarkdown
                 link.GetDynamicUrl = null;
                 link.Url = page;
             }
-            MakeSafe(link, allowAppLinks);
+            MakeSafe(link, allowAppLinks, showImage);
         }
         foreach (var autolink in document.Descendants<AutolinkInline>().ToList())
         {
@@ -111,7 +113,7 @@ public static class ChatMarkdown
     private static readonly System.Text.RegularExpressions.Regex Tag = new(
         @"<(?<close>/)?(?<name>[a-zA-Z][a-zA-Z0-9]*)[^>]*>", System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private static void MakeSafe(LinkInline link, bool allowAppLinks)
+    private static void MakeSafe(LinkInline link, bool allowAppLinks, Func<string, bool>? showImage)
     {
         var url = link.GetDynamicUrl?.Invoke() ?? link.Url;
         var isAppLink = allowAppLinks && Contracts.AppPaths.IsLinkablePage(url);
@@ -122,6 +124,11 @@ public static class ChatMarkdown
             return;
         }
 
+        if (link.IsImage && !isAppLink && showImage?.Invoke(url!) == true)
+        {
+            ShowImage(link, url!);
+            return;
+        }
         if (link.IsImage)
         {
             link.IsImage = false;
@@ -137,6 +144,22 @@ public static class ChatMarkdown
             return;
         }
         AddLinkAttributes(link);
+    }
+
+    /// <summary>Keeps the image, lazily loaded without a referrer, and links it to the full image unless it already is a link.</summary>
+    private static void ShowImage(LinkInline image, string url)
+    {
+        var attributes = image.GetAttributes();
+        attributes.AddPropertyIfNotExist("loading", "lazy");
+        attributes.AddPropertyIfNotExist("referrerpolicy", "no-referrer");
+        // FirstParentOfType starts at the image itself, which is a LinkInline too.
+        if (image.Parent is { } parent && parent.FirstParentOfType<LinkInline>() is null)
+        {
+            var link = new LinkInline(url, string.Empty);
+            image.ReplaceBy(link, copyChildren: false);
+            link.AppendChild(image);
+            AddLinkAttributes(link);
+        }
     }
 
     private static string? AppLinkFor(string? url, Func<string, string?>? appLinkFor)

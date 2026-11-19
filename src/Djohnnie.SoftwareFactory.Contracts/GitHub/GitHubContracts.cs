@@ -201,7 +201,9 @@ public sealed record GitHubPullRequestDetails(
     [property: JsonPropertyName("changed_files")] int ChangedFiles,
     [property: JsonPropertyName("mergeable_state")] string? MergeableState = null,
     [property: JsonPropertyName("head")] GitHubPullRequestBranch? Head = null,
-    [property: JsonPropertyName("base")] GitHubPullRequestBranch? Base = null)
+    [property: JsonPropertyName("base")] GitHubPullRequestBranch? Base = null,
+    [property: JsonPropertyName("body")] string? Body = null,
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt = default)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 }

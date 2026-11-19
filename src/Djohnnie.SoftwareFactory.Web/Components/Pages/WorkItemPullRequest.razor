@@ -1,4 +1,6 @@
 @inject WorkItemService WorkItemService
+@using Djohnnie.SoftwareFactory.Application.Features.Uploads
+@inject ImageUploadService ImageUploads
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
 
@@ -204,6 +206,15 @@
             </MudPaper>
         }
 
+        @if (Changes.Description is { } description)
+        {
+            @* The opening post, as on GitHub: the DGHSF agent worker writes its summary and screenshots there. *@
+            <div class="pr-comment pr-description mt-2">
+                <b>@(description.AuthorLogin ?? "someone")</b> opened the pull request
+                · <MudLink Href="@description.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="description.CreatedAt" /></MudLink>
+                <div class="pr-comment-body pr-markdown">@CommentHtml(description)</div>
+            </div>
+        }
         @if (Changes.Comments.Count == 0)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">No comments yet.</MudText>
@@ -571,11 +582,12 @@
 
     /// <summary>
     /// A GitHub comment is Markdown written by anyone who can comment, so it goes through <see cref="ChatMarkdown"/>, which escapes
-    /// raw HTML and keeps only safe links. HTML comments are dropped first, because GitHub hides them too.
+    /// raw HTML and keeps only safe links. HTML comments are dropped first, because GitHub hides them too. Images in DGHSF's own
+    /// image storage, such as the agent worker's screenshots, are shown; every other image stays a link.
     /// </summary>
-    private static MarkupString CommentHtml(PullRequestComment comment)
+    private MarkupString CommentHtml(PullRequestComment comment)
     {
-        return (MarkupString)ChatMarkdown.ToHtml(HtmlComment.Replace(comment.Body, string.Empty));
+        return (MarkupString)ChatMarkdown.ToHtml(HtmlComment.Replace(comment.Body, string.Empty), showImage: ImageUploads.IsStoredImage);
     }
 
     private static readonly System.Text.RegularExpressions.Regex HtmlComment =

@@ -16,7 +16,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
 {
     public const string CopilotMention = "@copilot";
 
-    /// <summary>Reads the pull request, its files, its comments and its reviews from GitHub (five or more requests); nothing is stored.</summary>
+    /// <summary>Reads the pull request (with its description), its files, its comments and its reviews from GitHub (five or more requests); nothing is stored.</summary>
     public async Task<PullRequestChanges> GetChangesAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var (item, number) = await PullRequestOfAsync(repositoryFullName, id, cancellationToken);
@@ -37,7 +37,8 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             pullRequest.ChangedFiles > files.Count && files.Count >= GitHubApiClient.MaxPullRequestFiles,
             comments,
             ReviewStatus(reviews, pullRequest.MergeableState),
-            (await WorkerRunsOnAsync(item, number, cancellationToken)) is not null);
+            (await WorkerRunsOnAsync(item, number, cancellationToken)) is not null,
+            string.IsNullOrWhiteSpace(pullRequest.Body) ? null : new PullRequestComment(pullRequest.User?.Login, pullRequest.Body, pullRequest.CreatedAt, pullRequest.HtmlUrl));
     }
 
     /// <summary>

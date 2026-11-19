@@ -6,6 +6,10 @@ namespace Djohnnie.SoftwareFactory.Contracts.WorkItems;
 /// <param name="OpenedByWorker">
 /// The DGHSF agent worker opened it: feedback goes to the worker (a revision run) instead of to Copilot.
 /// </param>
+/// <param name="Description">
+/// The pull request's description as its opening post; <c>null</c> when it has none. The DGHSF agent worker writes its summary
+/// and screenshots there.
+/// </param>
 public sealed record PullRequestChanges(
     int Number,
     string Url,
@@ -20,7 +24,8 @@ public sealed record PullRequestChanges(
     bool FilesTruncated,
     IReadOnlyList<PullRequestComment> Comments,
     PullRequestReviewStatus Review,
-    bool OpenedByWorker = false);
+    bool OpenedByWorker = false,
+    PullRequestComment? Description = null);
 
 /// <summary>Where the pull request stands with its reviewers and whether GitHub would merge it.</summary>
 /// <param name="Reviewers">Each reviewer's verdict, most recent first.</param>

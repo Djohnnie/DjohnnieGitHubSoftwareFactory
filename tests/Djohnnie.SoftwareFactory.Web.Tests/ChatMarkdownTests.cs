@@ -84,6 +84,31 @@ public class ChatMarkdownTests
         Assert.Contains(">https://attacker.test/x.png</a>", html);
     }
 
+    [Fact]
+    public void ToHtml_ShowsTrustedImages_LinkedToTheFullImage()
+    {
+        const string Shot = "https://storage.test/uploads/shot.png";
+        var html = ChatMarkdown.ToHtml($"**The new page**\n\n![The new page]({Shot})\n\n![pixel](https://attacker.test/pixel.png)",
+            showImage: url => url.StartsWith("https://storage.test/uploads/", StringComparison.Ordinal));
+
+        Assert.Contains($"<a href=\"{Shot}\" target=\"_blank\" rel=\"noopener noreferrer nofollow\"><img src=\"{Shot}\"", html);
+        Assert.Contains("alt=\"The new page\"", html);
+        Assert.Contains("loading=\"lazy\"", html);
+        Assert.Contains("referrerpolicy=\"no-referrer\"", html);
+        Assert.Single(html.Split("<img").Skip(1));
+        Assert.Contains(">pixel</a>", html);
+    }
+
+    [Fact]
+    public void ToHtml_ShowsATrustedImageInALink_WithoutNestingLinks()
+    {
+        var html = ChatMarkdown.ToHtml("[![shot](https://storage.test/shot.png)](https://github.com/owner/repo)", showImage: _ => true);
+
+        Assert.Contains("<a href=\"https://github.com/owner/repo\"", html);
+        Assert.Contains("<img src=\"https://storage.test/shot.png\"", html);
+        Assert.Single(html.Split("<a ").Skip(1));
+    }
+
     [Theory]
     [InlineData("/stories/{0}")]
     [InlineData("/epics/{0}")]

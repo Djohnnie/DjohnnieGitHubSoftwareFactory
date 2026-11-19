@@ -84,6 +84,35 @@ public class ImageUploadTests : IDisposable
         Assert.True(_service.IsEnabled);
     }
 
+    [Theory]
+    [InlineData("https://account.blob.core.windows.net/dghsf-uploads/2026/11/abc-shot.png", true)]
+    [InlineData("https://images.example.test/2026/11/abc-shot.png", true)]
+    [InlineData("https://account.blob.core.windows.net/dghsf-uploads-other/shot.png", false)]
+    [InlineData("https://account.blob.core.windows.net/other/shot.png", false)]
+    [InlineData("https://images.example.test.attacker.test/shot.png", false)]
+    [InlineData("https://attacker.test/pixel.png", false)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData(null, false)]
+    public void IsStoredImage_OnlyTrustsTheContainerAndThePublicBaseUrl(string? url, bool stored)
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new ImageUploadOptions
+        {
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=account;AccountKey=a2V5;EndpointSuffix=core.windows.net",
+            PublicBaseUrl = "https://images.example.test/"
+        });
+        var service = new ImageUploadService(null!, options);
+
+        Assert.Equal(stored, service.IsStoredImage(url));
+    }
+
+    [Fact]
+    public void IsStoredImage_TrustsNothingWithoutStorage()
+    {
+        var service = new ImageUploadService(null!, Microsoft.Extensions.Options.Options.Create(new ImageUploadOptions()));
+
+        Assert.False(service.IsStoredImage("https://account.blob.core.windows.net/dghsf-uploads/shot.png"));
+    }
+
     private sealed class FakeImageStorage : IImageStorage
     {
         public List<(string Name, byte[] Content, string ContentType)> Stored { get; } = [];
