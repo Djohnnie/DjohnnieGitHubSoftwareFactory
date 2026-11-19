@@ -80,3 +80,6 @@ public sealed record AiModelUsageQuery(Guid ModelId, int Page, int PageSize)
 {
     public const int MaxPageSize = 100;
 }
+
+/// <summary>The DGHSF agent worker sessions that were counted on any model; one that used several models counts once.</summary>
+public sealed record AiModelSessionCount(int Sessions);
