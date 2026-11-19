@@ -43,7 +43,10 @@
                         {
                             <MudText Typo="Typo.caption" Class="agent-run-kind">Revision</MudText>
                         }
-                        <MudText Typo="Typo.caption" Color="Color.Secondary"><TimeAgo At="@(run.StartedAt ?? run.CreatedAt)" /></MudText>
+                        @if (ShownAt(run) is { } at)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary"><TimeAgo At="@at" /></MudText>
+                        }
                         @if (run.Duration is { } duration)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">· @FormatDuration(duration)</MudText>
@@ -58,7 +61,8 @@
                             <GitHubLink Href="@run.PullRequestUrl" Typo="Typo.caption">#@number</GitHubLink>
                         }
                     </MudStack>
-                    @if (run.AiCredits is { } credits)
+                    @* While the task is active, its latest run (which costs nothing yet) is what's shown, not the totals of the runs before it. *@
+                    @if (!run.IsActive && run.AiCredits is { } credits)
                     {
                         <MudText Typo="Typo.caption" Class="d-block" title="@TokenDetails(run)">
                             @AiModel.FormatCredits(credits)@(run.UsageComplete ? null : " (at least)")
@@ -243,6 +247,25 @@
         {
             _busy = false;
         }
+    }
+
+    /// <summary>
+    /// When the task started, once it ended; while it's active, when its latest run started or was queued. A task that waits
+    /// for another run shows no time, because the time of its runs before would read as this one's.
+    /// </summary>
+    public static DateTimeOffset? ShownAt(AgentRun run)
+    {
+        if (!run.IsActive)
+        {
+            return run.StartedAt ?? run.CreatedAt;
+        }
+
+        return run.Status switch
+        {
+            AgentRunStatus.Running => run.CurrentRun?.StartedAt ?? run.StartedAt,
+            AgentRunStatus.Queued => run.QueuedAt,
+            _ => run.Attempts == 0 ? run.CreatedAt : null
+        };
     }
 
     public static Color ColorOf(AgentRunStatus status)

@@ -74,6 +74,12 @@ public sealed record AgentRun
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? CompletedAt { get; init; }
 
+    /// <summary>
+    /// The run that is going on for a running task, so its own start shows instead of the task's (its first run's); only
+    /// the runs of a work item fill it in.
+    /// </summary>
+    public AgentRunAttempt? CurrentRun { get; init; }
+
     /// <summary>The run's cost in GitHub AI credits (1 credit = 0.01 USD).</summary>
     public decimal? AiCredits
     {

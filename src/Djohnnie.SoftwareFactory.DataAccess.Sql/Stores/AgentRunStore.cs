@@ -356,7 +356,15 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized)
             .OrderByDescending(r => r.SysId)
             .ToListAsync(cancellationToken);
-        return runs.Select(r => r.ToContract()).ToList();
+        var runningIds = runs.Where(r => r.Status == AgentRunStatus.Running).Select(r => r.Id).ToList();
+        var current = runningIds.Count == 0
+            ? new Dictionary<Guid, Entities.AgentRunAttempt>()
+            : (await db.AgentRunAttempts.AsNoTracking()
+                    .Where(a => runningIds.Contains(a.AgentRunId) && a.Status == AgentRunStatus.Running)
+                    .ToListAsync(cancellationToken))
+                .GroupBy(a => a.AgentRunId)
+                .ToDictionary(g => g.Key, g => g.MaxBy(a => a.Attempt)!);
+        return runs.Select(r => r.ToContract() with { CurrentRun = current.GetValueOrDefault(r.Id)?.ToContract() }).ToList();
     }
 
     public async Task<List<AgentRunOverview>> GetForRepositoryAsync(string repositoryFullName, int max, CancellationToken cancellationToken = default)

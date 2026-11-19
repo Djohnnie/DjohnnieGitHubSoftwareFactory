@@ -383,6 +383,56 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task TaskOnTheWorker_WhileARunGoesOn_ShowsThatRunInsteadOfTheTask()
+    {
+        await SelectRepositoryAsync();
+        var task = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Worker task", Description = "About it.", Executor = AgentExecutor.DghsfWorker
+        }, _cancellationToken);
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.IssueNumber = 7;
+            entity.IssueUrl = "https://github.com/owner/repo/issues/7";
+            entity.AssignedAt = DateTimeOffset.UtcNow.AddDays(-3);
+            var run = new DataAccess.Sql.Entities.AgentRun
+            {
+                Id = Guid.NewGuid(), WorkItemId = task.Id, RepositoryFullName = Repo, Status = Contracts.AgentRuns.AgentRunStatus.Running,
+                Kind = Contracts.AgentRuns.AgentRunKind.Revise, Attempts = 2, MaxAttempts = 3, NanoAiu = 2_500_000_000, UsageComplete = true,
+                Models = "claude-sonnet-4.5", RequestedModel = "gpt-5", CreatedAt = DateTimeOffset.UtcNow.AddDays(-3), StartedAt = DateTimeOffset.UtcNow.AddDays(-3)
+            };
+            db.AgentRuns.Add(run);
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 1, Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 2_500_000_000,
+                Models = "claude-sonnet-4.5", UsageComplete = true, StartedAt = DateTimeOffset.UtcNow.AddDays(-3), CompletedAt = DateTimeOffset.UtcNow.AddDays(-3).AddMinutes(9)
+            });
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 2, Kind = Contracts.AgentRuns.AgentRunKind.Revise,
+                Status = Contracts.AgentRuns.AgentRunStatus.Running, UsageComplete = true, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5).AddSeconds(-30)
+            });
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Agent worker runs", cut.Markup));
+        var panel = cut.FindComponent<AgentRunsPanel>();
+        var row = panel.Find(".agent-run");
+        Assert.Contains("5 minutes ago", row.TextContent);
+        Assert.DoesNotContain("3 days", row.TextContent);
+        // The run that goes on costs nothing yet: it shows the model it asked for, not the totals of the runs before it.
+        Assert.Contains("gpt-5", row.TextContent);
+        Assert.DoesNotContain("claude-sonnet-4.5", row.TextContent);
+        Assert.Contains("2 runs · 2.5 AI credits", panel.Markup);
+    }
+
+    [Fact]
     public async Task Draft_HasNoRefreshButtons()
     {
         await SelectRepositoryAsync();
