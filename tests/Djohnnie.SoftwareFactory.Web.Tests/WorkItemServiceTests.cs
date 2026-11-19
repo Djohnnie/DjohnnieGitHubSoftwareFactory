@@ -519,7 +519,7 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>The Actions runs of a branch, newest first; none when missing.</summary>
         public Dictionary<string, List<RunOnGitHub>> RunsByBranch { get; } = [];
 
-        /// <summary>The state of each pull request by number: open, closed or merged; a missing one is open.</summary>
+        /// <summary>The state of each pull request by number: open, draft, closed or merged; a missing one is open.</summary>
         public Dictionary<int, string> PullRequestStates { get; } = [];
 
         /// <summary>The files of every pull request.</summary>
@@ -534,6 +534,9 @@ public partial class WorkItemServiceTests : IDisposable
 
         /// <summary>When set, submitting a review is refused with this status (e.g. 422 for a line no longer in the diff).</summary>
         public HttpStatusCode? ReviewFailure { get; set; }
+
+        /// <summary>When set, merging a pull request is refused with this status and message (e.g. 405 for a blocked merge).</summary>
+        public (HttpStatusCode Status, string Message)? MergeFailure { get; set; }
 
         /// <summary>The submitted reviews of every pull request, oldest first.</summary>
         public List<(string Login, string State)> Reviews { get; } = [];
@@ -707,7 +710,7 @@ public partial class WorkItemServiceTests : IDisposable
                 ("GET", "") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
                 {
                     number, title = "Fix the task", html_url = $"https://github.com/owner/repo/pull/{number}",
-                    state = state == "merged" ? "closed" : state, draft = false, user = new { login = "Copilot" },
+                    state = state switch { "merged" => "closed", "draft" => "open", _ => state }, draft = state == "draft", user = new { login = "Copilot" },
                     merged_at = state == "merged" ? DateTimeOffset.UnixEpoch : (DateTimeOffset?)null,
                     additions = 3, deletions = 1, changed_files = PullRequestFiles.Count, mergeable_state = MergeableState
                 })),
@@ -728,8 +731,16 @@ public partial class WorkItemServiceTests : IDisposable
                 }))),
                 ("POST", "/reviews") when ReviewFailure is { } failure => Json(failure, """{"message":"Unprocessable Entity","errors":["Line could not be resolved"]}"""),
                 ("POST", "/reviews") => Json(HttpStatusCode.OK, $$"""{"id":9,"html_url":"https://github.com/owner/repo/pull/{{number}}#pullrequestreview-9"}"""),
+                ("PUT", "/merge") when MergeFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),
+                ("PUT", "/merge") => Merge(number),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
+        }
+
+        private HttpResponseMessage Merge(int number)
+        {
+            PullRequestStates[number] = "merged";
+            return Json(HttpStatusCode.OK, """{"sha":"abc123","merged":true,"message":"Pull Request successfully merged"}""");
         }
 
         private HttpResponseMessage LinkedPullRequestsResponse(string body)

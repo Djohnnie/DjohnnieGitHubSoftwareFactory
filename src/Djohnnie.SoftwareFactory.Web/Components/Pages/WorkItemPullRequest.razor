@@ -1,5 +1,6 @@
 @inject WorkItemService WorkItemService
 @inject ISnackbar Snackbar
+@inject IDialogService Dialogs
 
 @* One tab of a work item's pull request: the diff with line comments, or the discussion with a form to send feedback to its
    agent: Copilot (an @copilot comment or review), or, on a pull request the DGHSF agent worker opened, the worker (the comment
@@ -171,6 +172,38 @@
 
     @if (Changes is not null && Section == PullRequestSection.Discussion)
     {
+        @if (State.CanSendFeedback)
+        {
+            var readiness = MergeReadiness(Changes);
+            @* First on the tab: the "can be merged" banner at the top of the work item links here. *@
+            <MudPaper Class="pa-4 mt-3 pr-merge-card" Outlined="true" Elevation="0">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.MergeType" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1"><b>Merge and close pull request #@Changes.Number</b></MudText>
+                </MudStack>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    Merging puts the pull request's changes on its base branch and closes it, just like the merge button on GitHub. It's done as you,
+                    so it also works on a pull request you opened yourself.
+                </MudText>
+                <MudAlert Variant="Variant.Text" Severity="readiness.Severity" Dense="true" Class="mt-2 pr-merge-readiness">@readiness.Text</MudAlert>
+                <MudStack Row="true" AlignItems="AlignItems.End" Wrap="Wrap.Wrap" Spacing="3" Class="mt-2">
+                    <MudSelect T="PullRequestMergeMethod" Value="State.MergeMethod" ValueChanged="ChangeMergeMethod" Label="How to merge" Dense="true"
+                               Disabled="@(State.Sending || Changes.IsDraft)" Class="pr-merge-method" Style="min-width: 260px; max-width: 320px"
+                               HelperText="@MergeMethodHelp(State.MergeMethod)">
+                        <MudSelectItem Value="PullRequestMergeMethod.Merge">Create a merge commit</MudSelectItem>
+                        <MudSelectItem Value="PullRequestMergeMethod.Squash">Squash and merge</MudSelectItem>
+                        <MudSelectItem Value="PullRequestMergeMethod.Rebase">Rebase and merge</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.MergeType" OnClick="MergeAsync"
+                               Disabled="@(State.Sending || Changes.IsDraft)" Class="pr-merge mb-5">Merge and close</MudButton>
+                    @if (State.Sending)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mb-6" />
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+
         @if (Changes.Comments.Count == 0)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">No comments yet.</MudText>
@@ -230,7 +263,7 @@
             }
             <DictationTextField Value="@State.Body" ValueChanged="ChangeBody" Label="@($"What should {AgentName} change?")" Lines="4"
                           Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="State.Sending" />
-            <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Mark the pull request as &quot;Changes requested&quot; (can block merging until you approve)"
+            <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Mark the pull request as &quot;Changes requested&quot; (can block merging)"
                          Disabled="State.Sending" Dense="true" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
                 @if (Changes.OpenedByWorker)
@@ -269,26 +302,6 @@
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                 }
             </MudStack>
-
-            <MudText Typo="Typo.subtitle1" Class="mt-6"><b>Approve</b></MudText>
-            @if (State.ApprovedUrl is not null)
-            {
-                <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mb-2" ShowCloseIcon="true" CloseIconClicked="CloseApproved">
-                    Approved. <MudLink Href="@State.ApprovedUrl" Target="_blank">View the review on GitHub</MudLink>.
-                </MudAlert>
-            }
-            <DictationTextField Value="@State.ApprovalBody" ValueChanged="ChangeApprovalBody" Label="Comment (optional)" Lines="2"
-                          Immediate="true" MaxLength="PullRequestApproval.MaxBodyLength" Disabled="State.Sending" />
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                Submitted as you as a review that approves pull request #@Changes.Number. @(Changes.OpenedByWorker
-                    ? "It doesn't start the agent."
-                    : $"It doesn't mention {WorkItemPullRequests.CopilotMention}, so Copilot doesn't start working on it.")
-                Merging stays on GitHub.
-            </MudText>
-            <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
-                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="ApproveAsync"
-                           Disabled="State.Sending" Class="pr-approve">Approve</MudButton>
-            </MudStack>
         }
         else if (!Changes.IsOpen)
         {
@@ -316,8 +329,8 @@
     /// <summary>Asks to show the other tab, e.g. to send the pending line comments from the discussion.</summary>
     [Parameter] public EventCallback<PullRequestSection> OnNavigate { get; set; }
 
-    /// <summary>Raised after the pull request was approved, so the work item can refresh its progress.</summary>
-    [Parameter] public EventCallback OnApproved { get; set; }
+    /// <summary>Raised after the pull request was merged, so the work item can refresh its progress.</summary>
+    [Parameter] public EventCallback OnMerged { get; set; }
 
     /// <summary>Raised after feedback started a revision run of the DGHSF agent worker, so the work item can show the run.</summary>
     [Parameter] public EventCallback OnAgentRunStarted { get; set; }
@@ -439,7 +452,7 @@
         if (State.RequestChanges)
         {
             return $"It becomes a \"Request changes\" review with {lineComments}. GitHub shows the pull request as \"Changes requested\" "
-                + "and, if the repository requires approving reviews, blocks merging until you approve it or dismiss the review. "
+                + "and, if the repository requires approving reviews, blocks merging until the review is dismissed or another reviewer approves. "
                 + $"{char.ToUpperInvariant(AgentName[0])}{AgentName[1..]} acts on the feedback either way.";
         }
 
@@ -519,30 +532,32 @@
         }
     }
 
-    private void ChangeApprovalBody(string? body)
+    private void ChangeMergeMethod(PullRequestMergeMethod method)
     {
-        State.ApprovalBody = body;
+        State.MergeMethod = method;
     }
 
-    private void CloseApproved()
+    private async Task MergeAsync()
     {
-        State.ApprovedUrl = null;
-    }
+        var number = Changes!.Number;
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Merge and close pull request #{number}",
+            $"Put the changes of pull request #{number} on its base branch ({MergeMethodLabel(State.MergeMethod).ToLowerInvariant()}) and close it?",
+            yesText: "Merge and close", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
 
-    private async Task ApproveAsync()
-    {
         State.Sending = true;
         State.NotifyChanged();
         try
         {
-            var result = await WorkItemService.ApprovePullRequestAsync(new PullRequestApproval(RepositoryName, Item.Id, State.ApprovalBody?.Trim()));
-            Snackbar.Add($"Approved pull request #{Changes!.Number}.", Severity.Success);
-            State.ApprovalBody = null;
-            State.ApprovedUrl = result.Url;
+            await WorkItemService.MergePullRequestAsync(new PullRequestMerge(RepositoryName, Item.Id, State.MergeMethod));
+            Snackbar.Add($"Merged and closed pull request #{number}.", Severity.Success);
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
-            Snackbar.Add($"Could not approve: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Could not merge: {ex.Message}", Severity.Error);
             return;
         }
         finally
@@ -551,7 +566,7 @@
             State.NotifyChanged();
         }
         await LoadAsync();
-        await OnApproved.InvokeAsync();
+        await OnMerged.InvokeAsync();
     }
 
     /// <summary>
@@ -573,6 +588,44 @@
             PullRequestReviewDecision.Approved => ("Approved", Color.Success),
             PullRequestReviewDecision.ChangesRequested => ("Changes requested", Color.Warning),
             _ => ("Not approved yet", Color.Default)
+        };
+    }
+
+    /// <summary>Whether GitHub would merge the pull request now, in a sentence for the merge card.</summary>
+    private static (Severity Severity, string Text) MergeReadiness(PullRequestChanges changes)
+    {
+        if (changes.IsDraft)
+        {
+            return (Severity.Warning, "This is a draft. Mark it as ready for review on GitHub before you can merge it.");
+        }
+        return changes.Review.MergeState switch
+        {
+            "clean" or "has_hooks" => (Severity.Success, "Ready to merge: the required reviews and checks are in."),
+            "unstable" => (Severity.Info, "It can be merged, but some checks that aren't required fail."),
+            "blocked" => (Severity.Warning, "A branch rule blocks merging, e.g. a required approval or required checks. GitHub refuses the merge until that's resolved."),
+            "behind" => (Severity.Warning, "The base branch moved on; the branch has to be updated on GitHub before it can be merged."),
+            "dirty" => (Severity.Error, "The branch conflicts with the base branch. Resolve the conflicts before merging."),
+            _ => (Severity.Info, "GitHub is still checking whether it can be merged. You can try; GitHub refuses if something blocks it.")
+        };
+    }
+
+    private static string MergeMethodLabel(PullRequestMergeMethod method)
+    {
+        return method switch
+        {
+            PullRequestMergeMethod.Squash => "Squash and merge",
+            PullRequestMergeMethod.Rebase => "Rebase and merge",
+            _ => "Create a merge commit"
+        };
+    }
+
+    private static string MergeMethodHelp(PullRequestMergeMethod method)
+    {
+        return method switch
+        {
+            PullRequestMergeMethod.Squash => "All commits become one commit on the base branch.",
+            PullRequestMergeMethod.Rebase => "The commits are replayed one by one on the base branch.",
+            _ => "All commits are kept and joined with a merge commit."
         };
     }
 

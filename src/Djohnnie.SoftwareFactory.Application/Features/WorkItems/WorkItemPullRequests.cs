@@ -61,25 +61,42 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         return new(decision, reviewers, mergeableState);
     }
 
-    /// <summary>Approves the pull request as the signed-in user, without mentioning Copilot.</summary>
-    public async Task<PullRequestFeedbackResult> ApproveAsync(PullRequestApproval approval, CancellationToken cancellationToken = default)
+    /// <summary>Merges the pull request as the signed-in user, which closes it. Refreshing the work item afterwards picks up its progress.</summary>
+    public async Task<PullRequestMergeResult> MergeAsync(PullRequestMerge merge, CancellationToken cancellationToken = default)
     {
-        var (_, number) = await PullRequestOfAsync(approval.RepositoryFullName, approval.Id, cancellationToken);
-        var pullRequest = await gitHub.GetPullRequestAsync(approval.RepositoryFullName, number, cancellationToken);
+        var (_, number) = await PullRequestOfAsync(merge.RepositoryFullName, merge.Id, cancellationToken);
+        var pullRequest = await gitHub.GetPullRequestAsync(merge.RepositoryFullName, number, cancellationToken);
         if (!pullRequest.IsOpen)
         {
-            throw new DomainRuleException($"Pull request #{number} is {(pullRequest.MergedAt is null ? "closed" : "merged")}, so it can no longer be approved.");
+            throw new DomainRuleException($"Pull request #{number} is already {(pullRequest.MergedAt is null ? "closed" : "merged")}.");
+        }
+        if (pullRequest.Draft)
+        {
+            throw new DomainRuleException($"Pull request #{number} is a draft. Mark it as ready for review on GitHub before merging it.");
         }
 
         try
         {
-            return new(await gitHub.ApprovePullRequestAsync(approval.RepositoryFullName, number, approval.Body?.Trim() ?? string.Empty, cancellationToken));
+            var sha = await gitHub.MergePullRequestAsync(merge.RepositoryFullName, number, MergeMethodName(merge.Method), cancellationToken);
+            return new(pullRequest.HtmlUrl, sha);
         }
-        catch (GitHubApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity)
+        catch (GitHubApiException ex) when (ex.StatusCode is System.Net.HttpStatusCode.MethodNotAllowed or System.Net.HttpStatusCode.Conflict
+                                                or System.Net.HttpStatusCode.UnprocessableEntity)
         {
-            // E.g. approving your own pull request, or one Copilot opened on your request where the repository needs an independent approval.
-            throw new DomainRuleException($"GitHub didn't accept the approval: {ex.Message}");
+            // E.g. merge conflicts, a branch rule that requires an approval or checks, or a merge method the repository doesn't allow.
+            throw new DomainRuleException($"GitHub didn't merge pull request #{number}: {ex.Message}");
         }
+    }
+
+    public static string MergeMethodName(PullRequestMergeMethod method)
+    {
+        return method switch
+        {
+            PullRequestMergeMethod.Merge => "merge",
+            PullRequestMergeMethod.Squash => "squash",
+            PullRequestMergeMethod.Rebase => "rebase",
+            _ => throw new ArgumentOutOfRangeException(nameof(method), method, null)
+        };
     }
 
     private static PullRequestComment ToComment(GitHubComment comment, bool onLine)

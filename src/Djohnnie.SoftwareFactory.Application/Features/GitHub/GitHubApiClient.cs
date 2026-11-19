@@ -526,15 +526,29 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
-    /// <summary>Submits a review that approves the pull request, optionally with a comment.</summary>
-    /// <returns>The review's URL.</returns>
-    public async Task<string> ApprovePullRequestAsync(string repositoryFullName, int number, string body, CancellationToken cancellationToken = default)
+    /// <summary>Merges the pull request, which closes it.</summary>
+    /// <param name="mergeMethod"><c>merge</c>, <c>squash</c> or <c>rebase</c>.</param>
+    /// <returns>The commit the merge created on the base branch.</returns>
+    /// <exception cref="GitHubApiException">
+    /// 405 when GitHub can't merge it (e.g. a draft, conflicts, a branch rule, or a merge method the repository doesn't allow),
+    /// 409 when its branch moved on in the meantime.
+    /// </exception>
+    public async Task<string?> MergePullRequestAsync(string repositoryFullName, int number, string mergeMethod, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/reviews",
-            JsonContent.Create(new Api.CreateReviewRequest(body, "APPROVE", [])), cancellationToken);
+        using var response = await SendAsync(HttpMethod.Put, $"repos/{repositoryFullName}/pulls/{number}/merge",
+            JsonContent.Create(new Api.MergePullRequestRequest(mergeMethod)), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            // EnsureSuccessAsync would call this a file change.
+            throw new GitHubApiException(response.StatusCode, "The pull request's branch changed in the meantime. Reload and review the latest changes, then try again.");
+        }
         await EnsureSuccessAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<Api.HtmlUrlResponse>(cancellationToken))?.HtmlUrl
-            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+        var result = await response.Content.ReadFromJsonAsync<Api.MergePullRequestResponse>(cancellationToken);
+        if (result is not { Merged: true })
+        {
+            throw new GitHubApiException(response.StatusCode, result?.Message ?? "GitHub didn't merge the pull request.");
+        }
+        return result.Sha;
     }
 
     private async Task<List<T>> GetAllPagesAsync<T>(string firstUrl, CancellationToken cancellationToken)

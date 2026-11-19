@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
-public sealed record ApprovePullRequestCommand(PullRequestApproval Dto) : IRequest<Response<PullRequestFeedbackResult>>;
+public sealed record MergePullRequestCommand(PullRequestMerge Dto) : IRequest<Response<PullRequestMergeResult>>;

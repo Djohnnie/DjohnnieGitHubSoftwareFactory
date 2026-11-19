@@ -435,6 +435,14 @@ else if (_item is not null)
        The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
     @if (_item.PullRequestNumber is { } pullRequestNumber && !Removed)
     {
+        @if (CanBeMerged)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Icon="@Icons.Material.Filled.MergeType" Class="mb-4 pr-mergeable">
+                Pull request #@pullRequestNumber can be merged and closed. Go to the
+                <MudLink OnClick="() => ShowPullRequestSection(PullRequestSection.Discussion)" Class="pr-mergeable-link">Discussion tab</MudLink>
+                to merge it.
+            </MudAlert>
+        }
         @* Only the tab bar is outlined (no ApplyEffectsToContainer): the cards in the panels are outlined already. *@
         <MudTabs ActivePanelIndex="_tab" ActivePanelIndexChanged="ChangeTab" KeepPanelsAlive="true" Elevation="0" Outlined="true" Rounded="true">
             <MudTabPanel Text="@_type.DisplayName" Icon="@WorkItemRoutes.Icon(_type)">
@@ -463,7 +471,7 @@ else if (_item is not null)
                 </TabContent>
                 <ChildContent><div class="tab-panel">
                     <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" State="_pullRequest" Section="PullRequestSection.Discussion"
-                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" OnApproved="RefreshAsync"
+                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" OnMerged="RefreshAsync"
                                          OnAgentRunStarted="RefreshAsync" />
                 </div></ChildContent>
             </MudTabPanel>
@@ -631,6 +639,22 @@ else if (_item is not null)
     private void ChangeTab(int index)
     {
         _tab = index;
+    }
+
+    /// <summary>
+    /// The agent is done with the pull request and it is still open: from the stored progress, or from GitHub once a pull
+    /// request tab loaded it.
+    /// </summary>
+    private bool CanBeMerged
+    {
+        get
+        {
+            if (_pullRequest.Changes is { } changes)
+            {
+                return changes.IsOpen && !changes.IsDraft;
+            }
+            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped;
+        }
     }
 
     private void ShowPullRequestSection(PullRequestSection section)

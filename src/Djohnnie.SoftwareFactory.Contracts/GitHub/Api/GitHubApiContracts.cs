@@ -145,11 +145,19 @@ public sealed record StatusCheckRollupNode([property: JsonPropertyName("state")]
 
 public sealed record CreateCommentRequest([property: JsonPropertyName("body")] string Body);
 
-/// <param name="Event"><c>COMMENT</c>, <c>REQUEST_CHANGES</c> or <c>APPROVE</c>.</param>
+/// <param name="Event"><c>COMMENT</c> or <c>REQUEST_CHANGES</c>.</param>
 public sealed record CreateReviewRequest(
     [property: JsonPropertyName("body")] string Body,
     [property: JsonPropertyName("event")] string Event,
     [property: JsonPropertyName("comments")] IReadOnlyList<GitHubReviewLineComment> Comments);
+
+/// <param name="MergeMethod"><c>merge</c>, <c>squash</c> or <c>rebase</c>.</param>
+public sealed record MergePullRequestRequest([property: JsonPropertyName("merge_method")] string MergeMethod);
+
+public sealed record MergePullRequestResponse(
+    [property: JsonPropertyName("sha")] string? Sha,
+    [property: JsonPropertyName("merged")] bool Merged,
+    [property: JsonPropertyName("message")] string? Message);
 
 public sealed record HtmlUrlResponse([property: JsonPropertyName("html_url")] string HtmlUrl);
 

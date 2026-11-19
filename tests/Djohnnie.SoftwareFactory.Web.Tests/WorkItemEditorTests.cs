@@ -492,8 +492,8 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add comment").Click());
         cut.WaitForAssertion(() => Assert.Contains("1 pending", cut.Markup));
         await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
-        // The feedback and approval boxes start empty (bound to the state, not showing its name).
-        Assert.All(cut.FindComponents<MudTextField<string>>().Where(f => f.Instance.Label is "What should Copilot change?" or "Comment (optional)"),
+        // The feedback box starts empty (bound to the state, not showing its name).
+        Assert.All(cut.FindComponents<MudTextField<string>>().Where(f => f.Instance.Label is "What should Copilot change?"),
             f => Assert.True(string.IsNullOrEmpty(f.Instance.GetState(x => x.Value))));
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "What should Copilot change?").Find("textarea").Input("Almost done."));
         await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Send to Copilot")).Click());
@@ -546,7 +546,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
-    public async Task PullRequest_ShowsTheReviewStatus_AndApprovesIt()
+    public async Task PullRequest_ShowsTheReviewStatus_AndMergesAndClosesIt()
     {
         await SelectRepositoryAsync();
         var task = await SaveAcceptedTaskAsync();
@@ -572,15 +572,19 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = """
             [{"user":{"login":"copilot-pull-request-reviewer[bot]"},"state":"COMMENTED","submitted_at":"2026-11-12T08:00:00Z","html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-1"}]
             """;
-        _gitHub.Responses["POST /repos/owner/repo/pulls/12/reviews"] = """{"id":3,"html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}""";
+        _gitHub.Responses["PUT /repos/owner/repo/pulls/12/merge"] = """{"sha":"abc123","merged":true,"message":"Pull Request successfully merged"}""";
         Navigation.NavigateTo($"/tasks/{task.Id}");
         Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
         var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
         cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Discussion")));
 
-        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+        // The top of the page says the pull request can be merged and closed, and links to the discussion tab where that's done.
+        Assert.Contains("can be merged and closed", cut.Find(".pr-mergeable").TextContent);
+        await cut.InvokeAsync(() => cut.Find(".pr-mergeable-link").Click());
         cut.WaitForAssertion(() => Assert.Equal("Not approved yet", cut.Find(".pr-review-decision").TextContent.Trim()));
         Assert.Equal("Merge blocked", cut.Find(".pr-merge-state").TextContent.Trim());
+        Assert.Contains("A branch rule blocks merging", cut.Find(".pr-merge-readiness").TextContent);
         Assert.Contains("commented", cut.Find(".pr-reviewers").TextContent);
         // Comments are Markdown: a quote of an earlier comment is a blockquote, HTML comments are hidden like on GitHub, raw HTML stays text.
         var comment = cut.Find(".pr-comment .pr-markdown");
@@ -590,20 +594,19 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Null(comment.QuerySelector("script"));
         Assert.Contains("<script>alert(1)</script>", comment.TextContent);
 
-        // After approving, GitHub lists the approval and no longer blocks the merge.
-        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = """
-            [{"user":{"login":"djohnnie"},"state":"APPROVED","submitted_at":"2026-11-12T09:00:00Z","html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-3"}]
-            """;
-        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = _gitHub.Responses["GET /repos/owner/repo/pulls/12"].Replace("blocked", "clean");
-        await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Comment (optional)").Find("textarea").Input("Looks good."));
-        await cut.InvokeAsync(() => cut.Find("button.pr-approve").Click());
+        // Merging (after confirming) closes the pull request; the banner and the merge card go away.
+        Assert.DoesNotContain(cut.FindAll(".pr-approve"), _ => true);
+        _gitHub.Effects["PUT /repos/owner/repo/pulls/12/merge"] = () => _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = _gitHub.Responses["GET /repos/owner/repo/pulls/12"]
+            .Replace("\"state\":\"open\"", "\"state\":\"closed\"").Replace("\"merged_at\":null", "\"merged_at\":\"2026-11-12T10:00:00Z\"");
+        await cut.InvokeAsync(() => { _ = cut.Find("button.pr-merge").ClickAsync(new()); });
+        dialogs.WaitForAssertion(() => Assert.Contains("Merge and close pull request #12", dialogs.Markup), TimeSpan.FromSeconds(5));
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent == "Merge and close").Click());
 
-        cut.WaitForAssertion(() => Assert.Contains("View the review on GitHub", cut.Markup));
-        cut.WaitForAssertion(() => Assert.Equal("Approved", cut.Find(".pr-review-decision").TextContent.Trim()));
-        Assert.Equal("Ready to merge", cut.Find(".pr-merge-state").TextContent.Trim());
-        using var review = System.Text.Json.JsonDocument.Parse(_gitHub.Bodies["POST /repos/owner/repo/pulls/12/reviews"]!);
-        Assert.Equal("APPROVE", review.RootElement.GetProperty("event").GetString());
-        Assert.Equal("Looks good.", review.RootElement.GetProperty("body").GetString());
+        cut.WaitForAssertion(() => Assert.Contains("Merged", cut.Markup), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".pr-merge-card")));
+        Assert.Empty(cut.FindAll(".pr-mergeable"));
+        using var merge = System.Text.Json.JsonDocument.Parse(_gitHub.Bodies["PUT /repos/owner/repo/pulls/12/merge"]!);
+        Assert.Equal("merge", merge.RootElement.GetProperty("merge_method").GetString());
     }
 
     [Fact]
@@ -1226,12 +1229,19 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         /// <summary>The bodies of the requests answered from <see cref="Responses"/>, by "METHOD /path".</summary>
         public Dictionary<string, string?> Bodies { get; } = [];
 
+        /// <summary>What changes on GitHub when a request is answered, by "METHOD /path", e.g. a merge closes the pull request.</summary>
+        public Dictionary<string, Action> Effects { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var key = $"{request.Method.Method} {request.RequestUri!.AbsolutePath}";
             if (Responses.TryGetValue(key, out var json))
             {
                 Bodies[key] = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+                if (Effects.TryGetValue(key, out var effect))
+                {
+                    effect();
+                }
                 return new HttpResponseMessage(request.Method == HttpMethod.Post ? HttpStatusCode.Created : HttpStatusCode.OK)
                 {
                     Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")

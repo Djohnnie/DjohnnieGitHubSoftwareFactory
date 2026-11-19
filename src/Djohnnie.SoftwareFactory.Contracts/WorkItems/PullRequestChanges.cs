@@ -48,12 +48,28 @@ public enum PullRequestReviewDecision
 /// <param name="State">The reviewer's verdict: <c>APPROVED</c>, <c>CHANGES_REQUESTED</c>, <c>DISMISSED</c>, or <c>COMMENTED</c> when they only commented.</param>
 public sealed record PullRequestReviewer(string Login, string State, DateTimeOffset? SubmittedAt, string? Url);
 
-/// <summary>Approves a work item's pull request as the signed-in user. It doesn't mention Copilot, so Copilot doesn't start working.</summary>
-/// <param name="Body">An optional comment with the approval.</param>
-public sealed record PullRequestApproval(string RepositoryFullName, Guid Id, string? Body = null)
+/// <summary>
+/// Merges a work item's pull request as the signed-in user, which also closes it. GitHub lets you merge a pull request you
+/// opened yourself, even though it doesn't let you approve it.
+/// </summary>
+public sealed record PullRequestMerge(string RepositoryFullName, Guid Id, PullRequestMergeMethod Method = PullRequestMergeMethod.Merge);
+
+/// <summary>How the pull request's commits get onto the base branch, as GitHub's merge button offers it.</summary>
+public enum PullRequestMergeMethod
 {
-    public const int MaxBodyLength = PullRequestFeedback.MaxBodyLength;
+    /// <summary>Create a merge commit.</summary>
+    Merge = 0,
+
+    /// <summary>Squash the commits into one.</summary>
+    Squash = 1,
+
+    /// <summary>Rebase the commits onto the base branch.</summary>
+    Rebase = 2
 }
+
+/// <param name="Url">The merged pull request on GitHub.</param>
+/// <param name="Sha">The commit the merge created on the base branch.</param>
+public sealed record PullRequestMergeResult(string Url, string? Sha);
 
 /// <param name="Status"><c>added</c>, <c>removed</c>, <c>modified</c>, <c>renamed</c>, <c>copied</c>, <c>changed</c> or <c>unchanged</c>.</param>
 /// <param name="Patch">The unified diff hunks; <c>null</c> for binary files and diffs GitHub considers too large.</param>

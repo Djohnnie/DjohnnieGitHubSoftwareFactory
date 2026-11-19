@@ -1,15 +1,14 @@
 using Djohnnie.SoftwareFactory.Application.Common;
-using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using FluentValidation;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
-public sealed class ApprovePullRequestValidator : AbstractValidator<ApprovePullRequestCommand>
+public sealed class MergePullRequestValidator : AbstractValidator<MergePullRequestCommand>
 {
-    public ApprovePullRequestValidator()
+    public MergePullRequestValidator()
     {
         RuleFor(request => request.Dto.RepositoryFullName).ValidRepositoryFullName();
         RuleFor(request => request.Dto.Id).NotEmpty();
-        RuleFor(request => request.Dto.Body).MaximumLength(PullRequestApproval.MaxBodyLength);
+        RuleFor(request => request.Dto.Method).IsInEnum();
     }
 }
