@@ -657,7 +657,7 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         string? detail = null;
         try
         {
-            detail = (await response.Content.ReadFromJsonAsync<Api.ErrorResponse>(cancellationToken))?.Message;
+            detail = ErrorDetail(await response.Content.ReadFromJsonAsync<Api.ErrorResponse>(cancellationToken));
         }
         catch
         {
@@ -672,6 +672,44 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         };
 
         throw new GitHubApiException(response.StatusCode, message);
+    }
+
+    /// <summary>GitHub's message followed by the reasons in its <c>errors</c>, which say what was wrong when the message is only "Unprocessable Entity".</summary>
+    public static string? ErrorDetail(Api.ErrorResponse? error)
+    {
+        if (error is null)
+        {
+            return null;
+        }
+
+        var reasons = new List<string>();
+        if (error.Errors is { ValueKind: JsonValueKind.Array } errors)
+        {
+            foreach (var entry in errors.EnumerateArray())
+            {
+                var reason = entry.ValueKind switch
+                {
+                    JsonValueKind.String => entry.GetString(),
+                    JsonValueKind.Object when entry.TryGetProperty("message", out var text) && text.ValueKind == JsonValueKind.String => text.GetString(),
+                    JsonValueKind.Object => string.Join(" ", new[] { "field", "code" }
+                        .Select(name => entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null)
+                        .Where(value => !string.IsNullOrWhiteSpace(value))),
+                    _ => null
+                };
+                if (!string.IsNullOrWhiteSpace(reason))
+                {
+                    reasons.Add(reason.Trim());
+                }
+            }
+        }
+
+        var message = string.IsNullOrWhiteSpace(error.Message) ? null : error.Message.Trim();
+        if (reasons.Count == 0)
+        {
+            return message;
+        }
+        var joined = string.Join("; ", reasons);
+        return message is null || message.Equals("Unprocessable Entity", StringComparison.OrdinalIgnoreCase) ? joined : $"{message} ({joined})";
     }
 
     private static string ContentsUrl(string repositoryFullName, string path)

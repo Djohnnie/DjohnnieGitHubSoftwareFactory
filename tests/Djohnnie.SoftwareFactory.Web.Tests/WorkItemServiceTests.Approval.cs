@@ -56,6 +56,17 @@ public partial class WorkItemServiceTests
 
         var error = await Assert.ThrowsAsync<DomainRuleException>(() => _service.ApprovePullRequestAsync(new(Repo, task.Id), _cancellationToken));
         Assert.StartsWith("GitHub didn't accept the approval", error.Message);
+        Assert.Contains("Line could not be resolved", error.Message);
+    }
+
+    [Fact]
+    public void ErrorDetail_ReadsStringAndObjectErrors()
+    {
+        var error = JsonSerializer.Deserialize<Djohnnie.SoftwareFactory.Contracts.GitHub.Api.ErrorResponse>(
+            """{"message":"Validation Failed","errors":["Can not approve your own pull request",{"resource":"PullRequestReview","field":"body","code":"missing"},{"message":"Too long"}]}""");
+
+        Assert.Equal("Validation Failed (Can not approve your own pull request; body missing; Too long)",
+            Djohnnie.SoftwareFactory.Application.Features.GitHub.GitHubApiClient.ErrorDetail(error));
     }
 
     [Fact]

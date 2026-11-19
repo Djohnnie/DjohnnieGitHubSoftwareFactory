@@ -30,7 +30,13 @@ public sealed record CommitInfo(
     [property: JsonPropertyName("sha")] string Sha,
     [property: JsonPropertyName("html_url")] string? HtmlUrl);
 
-public sealed record ErrorResponse([property: JsonPropertyName("message")] string? Message);
+/// <param name="Errors">
+/// The reasons behind a 422: GitHub sends plain strings (e.g. "Can not approve your own pull request") or objects with
+/// <c>message</c>, <c>code</c> and <c>field</c>.
+/// </param>
+public sealed record ErrorResponse(
+    [property: JsonPropertyName("message")] string? Message,
+    [property: JsonPropertyName("errors")] System.Text.Json.JsonElement? Errors = null);
 
 public sealed record LabelRequest(
     [property: JsonPropertyName("name")] string Name,
