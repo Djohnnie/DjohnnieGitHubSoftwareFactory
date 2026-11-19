@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
@@ -85,6 +86,94 @@ public sealed class MindmapStore(IDbContextFactory<AppDbContext> dbFactory, Time
         mindmap.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(cancellationToken);
         return ToContract(mindmap);
+    }
+
+    public async Task<List<WorkItem>> AddPlannedWorkItemsAsync(string repositoryFullName, Guid mindmapId, IReadOnlyList<MindmapPlanItem> items,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var normalized = Entities.Repository.Normalize(repositoryFullName);
+        var mindmap = await db.Mindmaps.Include(m => m.Repository)
+            .SingleOrDefaultAsync(m => m.Id == mindmapId && m.Repository.FullName == normalized, cancellationToken)
+            ?? throw new DomainRuleException("The mindmap no longer exists.");
+        var nodes = Deserialize(mindmap.Nodes);
+        // An idea linked to an item that was deleted since counts as not linked.
+        var linkIds = nodes.Where(n => n.WorkItemId is not null).Select(n => n.WorkItemId!.Value).ToList();
+        var existingLinks = (await db.WorkItems.Where(e => linkIds.Contains(e.Id) && e.Repository.FullName == normalized)
+            .Select(e => e.Id).ToListAsync(cancellationToken)).ToHashSet();
+        int IndexOf(Guid ideaId)
+        {
+            var index = nodes.FindIndex(n => n.Id == ideaId);
+            if (index < 0)
+            {
+                throw new DomainRuleException("An idea no longer exists in the mindmap. Generate the work items again.");
+            }
+            return index;
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var created = new Dictionary<Guid, Entities.WorkItem>();
+        var linkedIdeas = new HashSet<Guid>();
+        foreach (var item in items)
+        {
+            var entity = new Entities.WorkItem
+            {
+                Id = Guid.NewGuid(),
+                Repository = mindmap.Repository,
+                RepositoryId = mindmap.RepositoryId,
+                Type = item.Type,
+                Title = item.Title.Trim(),
+                Description = item.Description,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            if (item.ParentId is not null || item.ParentWorkItemId is not null)
+            {
+                var parent = item.ParentId is { } parentId
+                    ? created.GetValueOrDefault(parentId)
+                    : await db.WorkItems.Include(e => e.Repository)
+                        .SingleOrDefaultAsync(e => e.Id == item.ParentWorkItemId && e.Repository.FullName == normalized, cancellationToken);
+                if (parent is null)
+                {
+                    throw new DomainRuleException("The parent of an item no longer exists. Generate the work items again.");
+                }
+                if (!item.Type.CanHaveParent(parent.Type))
+                {
+                    throw new DomainRuleException($"A {Name(item.Type)} can't be part of a {Name(parent.Type)}.");
+                }
+                entity.Parent = parent;
+                entity.ParentId = parent.Id;
+            }
+            else if (item.Type.RequiresParent)
+            {
+                throw new DomainRuleException($"A {Name(item.Type)} needs a parent.");
+            }
+
+            foreach (var ideaId in item.IdeaIds)
+            {
+                var index = IndexOf(ideaId);
+                if ((nodes[index].WorkItemId is { } linkedId && existingLinks.Contains(linkedId)) || !linkedIdeas.Add(ideaId))
+                {
+                    throw new DomainRuleException("An idea is linked to a work item already. Generate the work items again.");
+                }
+                nodes[index] = nodes[index] with { WorkItemId = entity.Id };
+            }
+            if (!created.TryAdd(item.Id, entity))
+            {
+                throw new DomainRuleException("Every item of the plan needs its own id.");
+            }
+            db.WorkItems.Add(entity);
+        }
+
+        mindmap.Nodes = JsonSerializer.Serialize(nodes, JsonOptions);
+        mindmap.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return created.Values.Select(entity => entity.ToContract()).ToList();
+    }
+
+    private static string Name(WorkItemType type)
+    {
+        return type.DisplayName.ToLowerInvariant();
     }
 
     public async Task<List<MindmapIdeaLink>> GetLinkedIdeasAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)

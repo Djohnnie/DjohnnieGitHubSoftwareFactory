@@ -1,0 +1,293 @@
+@page "/mindmaps/{Id:guid}/generate"
+@implements IDisposable
+@inject MindmapService MindmapData
+@inject WorkItemService WorkItems
+@inject RepositoryContext Repository
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Generate work items</PageTitle>
+
+<PageBreadcrumbs Parents="BreadcrumbParents" Current="Generate work items" BackDisabled="_saving" />
+
+<MudText Typo="Typo.h4">Generate work items</MudText>
+@if (_map is not null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+        Proposed for the mindmap <MudLink Href="@MindmapRoutes.MapPath(_map.Id)">@_map.Title</MudLink>: the central idea is the epic,
+        the other ideas become its features and their user stories. Nothing is stored until you save it as a draft; saved items are linked to their
+        ideas, and what you leave out is discarded.
+    </MudText>
+
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveSelectedAsync" Disabled="@(_generating || _saving || SelectedCount == 0)"
+                   StartIcon="@Icons.Material.Filled.Save">Save selected as draft (@SelectedCount)</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RegenerateAsync" Disabled="@(_generating || _saving)"
+                   StartIcon="@Icons.Material.Filled.AutoAwesome">Generate again</MudButton>
+    </MudStack>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_generating)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+    <MudText Typo="Typo.body2" Color="Color.Secondary">The Mindmap Planner is writing the work items…</MudText>
+}
+else if (_proposals.Count > 0)
+{
+    @if (_existingEpic is not null)
+    {
+        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-2">
+            The central idea is linked to the epic <MudLink Href="@WorkItemRoutes.ItemPath(_existingEpic.Type, _existingEpic.Id)">@_existingEpic.Title</MudLink>;
+            the items are added to it.
+        </MudAlert>
+    }
+    <MudCheckBox T="bool" Value="AllSelected" ValueChanged="SelectAll" Color="Color.Primary" Disabled="_saving" Label="Select all" />
+    <MudExpansionPanels MultiExpansion="true" Outlined="true" Elevation="0">
+        @foreach (var proposal in _proposals)
+        {
+            <MudExpansionPanel @key="proposal.Item.Id" Style="@($"margin-left:{proposal.Depth * 24}px")">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                        @* MudCheckBox stops its click from reaching the header, so ticking doesn't expand the panel. *@
+                        <MudCheckBox T="bool" Value="proposal.Selected" ValueChanged="selected => Select(proposal, selected)" Color="Color.Primary"
+                                     Disabled="_saving" aria-label="@($"Select {proposal.Item.Title}")" />
+                        <WorkItemTypeChip Type="proposal.Item.Type" />
+                        <MudText Style="font-weight:bold">@proposal.Item.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@IdeaSummary(proposal)</MudText>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    @if (ExistingParent(proposal.Item) is { } parent)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                            Part of the existing @WorkItemActions.Name(parent.Type)
+                            <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)">@parent.Title</MudLink>.
+                        </MudText>
+                    }
+                    @if (proposal.Item.IdeaIds.Count > 1)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Written for these ideas, which are linked to it:</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
+                            @foreach (var ideaId in proposal.Item.IdeaIds)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lightbulb">@IdeaText(ideaId)</MudChip>
+                            }
+                        </MudStack>
+                    }
+                    <MarkdownViewer Value="@proposal.Item.Description" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+else if (_map is not null && _error is null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info">
+        The agent has no new work items to propose. Add more ideas to the mindmap or generate again.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private readonly CancellationTokenSource _cancellation = new();
+    private Guid? _loadedId;
+    private Mindmap? _map;
+    private Dictionary<Guid, WorkItem> _workItems = [];
+    private WorkItem? _existingEpic;
+    private List<Proposal> _proposals = [];
+    private bool _generating = true;
+    private bool _saving;
+    private string? _error;
+
+    private string RepositoryName => Repository.Current!.FullName;
+    private int SelectedCount => _proposals.Count(p => p.Selected);
+    private bool AllSelected => _proposals.All(p => p.Selected);
+
+    private IReadOnlyList<BreadcrumbItem> BreadcrumbParents
+    {
+        get
+        {
+            List<BreadcrumbItem> parents = [new("Mindmaps", MindmapRoutes.ListPath)];
+            if (_map is not null)
+            {
+                parents.Add(new(_map.Title, MindmapRoutes.MapPath(_map.Id)));
+            }
+            return parents;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _map = null;
+
+        var cancellationToken = _cancellation.Token;
+        try
+        {
+            _map = await MindmapData.GetAsync(RepositoryName, Id, cancellationToken);
+            if (_map is null)
+            {
+                _error = "This mindmap does not exist in the selected repository.";
+                _generating = false;
+                return;
+            }
+            _workItems = (await WorkItems.GetAllAsync(RepositoryName, cancellationToken: cancellationToken)).ToDictionary(item => item.Id);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = $"Could not load the mindmap: {ex.Message}";
+            _generating = false;
+            return;
+        }
+
+        await GenerateAsync(cancellationToken);
+    }
+
+    private async Task RegenerateAsync()
+    {
+        await GenerateAsync(_cancellation.Token);
+    }
+
+    private async Task GenerateAsync(CancellationToken cancellationToken)
+    {
+        _generating = true;
+        _error = null;
+        _proposals = [];
+        try
+        {
+            var plan = await MindmapData.GeneratePlanAsync(RepositoryName, Id, cancellationToken);
+            _existingEpic = plan.EpicId is { } epicId ? _workItems.GetValueOrDefault(epicId) : null;
+            var depths = new Dictionary<Guid, int>();
+            _proposals = plan.Items.Select(item =>
+            {
+                var depth = item.ParentId is { } parent && depths.TryGetValue(parent, out var parentDepth) ? parentDepth + 1
+                    : item.ParentWorkItemId is null ? 0 : 1;
+                depths[item.Id] = depth;
+                return new Proposal(item, depth);
+            }).ToList();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the selection savable, so it always ends in user stories: selecting an item selects its parents and everything
+    /// below it, deselecting one deselects everything below it and the parents that are left without a selected child.
+    /// </summary>
+    private void Select(Proposal proposal, bool selected)
+    {
+        var byId = _proposals.ToDictionary(p => p.Item.Id);
+        Proposal? ParentOf(Proposal p)
+        {
+            return p.Item.ParentId is { } parentId ? byId.GetValueOrDefault(parentId) : null;
+        }
+        bool IsBelow(Proposal p, Proposal ancestor)
+        {
+            for (var current = ParentOf(p); current is not null; current = ParentOf(current))
+            {
+                if (current == ancestor)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        foreach (var below in _proposals.Where(p => IsBelow(p, proposal)))
+        {
+            below.Selected = selected;
+        }
+        proposal.Selected = selected;
+        for (var parent = ParentOf(proposal); parent is not null; parent = ParentOf(parent))
+        {
+            parent.Selected = selected || _proposals.Any(p => ParentOf(p) == parent && p.Selected);
+        }
+    }
+
+    private void SelectAll(bool selected)
+    {
+        _proposals.ForEach(p => p.Selected = selected);
+    }
+
+    private string IdeaText(Guid ideaId)
+    {
+        return _map?.Find(ideaId)?.Text ?? "(removed idea)";
+    }
+
+    private string IdeaSummary(Proposal proposal)
+    {
+        var ideas = proposal.Item.IdeaIds;
+        return ideas.Count == 0
+            ? "Not linked to an idea"
+            : $"Idea: {IdeaText(ideas[0])}" + (ideas.Count == 1 ? string.Empty : $" (+{ideas.Count - 1} more)");
+    }
+
+    /// <summary>The existing work item an item is added to, when its parent isn't part of the plan.</summary>
+    private WorkItem? ExistingParent(MindmapPlanItem item)
+    {
+        return item.ParentWorkItemId is { } workItemId ? _workItems.GetValueOrDefault(workItemId) : null;
+    }
+
+    private async Task SaveSelectedAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            var selected = _proposals.Where(p => p.Selected).Select(p => p.Item).ToList();
+            var saved = await MindmapData.SavePlanAsync(RepositoryName, Id, selected);
+            Snackbar.Add(saved.Count == 1
+                ? $"Saved '{saved[0].Title}' as a draft and linked it to the mindmap."
+                : $"Saved {saved.Count} work items as drafts and linked them to the mindmap.", Severity.Success);
+            var epic = saved.FirstOrDefault(item => item.Type == WorkItemType.Epic) ?? _existingEpic;
+            Navigation.NavigateTo(epic is null ? MindmapRoutes.MapPath(Id) : WorkItemRoutes.ItemPath(epic.Type, epic.Id));
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            _error = $"Could not save: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+
+    private sealed class Proposal(MindmapPlanItem item, int depth)
+    {
+        public MindmapPlanItem Item { get; } = item;
+
+        /// <summary>How many proposed items are above this one, for the indentation.</summary>
+        public int Depth { get; } = depth;
+
+        public bool Selected { get; set; } = true;
+    }
+}

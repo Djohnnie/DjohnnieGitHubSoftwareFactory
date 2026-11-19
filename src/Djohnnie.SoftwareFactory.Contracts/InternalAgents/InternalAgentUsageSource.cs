@@ -34,5 +34,6 @@ public enum InternalAgentUsageSource
     /// <summary>A chat title written with the DGHSF Agent's model, before the Chat Title Writer was its own agent.</summary>
     [Description("Chat title")] ChatTitle,
     [Description("Chat Title Writer")] ChatTitleWriter,
-    [Description("Chat Summarizer")] ChatSummarizer
+    [Description("Chat Summarizer")] ChatSummarizer,
+    [Description("Mindmap Planner")] MindmapPlanner
 }

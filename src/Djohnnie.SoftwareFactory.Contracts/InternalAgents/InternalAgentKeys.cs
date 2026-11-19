@@ -17,6 +17,7 @@ public static class InternalAgentKeys
     public const string DescriptionWriter = "description-writer";
     public const string WorkItemBreakdown = "work-item-breakdown";
     public const string MindmapWorkItemWriter = "mindmap-work-item-writer";
+    public const string MindmapPlanner = "mindmap-planner";
     public const string RepositoryAnalyst = "repository-analyst";
     public const string RepositoryWorkItemWriter = "repository-work-item-writer";
     public const string ChatTitleWriter = "chat-title-writer";

@@ -210,6 +210,136 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
             : new GeneratedWorkItem(title, Truncate(response.Result?.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength));
     }
 
+    /// <summary>
+    /// Proposes an epic for the central idea of a mindmap with features and user stories for its other ideas. The items are
+    /// not yet checked against the hierarchy; items without a key, a title or a known type, or with an unknown parent key,
+    /// are left out, and so are unknown ideas.
+    /// </summary>
+    /// <param name="agent">The Mindmap Planner agent.</param>
+    /// <param name="linkedItems">The work items ideas of the map are linked to, by id.</param>
+    /// <param name="existingEpic">The epic the central idea is linked to already, if any; the plan then adds to it.</param>
+    /// <param name="existingChildren">The children of <paramref name="existingEpic"/>.</param>
+    /// <param name="templates">The template each type follows, if any.</param>
+    public async Task<IReadOnlyList<MindmapPlanItem>> PlanMindmapAsync(InternalAgent agent, Mindmap mindmap, IReadOnlyDictionary<Guid, WorkItem> linkedItems,
+        WorkItem? existingEpic, IReadOnlyList<WorkItem> existingChildren, IReadOnlyDictionary<WorkItemType, WorkItemTemplate> templates,
+        CancellationToken cancellationToken = default)
+    {
+        var ideas = new List<Guid>();
+        var input = new
+        {
+            ExistingEpic = existingEpic is null ? null : new
+            {
+                existingEpic.Title,
+                Description = Truncate(existingEpic.Description, MaxDescriptionLength),
+                ExistingChildren = existingChildren.Select(child => $"{child.Type.DisplayName}: {child.Title}").ToList()
+            },
+            Templates = WorkItemTypeRules.All
+                .Where(templates.ContainsKey)
+                .ToDictionary(type => type.DisplayName, type => Template(templates[type]))
+        };
+        var message = $"""
+            Plan the work items for this mindmap. Every idea starts with its number in brackets.
+
+            ```text
+            {MindmapPlanOutline(mindmap, linkedItems, ideas)}
+            ```
+
+            ```json
+            {JsonSerializer.Serialize(input, JsonOptions)}
+            ```
+            """;
+
+        var response = await CreateAgent(agent, InternalAgentUsageSource.MindmapPlanner)
+            .RunAsync<MindmapPlanOutput>(message, serializerOptions: JsonOptions, cancellationToken: cancellationToken);
+        Guid? Idea(int? number)
+        {
+            return number is { } n && n >= 1 && n <= ideas.Count ? ideas[n - 1] : null;
+        }
+
+        var outputs = response.Result?.Items ?? [];
+        // The agent numbers its items itself; the first item with a key wins.
+        var keys = new Dictionary<int, Guid>();
+        foreach (var item in outputs)
+        {
+            if (item.Key is { } key)
+            {
+                keys.TryAdd(key, Guid.NewGuid());
+            }
+        }
+
+        var items = new List<MindmapPlanItem>();
+        var seenKeys = new HashSet<int>();
+        foreach (var item in outputs)
+        {
+            var title = Truncate(item.Title?.Trim() ?? string.Empty, GeneratedWorkItem.MaxTitleLength);
+            if (item.Key is not { } key || !seenKeys.Add(key) || ParseType(item.Type) is not { } type || title.Length == 0)
+            {
+                continue;
+            }
+            Guid? parentId = item.Parent is { } parentKey ? keys.GetValueOrDefault(parentKey) : null;
+            if (parentId == Guid.Empty)
+            {
+                continue;
+            }
+            Guid? parentWorkItemId = parentId is null && Idea(item.ExistingParentIdea) is { } parentIdea
+                && mindmap.Find(parentIdea)?.WorkItemId is { } linkedId && linkedItems.ContainsKey(linkedId)
+                ? linkedId
+                : null;
+            var ideaIds = (item.Ideas ?? []).Select(number => Idea(number)).OfType<Guid>().Distinct().ToList();
+            items.Add(new MindmapPlanItem(keys[key], parentId, parentWorkItemId, type, title,
+                Truncate(item.Description?.Trim() ?? string.Empty, WorkItem.MaxDescriptionLength), ideaIds));
+        }
+        return items;
+    }
+
+    /// <summary>A work item type by its display name, label or enum name, e.g. "User story", "story" or "Story".</summary>
+    private static WorkItemType? ParseType(string? value)
+    {
+        var name = value?.Trim();
+        return WorkItemTypeRules.All.Cast<WorkItemType?>().FirstOrDefault(type =>
+            string.Equals(type!.Value.DisplayName, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(type.Value.Label, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(type.Value.ToString(), name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The mindmap as an indented outline in which every idea starts with its number (<c>[1]</c> is the central idea), with
+    /// the done and linked ideas annotated. <paramref name="ideas"/> receives the idea ids in numbering order.
+    /// </summary>
+    public static string MindmapPlanOutline(Mindmap mindmap, IReadOnlyDictionary<Guid, WorkItem> linkedItems, List<Guid> ideas)
+    {
+        var builder = new System.Text.StringBuilder();
+        var seen = new HashSet<Guid>();
+        void Write(MindmapNode node, int depth)
+        {
+            if (!seen.Add(node.Id))
+            {
+                return;
+            }
+            ideas.Add(node.Id);
+            builder.Append(' ', depth * 2).Append("- [").Append(ideas.Count).Append("] ").Append(node.Text.ReplaceLineEndings(" "));
+            if (node.IsDone)
+            {
+                builder.Append(" [done]");
+            }
+            if (node.WorkItemId is { } id && linkedItems.TryGetValue(id, out var item))
+            {
+                builder.Append(" [linked to ").Append(item.Type.DisplayName.ToLowerInvariant()).Append(": ").Append(item.Title).Append(']');
+            }
+            builder.AppendLine();
+            foreach (var child in mindmap.ChildrenOf(node.Id))
+            {
+                Write(child, depth + 1);
+            }
+        }
+
+        if (mindmap.Root is { } root)
+        {
+            Write(root, 0);
+        }
+        return Truncate(builder.ToString().TrimEnd(), MaxOutlineLength);
+    }
+
     /// <summary>Plans the epics and features of a repository; empty when the agent returns nothing usable.</summary>
     /// <param name="agent">The Repository Analyst agent.</param>
     /// <param name="tools">Lets the agent read the repository's files.</param>
@@ -545,6 +675,21 @@ public sealed class BackgroundAgents(AssistantAgentFactory factory, IAgentUsageR
     internal sealed record ChildOutput(
         [property: Description("The title; no placeholders.")] string? Title,
         [property: Description("The description as Markdown.")] string? Description);
+
+    [Description("The work items planned for the mindmap.")]
+    internal sealed record MindmapPlanOutput(
+        [property: Description("The work items, each parent before its children: first the epic of the central idea (unless it exists already).")]
+        List<MindmapPlanItemOutput>? Items);
+
+    [Description("One planned epic, feature or user story.")]
+    internal sealed record MindmapPlanItemOutput(
+        [property: Description("A unique number for this item: 1, 2, 3, ...")] int? Key,
+        [property: Description("The key of the parent item in this plan; null for the epic and for items under an existing work item.")] int? Parent,
+        [property: Description("For an item under an existing work item: the number of the idea linked to it; otherwise null.")] int? ExistingParentIdea,
+        [property: Description("The type: Epic, Feature or User story.")] string? Type,
+        [property: Description("The title; no placeholders.")] string? Title,
+        [property: Description("The description as Markdown.")] string? Description,
+        [property: Description("The numbers of the ideas this item is written for; it is linked to them.")] List<int>? Ideas);
 
     [Description("The planned epics with their features.")]
     internal sealed record RepositoryPlanOutput(

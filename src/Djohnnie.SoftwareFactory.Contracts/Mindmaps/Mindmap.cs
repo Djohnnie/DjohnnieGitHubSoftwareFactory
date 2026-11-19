@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Djohnnie.SoftwareFactory.Contracts.Mindmaps;
 
 /// <summary>
@@ -164,6 +166,45 @@ public sealed record LinkMindmapIdeaRequest(string RepositoryFullName, Guid Mind
 /// <param name="TemplateId">The template to follow; <c>null</c> for none.</param>
 /// <param name="ParentId">The parent the new item will get, if chosen already.</param>
 public sealed record GenerateMindmapWorkItemRequest(string RepositoryFullName, Guid MindmapId, Guid IdeaId, WorkItems.WorkItemType Type, Guid? TemplateId, Guid? ParentId);
+
+/// <summary>Asks the Mindmap Planner to turn a stored mindmap into an epic with child work items.</summary>
+public sealed record GenerateMindmapPlanRequest(string RepositoryFullName, Guid MindmapId);
+
+/// <summary>
+/// One epic, feature or user story proposed by the Mindmap Planner; nothing is stored until it is saved as a draft.
+/// The plan always ends in user stories: the epic has features and every feature has user stories. Saving links the item
+/// to its ideas.
+/// </summary>
+/// <param name="Id">Identifies the item within the plan only; the saved work item gets its own id.</param>
+/// <param name="ParentId">The <see cref="Id"/> of the parent item in the plan, if the parent is new.</param>
+/// <param name="ParentWorkItemId">The existing work item that is the parent, if any. Both parents are <c>null</c> only for the epic.</param>
+/// <param name="IdeaIds">The ideas the item is written for, which it is linked to; the epic's first idea is the central idea.</param>
+public sealed record MindmapPlanItem(
+    Guid Id,
+    Guid? ParentId,
+    Guid? ParentWorkItemId,
+    WorkItems.WorkItemType Type,
+    [property: Required, MaxLength(WorkItems.GeneratedWorkItem.MaxTitleLength)] string Title,
+    [property: MaxLength(WorkItems.WorkItem.MaxDescriptionLength)] string Description,
+    IReadOnlyList<Guid> IdeaIds)
+{
+    /// <summary>The most items proposed for one mindmap, and saved at once.</summary>
+    public const int MaxPerPlan = 100;
+
+    /// <summary>The only types of a plan: the epic of the central idea, its features and their user stories.</summary>
+    public static IReadOnlyList<WorkItems.WorkItemType> Types { get; } = [WorkItems.WorkItemType.Epic, WorkItems.WorkItemType.Feature, WorkItems.WorkItemType.Story];
+}
+
+/// <summary>The work items the Mindmap Planner proposes for a mindmap, parents before their children.</summary>
+/// <param name="EpicId">
+/// The existing epic the central idea is linked to, which the items are added to; <c>null</c> when the plan starts with a
+/// new epic for the central idea.
+/// </param>
+/// <param name="Items">The proposed items; empty when the agent had nothing to add.</param>
+public sealed record GeneratedMindmapPlan(Guid? EpicId, IReadOnlyList<MindmapPlanItem> Items);
+
+/// <summary>Saves proposed items of a mindmap as drafts and links them to their ideas, all or none.</summary>
+public sealed record SaveMindmapPlanRequest(string RepositoryFullName, Guid MindmapId, IReadOnlyList<MindmapPlanItem> Items);
 
 /// <summary>An idea of a mindmap that is linked to a work item.</summary>
 public sealed record MindmapIdeaLink(Guid MindmapId, string MindmapTitle, Guid IdeaId, string IdeaText, bool IsDone);

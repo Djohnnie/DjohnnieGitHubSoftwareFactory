@@ -498,6 +498,64 @@ public class MindmapTests : BunitContext
         }
     }
 
+    [Fact]
+    public async Task PlanPage_ShowsTheProposedTree_KeepsTheSelectionEndingInUserStories_AndSavesItLinkedToTheIdeas()
+    {
+        var chat = new ScriptedChatClient(ScriptedChatClient.Text("""
+            {"items":[
+              {"key":1,"parent":null,"type":"Epic","title":"Launch","description":"Go live.","ideas":[1]},
+              {"key":2,"parent":1,"type":"Feature","title":"Website","description":"A site.","ideas":[2]},
+              {"key":3,"parent":2,"type":"User story","title":"Responsive layout","description":"Phones too.","ideas":[3]},
+              {"key":4,"parent":2,"type":"User story","title":"Buy the domain","description":"Register it.","ideas":[4]}
+            ]}
+            """));
+        Services.AddSingleton(_ => new AssistantAgentFactory(chat, NullLoggerFactory.Instance));
+        await SelectRepositoryAsync();
+        var map = Mindmap.Create(Repo, "Launch");
+        var website = MindmapLayout.AddChild(map, map.Root!.Id, "Website");
+        var responsive = MindmapLayout.AddChild(map, website.Id, "Responsive");
+        var domain = MindmapLayout.AddChild(map, website.Id, "Domain");
+        var saved = await Mindmaps.SaveAsync(map, _cancellationToken);
+        Navigation.NavigateTo(MindmapRoutes.GeneratePath(saved.Id));
+
+        var cut = Render<MindmapPlanGenerator>(parameters => parameters.Add(page => page.Id, saved.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Buy the domain", cut.Markup));
+        Assert.Contains("Idea: Website", cut.Markup);
+        Assert.Contains("margin-left:48px", cut.Markup);
+        Assert.Contains("Save selected as draft (4)", cut.Markup);
+        Task Tick(string title, bool selected)
+        {
+            return cut.InvokeAsync(() => cut.FindComponents<MudBlazor.MudCheckBox<bool>>()
+                .Single(c => c.Instance.UserAttributes.TryGetValue("aria-label", out var label) && Equals(label, $"Select {title}"))
+                .Instance.ValueChanged.InvokeAsync(selected));
+        }
+
+        // Without its user stories the feature goes too, and without a feature the epic.
+        await Tick("Responsive layout", false);
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (3)", cut.Markup));
+        await Tick("Buy the domain", false);
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (0)", cut.Markup));
+        // A story brings its parents back; the feature brings all of its stories.
+        await Tick("Buy the domain", true);
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (3)", cut.Markup));
+        await Tick("Website", true);
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (4)", cut.Markup));
+        await Tick("Responsive layout", false);
+        cut.WaitForAssertion(() => Assert.Contains("Save selected as draft (3)", cut.Markup));
+
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save selected as draft")).Click());
+
+        var items = await Services.GetRequiredService<Application.Features.WorkItems.WorkItemService>().GetAllAsync(Repo, cancellationToken: _cancellationToken);
+        var epic = items.Single(i => i.Type == Contracts.WorkItems.WorkItemType.Epic);
+        cut.WaitForAssertion(() => Assert.EndsWith(WorkItemRoutes.ItemPath(epic.Type, epic.Id), Navigation.Uri));
+        Assert.Equal(3, items.Count);
+        var stored = (await Mindmaps.GetAsync(Repo, saved.Id, _cancellationToken))!;
+        Assert.Equal(epic.Id, stored.Root!.WorkItemId);
+        Assert.Equal(items.Single(i => i.Title == "Buy the domain").Id, stored.Find(domain.Id)!.WorkItemId);
+        Assert.Null(stored.Find(responsive.Id)!.WorkItemId);
+    }
+
     private Task SelectRepositoryAsync()
     {
         return Services.GetRequiredService<RepositoryContext>().SelectAsync(new GitHubRepository(

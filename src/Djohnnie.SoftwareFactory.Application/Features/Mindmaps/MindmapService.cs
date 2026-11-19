@@ -35,6 +35,19 @@ public sealed class MindmapService(ISender mediator)
         return (await mediator.Send(new GenerateMindmapWorkItemQuery(request), cancellationToken)).Dto;
     }
 
+    /// <summary>Lets the Mindmap Planner propose an epic for the central idea with child work items for the other ideas; nothing is stored.</summary>
+    public async Task<GeneratedMindmapPlan> GeneratePlanAsync(string repositoryFullName, Guid mindmapId, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GenerateMindmapPlanQuery(new(repositoryFullName, mindmapId)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Saves proposed items as drafts and links them to their ideas, all or none.</summary>
+    public async Task<List<WorkItem>> SavePlanAsync(string repositoryFullName, Guid mindmapId, IReadOnlyList<MindmapPlanItem> items,
+        CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new SaveMindmapPlanCommand(new(repositoryFullName, mindmapId, items)), cancellationToken)).Dto.Items.ToList();
+    }
+
     /// <summary>The mindmap ideas linked to a work item, by mindmap title.</summary>
     public async Task<List<MindmapIdeaLink>> GetLinkedIdeasAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)
     {

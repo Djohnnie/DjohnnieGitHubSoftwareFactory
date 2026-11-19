@@ -7,6 +7,12 @@ public static class MindmapRoutes
 
     public const string NewPath = "/mindmaps/new";
 
+    /// <summary>The page where the Mindmap Planner proposes the work items of a stored map.</summary>
+    public static string GeneratePath(Guid id)
+    {
+        return $"{Contracts.AppPaths.Mindmap(id)}/generate";
+    }
+
     /// <param name="ideaId">An idea to select and bring into view.</param>
     public static string MapPath(Guid id, Guid? ideaId = null)
     {

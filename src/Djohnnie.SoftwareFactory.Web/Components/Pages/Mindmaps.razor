@@ -2,6 +2,8 @@
 @page "/mindmaps/{Id:guid}"
 @inject MindmapService MindmapData
 @inject WorkItemService WorkItems
+@inject AssistantService Assistant
+@inject InternalAgentService InternalAgents
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
@@ -41,6 +43,13 @@
             <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="Arrange" Disabled="_saving || _map.Nodes.Count < 2"
                        StartIcon="@Icons.Material.Filled.AutoFixHigh" title="Arrange all ideas neatly around the central idea">
                 Auto-arrange
+            </MudButton>
+        }
+        @if (_map is not null && _plannerActive)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="GenerateWorkItemsAsync" Disabled="_saving"
+                       StartIcon="@Icons.Material.Filled.AutoAwesome" title="Let the Mindmap Planner turn the map into an epic with child work items">
+                Generate work items
             </MudButton>
         }
         @if (_map is not null && !IsNew)
@@ -170,6 +179,9 @@
 
     // The work items of the repository, for the ideas linked to them (and the dialog that links an idea).
     private Dictionary<Guid, WorkItem> _workItems = [];
+
+    // Whether the Mindmap Planner can generate the work items of the map.
+    private bool _plannerActive;
     private Mindmap? _map;
     private Guid? _selectedId;
     private bool _loading = true;
@@ -266,6 +278,7 @@
         {
             _maps = await MindmapData.GetAllAsync(RepositoryName);
             await LoadWorkItemsAsync();
+            _plannerActive = Assistant.IsConfigured && (await InternalAgents.GetAsync(InternalAgentKeys.MindmapPlanner)).IsEnabled;
             var map = id is { } mapId ? await MindmapData.GetAsync(RepositoryName, mapId) : null;
             if (id is not null && map is null)
             {
@@ -693,6 +706,20 @@
         }
         var parent = MindmapLayout.ProposedParent(_map, ideaId, type, _workItems);
         Navigate(WorkItemRoutes.NewPath(type, parent, mindmapId: _map.Id, ideaId: ideaId));
+    }
+
+    /// <summary>Opens the page where the Mindmap Planner proposes the map's work items. The agent reads the stored map, so the map is saved first.</summary>
+    private async Task GenerateWorkItemsAsync()
+    {
+        if (_map is null)
+        {
+            return;
+        }
+        if ((_dirty || IsNew || _editingId is not null) && !await SaveCoreAsync())
+        {
+            return;
+        }
+        Navigate(MindmapRoutes.GeneratePath(_map.Id));
     }
 
     private void ToggleDone(Guid id)
