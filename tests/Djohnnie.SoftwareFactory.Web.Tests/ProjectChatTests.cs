@@ -379,7 +379,7 @@ public class ProjectChatTests : BunitContext
         var cut = Render<Chat>();
 
         cut.WaitForAssertion(() => Assert.Contains("The DGHSF Agent is disabled", cut.Markup), TimeSpan.FromSeconds(5));
-        await SendAsync(cut, "Hello?");
+        await SendAsync(cut, "Hello?", whenReady: false);
         Assert.Empty(await Store.GetAllAsync(Repo, _cancellationToken));
     }
 
@@ -430,9 +430,18 @@ public class ProjectChatTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Two bugs are open.", cut.Markup), TimeSpan.FromSeconds(5));
     }
 
-    private static async Task SendAsync(IRenderedComponent<Chat> cut, string text)
+    /// <summary>
+    /// Types and sends a message. Unless <paramref name="whenReady"/> is false, it first waits until the page has loaded the
+    /// agent: the input is disabled, and Enter does nothing, until then.
+    /// </summary>
+    private static async Task SendAsync(IRenderedComponent<Chat> cut, string text, bool whenReady = true)
     {
-        var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Ask DGHSF Agent about this project").Find("input");
+        var field = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Ask DGHSF Agent about this project");
+        if (whenReady)
+        {
+            cut.WaitForAssertion(() => Assert.False(field.Find("input").HasAttribute("disabled")), TimeSpan.FromSeconds(5));
+        }
+        var input = field.Find("input");
         input.Input(text);
         await cut.InvokeAsync(() => input.KeyDown("Enter"));
     }
