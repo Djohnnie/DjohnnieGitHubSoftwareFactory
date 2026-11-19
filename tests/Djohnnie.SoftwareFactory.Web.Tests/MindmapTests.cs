@@ -120,6 +120,56 @@ public class MindmapTests : BunitContext
     }
 
     [Fact]
+    public void Layout_Arrange_BalancesTheSides_StacksEveryColumn_AndKeepsTheOrder()
+    {
+        var map = Mindmap.Create(Repo);
+        var root = map.Root!;
+        // Four branches, deliberately scattered: two with three details each, two without any.
+        var branches = Enumerable.Range(1, 4).Select(i => MindmapLayout.AddChild(map, root.Id, $"Branch {i}")).ToList();
+        foreach (var branch in branches.Take(2))
+        {
+            for (var i = 1; i <= 3; i++)
+            {
+                MindmapLayout.AddChild(map, branch.Id, $"{branch.Text} detail {i}");
+            }
+        }
+        MindmapLayout.Move(map, branches[2].Id, 333, -444);
+        var detailsBefore = map.ChildrenOf(branches[0].Id).OrderBy(n => n.Y).Select(n => n.Id).ToList();
+
+        Assert.True(MindmapLayout.Arrange(map));
+
+        Assert.Equal((0d, 0d), (root.X, root.Y));
+        Assert.Null(map.StructureProblem());
+
+        // Every level gets its own column, growing away from the centre, and both sides have ideas.
+        foreach (var node in map.Nodes.Where(n => n.ParentId is not null))
+        {
+            var parent = map.Find(node.ParentId!.Value)!;
+            Assert.True(Math.Sign(node.X) != 0 && (parent.ParentId is null || Math.Sign(node.X) == Math.Sign(parent.X)));
+            Assert.True(Math.Abs(node.X) > Math.Abs(parent.X));
+        }
+        Assert.Contains(branches, b => b.X > 0);
+        Assert.Contains(branches, b => b.X < 0);
+
+        // The ideas in one column don't overlap, and an idea is centred next to the ideas below it.
+        foreach (var column in map.Nodes.GroupBy(n => n.X))
+        {
+            var ys = column.Select(n => n.Y).Order().ToList();
+            Assert.All(ys.Zip(ys.Skip(1)), pair => Assert.True(pair.Second - pair.First >= 48, $"Ideas at x={column.Key} are too close."));
+        }
+        foreach (var branch in branches.Take(2))
+        {
+            Assert.Equal(map.ChildrenOf(branch.Id).Average(n => n.Y), branch.Y, 1);
+        }
+
+        // The ideas below an idea keep their order from top to bottom.
+        Assert.Equal(detailsBefore, map.ChildrenOf(branches[0].Id).OrderBy(n => n.Y).Select(n => n.Id));
+
+        // Arranging again changes nothing.
+        Assert.False(MindmapLayout.Arrange(map));
+    }
+
+    [Fact]
     public void Layout_Remove_RemovesTheIdeaWithEverythingBelowIt_ButNeverTheCentralIdea()
     {
         var map = Mindmap.Create(Repo);

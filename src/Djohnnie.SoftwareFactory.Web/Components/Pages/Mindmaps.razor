@@ -36,6 +36,13 @@
             }
             Save mindmap
         </MudButton>
+        @if (_map is not null)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="Arrange" Disabled="_saving || _map.Nodes.Count < 2"
+                       StartIcon="@Icons.Material.Filled.AutoFixHigh" title="Arrange all ideas neatly around the central idea">
+                Auto-arrange
+            </MudButton>
+        }
         @if (_map is not null && !IsNew)
         {
             <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving || !_dirty" StartIcon="@Icons.Material.Filled.Undo">
@@ -746,6 +753,20 @@
         MindmapLayout.Remove(_map, id);
         _selectedId = parentId;
         _dirty = true;
+    }
+
+    /// <summary>Arranges all ideas tidily (see <see cref="MindmapLayout.Arrange"/>) and brings the central idea back into view.</summary>
+    private void Arrange()
+    {
+        if (_map is null)
+        {
+            return;
+        }
+        if (MindmapLayout.Arrange(_map))
+        {
+            _dirty = true;
+        }
+        _recenter = true;
     }
 
     private async Task CenterAsync()
