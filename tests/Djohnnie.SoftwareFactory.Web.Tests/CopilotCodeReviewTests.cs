@@ -136,15 +136,15 @@ public class CopilotCodeReviewTests : BunitContext
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Navigation_LinksTheCodeReviewPageJustBeforeModels(bool vertical)
+    public void Navigation_LinksTheCodeReviewPageRightAfterActionsAndBeforeBackgroundTasks(bool vertical)
     {
         var cut = Render<AppNavigation>(p => p.Add(n => n.HasRepository, true).Add(n => n.Vertical, vertical));
 
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
 
-        Assert.Equal(links.IndexOf("/models") - 1, links.IndexOf("/copilot-code-review"));
-        Assert.Equal(links.Count - 4, links.IndexOf("/internal-agents"));
-        Assert.Equal(links.Count - 3, links.IndexOf("/internal-models"));
+        Assert.Equal(links.IndexOf("/actions") + 1, links.IndexOf("/copilot-code-review"));
+        Assert.Equal(links.Count - 4, links.IndexOf("/copilot-code-review"));
+        Assert.Equal(links.Count - 3, links.IndexOf("/background-tasks"));
         Assert.Equal(links.Count - 2, links.IndexOf("/sync-log"));
         Assert.Equal(links.Count - 1, links.IndexOf("https://github.com/Djohnnie/DjohnnieGitHubSoftwareFactory"));
     }

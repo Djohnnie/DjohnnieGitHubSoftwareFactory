@@ -178,13 +178,14 @@ public class ActionsPageTests : BunitContext
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Navigation_LinksTheActionsPageRightAfterTheOverviewMindmapsWorkItemMapAndKnowledgeBase(bool vertical)
+    public void Navigation_LinksTheActionsPageRightAfterTheInternalModelsAndBeforeCodeReview(bool vertical)
     {
         var cut = Render<AppNavigation>(p => p.Add(n => n.HasRepository, true).Add(n => n.Vertical, vertical));
 
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
 
-        Assert.Equal(["/", "/chat", "/mindmaps", "/work-item-map", "/knowledge-base", "/actions"], links.Take(6));
+        Assert.Equal(links.IndexOf("/internal-models") + 1, links.IndexOf("/actions"));
+        Assert.Equal(links.IndexOf("/actions") + 1, links.IndexOf("/copilot-code-review"));
     }
 
     [Theory]
