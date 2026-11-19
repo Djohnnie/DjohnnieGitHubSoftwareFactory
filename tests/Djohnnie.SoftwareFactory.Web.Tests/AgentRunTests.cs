@@ -360,7 +360,7 @@ public class AgentRunTests
         Assert.Contains("has conflicts in:\n\n- `src/App.cs`\n- `src/Deleted.cs`\n", worker.Agent.Request!.Prompt);
         Assert.Contains("left merge conflicts with main in src/App.cs, so nothing was pushed", (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!.Error);
         Assert.DoesNotContain("push", string.Join(" ", worker.Git.Commands));
-        Assert.Empty(worker.GitHub.Posted.Where(r => r.Path.Contains("/comments")));
+        Assert.DoesNotContain(worker.GitHub.Posted, r => r.Path.Contains("/comments"));
     }
 
     [Fact]
