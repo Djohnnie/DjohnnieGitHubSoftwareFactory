@@ -553,6 +553,9 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>The repositories (owner/name) GitHub no longer knows; every other one exists.</summary>
         public HashSet<string> DeletedRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>The repositories (owner/name) archived on GitHub (read-only there).</summary>
+        public HashSet<string> GitHubArchivedRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>When set, every request that reads a repository is refused like this.</summary>
         public (HttpStatusCode Status, string Message)? RepositoryReadFailure { get; set; }
 
@@ -628,7 +631,7 @@ public partial class WorkItemServiceTests : IDisposable
                     : Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
                     {
                         id = 1, name = repository.Groups["name"].Value, full_name = fullName, owner = new { login = repository.Groups["owner"].Value },
-                        html_url = $"https://github.com/{fullName}", @private = false, fork = false, archived = false, default_branch = "main"
+                        html_url = $"https://github.com/{fullName}", @private = false, fork = false, archived = GitHubArchivedRepositories.Contains(fullName), default_branch = "main"
                     }));
             }
             if (method == "GET" && path == "/repos/owner/repo/actions/runs")

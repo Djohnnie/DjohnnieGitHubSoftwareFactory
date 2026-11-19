@@ -79,6 +79,26 @@ public partial class WorkItemServiceTests
     }
 
     [Fact]
+    public async Task Sync_IgnoresARepositoryArchivedOnGitHub_WithoutArchivingOrLoggingIt()
+    {
+        var epic = await AcceptAsync(WorkItemType.Epic, "Epic");
+        await Repositories.SetFavoriteAsync(Repo, true, _cancellationToken);
+        _gitHub.IssuesOnGitHub[42] = new("Renamed", $"About Epic.\n\n{WorkItemWorkflow.Marker(epic)}", "open");
+        _gitHub.GitHubArchivedRepositories.Add(Repo);
+        _gitHub.Requests.Clear();
+
+        var result = await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Equal((1, 0, 0), (result.Repositories, result.Items, result.Changed));
+        Assert.Empty(result.Failures);
+        Assert.Equal("Epic", (await _service.GetAsync(Repo, epic.Id, _cancellationToken))!.Title);
+        Assert.All(_gitHub.Requests, r => Assert.Equal("/repos/owner/repo", r.Path));
+        var stored = (await Repositories.FindAsync(Repo, _cancellationToken))!;
+        Assert.Equal((false, true), (stored.IsArchived, stored.IsFavorite));
+        Assert.DoesNotContain(await SyncLogAsync(), e => e.RepositoryFullName == Repo);
+    }
+
+    [Fact]
     public async Task Sync_WhenARepositoryCannotBeChecked_KeepsItAndStillSyncsItsWorkItems()
     {
         var epic = await AcceptAsync(WorkItemType.Epic, "Epic");

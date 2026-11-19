@@ -4,6 +4,7 @@ using System.Net;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.Repositories;
 using Djohnnie.SoftwareFactory.Contracts.SyncLog;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
@@ -15,7 +16,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
 /// <summary>
 /// Checks that every known repository still exists on GitHub (archiving the ones that don't), then refreshes every accepted
-/// work item of the others from its GitHub issue; nothing is sent to GitHub.
+/// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. Nothing is sent to GitHub.
 /// What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
 /// </summary>
 public sealed class WorkItemSyncService(
@@ -179,8 +180,9 @@ public sealed class WorkItemSyncService(
     /// (e.g. once the sync token has access to it again) is restored. GitHub answers 404 both for a deleted repository and
     /// for one the sync token can't see, so the token needs access to every repository DGHSF works with.
     /// A repository that couldn't be checked keeps its state and is reported in <paramref name="failures"/>.
+    /// One archived on GitHub (read-only there) is ignored: it isn't synced and nothing is logged about it.
     /// </summary>
-    /// <returns>The repositories that are (still) on GitHub, whose work items are synced.</returns>
+    /// <returns>The repositories that are (still) on GitHub and not archived there, whose work items are synced.</returns>
     /// <exception cref="GitHubApiException">GitHub refused the token or the rate limit was reached; the run is logged as stopped.</exception>
     private async Task<List<RepositorySummary>> CheckRepositoriesAsync(Run run, IReadOnlyList<RepositorySummary> known, List<WorkItemSyncFailure> failures,
         CancellationToken cancellationToken)
@@ -190,7 +192,8 @@ public sealed class WorkItemSyncService(
         {
             try
             {
-                var exists = await WithRetriesAsync(() => ExistsOnGitHubAsync(repository.FullName, cancellationToken), cancellationToken);
+                var onGitHubRepository = await WithRetriesAsync(() => FindOnGitHubAsync(repository.FullName, cancellationToken), cancellationToken);
+                var exists = onGitHubRepository is not null;
                 if (exists == repository.IsArchived)
                 {
                     await WithRetriesAsync(() => repositories.SetArchivedAsync(repository.FullName, !exists, cancellationToken), cancellationToken);
@@ -210,7 +213,8 @@ public sealed class WorkItemSyncService(
                 }
 
                 // Last, so a repository whose new state couldn't be saved is handled below like one that couldn't be checked.
-                if (exists)
+                // One archived on GitHub is read-only there, so its work items are silently left alone.
+                if (onGitHubRepository is { Archived: false })
                 {
                     onGitHub.Add(repository);
                 }
@@ -238,17 +242,19 @@ public sealed class WorkItemSyncService(
         return onGitHub;
     }
 
-    /// <summary>Whether GitHub knows the repository; a renamed one still exists, since GitHub redirects to its new name.</summary>
-    private async Task<bool> ExistsOnGitHubAsync(string repositoryFullName, CancellationToken cancellationToken)
+    /// <summary>
+    /// The repository on GitHub, or <c>null</c> when GitHub doesn't know it; a renamed one still exists, since GitHub
+    /// redirects to its new name.
+    /// </summary>
+    private async Task<GitHubRepository?> FindOnGitHubAsync(string repositoryFullName, CancellationToken cancellationToken)
     {
         try
         {
-            await gitHub.GetRepositoryAsync(repositoryFullName, cancellationToken);
-            return true;
+            return await gitHub.GetRepositoryAsync(repositoryFullName, cancellationToken);
         }
         catch (GitHubApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            return false;
+            return null;
         }
     }
 
