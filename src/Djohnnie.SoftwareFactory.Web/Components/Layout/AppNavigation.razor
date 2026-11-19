@@ -8,13 +8,15 @@
         {
             <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Dashboard">Overview</MudButton>
             <MudButton Href="@ChatRoutes.Path" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Forum">Chat</MudButton>
+
+            <MudDivider Class="my-1" />
+
             <MudButton Href="/mindmaps" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Hub">Mindmaps</MudButton>
             <MudButton Href="/work-item-map" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.BubbleChart">Work item map</MudButton>
             <MudButton Href="@KnowledgeBaseRoutes.Path" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.LocalLibrary">Knowledge base</MudButton>
 
             <MudDivider Class="my-1" />
 
-            <MudButton Href="/actions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PlayCircle">Actions</MudButton>
             <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                        StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
             <MudButton Href="/skills" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.AutoFixHigh">Skills</MudButton>
@@ -30,14 +32,27 @@
 
             <MudDivider Class="my-1" />
 
-            <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
-            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Memory">GitHub Copilot Models</MudButton>
-            <MudButton Href="/background-tasks" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PendingActions">Background tasks</MudButton>
+            <MudButton Href="/models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.Cloud">GitHub Copilot Models</MudButton>
         }
         <MudButton Href="/internal-agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.Psychology">Internal agents</MudButton>
         <MudButton Href="/internal-models" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.Memory">Internal models</MudButton>
+
+        @if (HasRepository)
+        {
+            <MudDivider Class="my-1" />
+
+            <MudButton Href="/actions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PlayCircle">Actions</MudButton>
+            <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
+        }
+
+        <MudDivider Class="my-1" />
+
+        @if (HasRepository)
+        {
+            <MudButton Href="/background-tasks" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PendingActions">Background tasks</MudButton>
+        }
         <MudButton Href="/sync-log" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
                    StartIcon="@Icons.Material.Filled.ManageHistory">Sync log</MudButton>
 
@@ -54,13 +69,15 @@ else
         {
             @IconLink("/", Icons.Material.Filled.Dashboard, "Overview")
             @IconLink(ChatRoutes.Path, Icons.Material.Filled.Forum, "Chat")
+
+            <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
+
             @IconLink("/mindmaps", Icons.Material.Filled.Hub, "Mindmaps")
             @IconLink("/work-item-map", Icons.Material.Filled.BubbleChart, "Work item map")
             @IconLink(KnowledgeBaseRoutes.Path, Icons.Material.Filled.LocalLibrary, "Knowledge base")
 
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 
-            @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
             @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
             @IconLink("/skills", Icons.Material.Filled.AutoFixHigh, "Skills")
             @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
@@ -74,12 +91,25 @@ else
 
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 
-            @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
-            @IconLink("/models", Icons.Material.Filled.Memory, "GitHub Copilot Models")
-            @IconLink("/background-tasks", Icons.Material.Filled.PendingActions, "Background tasks")
+            @IconLink("/models", Icons.Material.Filled.Cloud, "GitHub Copilot Models")
         }
         @IconLink("/internal-agents", Icons.Material.Filled.Psychology, "Internal agents")
         @IconLink("/internal-models", Icons.Material.Filled.Memory, "Internal models")
+
+        @if (HasRepository)
+        {
+            <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
+
+            @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
+            @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
+        }
+
+        <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
+
+        @if (HasRepository)
+        {
+            @IconLink("/background-tasks", Icons.Material.Filled.PendingActions, "Background tasks")
+        }
         @IconLink("/sync-log", Icons.Material.Filled.ManageHistory, "Sync log")
 
         <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
