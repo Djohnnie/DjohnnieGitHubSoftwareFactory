@@ -8,47 +8,71 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
 {
     public async Task<AgentRun> CreateAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, CancellationToken cancellationToken = default)
     {
-        return await AddAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, run => { }, cancellationToken);
+        return await StartTaskAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, AgentRunKind.Implement, null, null, null, cancellationToken);
     }
 
     public async Task<AgentRun> CreateRevisionAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, string branch,
         int pullRequestNumber, string pullRequestUrl, CancellationToken cancellationToken = default)
     {
-        return await AddAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, run =>
-        {
-            run.Kind = AgentRunKind.Revise;
-            run.Branch = Truncate(branch, 250);
-            run.PullRequestNumber = pullRequestNumber;
-            run.PullRequestUrl = Truncate(pullRequestUrl, 500);
-        }, cancellationToken);
+        return await StartTaskAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, AgentRunKind.Revise, Truncate(branch, 250), pullRequestNumber,
+            Truncate(pullRequestUrl, 500), cancellationToken);
     }
 
-    private async Task<AgentRun> AddAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, Action<Entities.AgentRun> configure,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// Adds the work item's task, or when it already has one, reopens it: every run on the item (a retry, a fresh start or a
+    /// revision on its pull request's feedback) is a run of that one task, which gets <paramref name="maxAttempts"/> more runs.
+    /// </summary>
+    private async Task<AgentRun> StartTaskAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, AgentRunKind kind,
+        string? branch, int? pullRequestNumber, string? pullRequestUrl, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var normalized = Entities.Repository.Normalize(repositoryFullName);
+        var model = Truncate(requestedModel, 100);
+        var budget = Math.Max(1, maxAttempts);
         if (await db.AgentRuns.AnyAsync(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized
                 && r.Status != AgentRunStatus.Succeeded && r.Status != AgentRunStatus.Failed && r.Status != AgentRunStatus.Cancelled, cancellationToken))
         {
-            throw new DomainRuleException("The DGHSF agent worker is already working on this item. Wait for that run to end or cancel it.");
+            throw AlreadyWorking();
         }
 
-        var entity = new Entities.AgentRun
+        var existing = await db.AgentRuns
+            .Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized)
+            .OrderByDescending(r => r.SysId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is null)
         {
-            Id = Guid.NewGuid(),
-            WorkItemId = workItemId,
-            RepositoryFullName = normalized,
-            Status = AgentRunStatus.Pending,
-            MaxAttempts = Math.Max(1, maxAttempts),
-            RequestedModel = Truncate(requestedModel, 100),
-            UsageComplete = true,
-            CreatedAt = timeProvider.GetUtcNow()
-        };
-        configure(entity);
-        db.AgentRuns.Add(entity);
+            existing = new Entities.AgentRun
+            {
+                Id = Guid.NewGuid(),
+                WorkItemId = workItemId,
+                RepositoryFullName = normalized,
+                UsageComplete = true,
+                CreatedAt = timeProvider.GetUtcNow()
+            };
+            db.AgentRuns.Add(existing);
+        }
+
+        // A task that ran before keeps its runs, totals and the time it started; it gets maxAttempts more runs. A fresh
+        // start keeps the pull request the task opened before until it opens a new one, so that one can still be revised
+        // when the start fails.
+        existing.Status = AgentRunStatus.Pending;
+        existing.Kind = kind;
+        existing.MaxAttempts = existing.Attempts + budget;
+        existing.RequestedModel = model;
+        existing.Branch = branch ?? existing.Branch;
+        existing.PullRequestNumber = pullRequestNumber ?? existing.PullRequestNumber;
+        existing.PullRequestUrl = pullRequestUrl ?? existing.PullRequestUrl;
+        existing.Error = null;
+        existing.QueuedAt = null;
+        existing.LeaseUntil = null;
+        existing.CompletedAt = null;
         await db.SaveChangesAsync(cancellationToken);
-        return entity.ToContract();
+        return existing.ToContract();
+    }
+
+    private static DomainRuleException AlreadyWorking()
+    {
+        return new DomainRuleException("The DGHSF agent worker is already working on this item. Wait for that run to end or cancel it.");
     }
 
     public async Task<IReadOnlyList<Guid>> ClaimDueAsync(int max, CancellationToken cancellationToken = default)
@@ -148,7 +172,12 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             Id = Guid.NewGuid(),
             AgentRunId = id,
             Attempt = entity.Attempts,
+            Kind = entity.Kind,
             Status = AgentRunStatus.Running,
+            // A revision works on its pull request from the start; a run that implements the item opens its own.
+            Branch = entity.Kind == AgentRunKind.Revise ? entity.Branch : null,
+            PullRequestNumber = entity.Kind == AgentRunKind.Revise ? entity.PullRequestNumber : null,
+            PullRequestUrl = entity.Kind == AgentRunKind.Revise ? entity.PullRequestUrl : null,
             UsageComplete = true,
             StartedAt = now
         });
@@ -359,7 +388,9 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var normalized = Entities.Repository.Normalize(repositoryFullName);
         var run = await db.AgentRuns.AsNoTracking()
-            .Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized && r.Status != AgentRunStatus.Cancelled)
+            // A cancelled follow-up run leaves the pull request the task opened, which is still being worked on.
+            .Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized
+                && (r.Status != AgentRunStatus.Cancelled || r.PullRequestNumber != null))
             .OrderByDescending(r => r.SysId)
             .FirstOrDefaultAsync(cancellationToken);
         return run?.ToContract();

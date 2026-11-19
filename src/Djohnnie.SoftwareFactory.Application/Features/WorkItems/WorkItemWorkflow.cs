@@ -107,7 +107,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
 
     /// <summary>
     /// Starts another run of the DGHSF agent worker on an item it already worked on, e.g. after a failed run. The new run
-    /// branches from the base branch again and opens its own pull request.
+    /// branches from the base branch again and opens its own pull request; it is a run of the item's task.
     /// </summary>
     public async Task<AgentRun> StartWorkerRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
@@ -117,13 +117,14 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
 
     /// <summary>
     /// Starts a revision run of the DGHSF agent worker on the newest open pull request it opened for the item: it addresses
-    /// the feedback written on it since the agent's last run there and pushes to the same branch.
+    /// the feedback written on it since the agent's last run there and pushes to the same branch. The revision is a run of
+    /// the item's task, next to the run that opened the pull request.
     /// </summary>
     public async Task<AgentRun> StartRevisionRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var item = await FindWorkerItemAsync(repositoryFullName, id, cancellationToken);
         var opened = (await agentRuns.GetForWorkItemAsync(repositoryFullName, id, cancellationToken))
-            .FirstOrDefault(r => r is { Kind: AgentRunKind.Implement, Status: AgentRunStatus.Succeeded, PullRequestNumber: not null })
+            .FirstOrDefault(r => r.PullRequestNumber is not null)
             ?? throw new DomainRuleException("The DGHSF agent worker hasn't opened a pull request for this item yet.");
         var number = opened.PullRequestNumber!.Value;
 

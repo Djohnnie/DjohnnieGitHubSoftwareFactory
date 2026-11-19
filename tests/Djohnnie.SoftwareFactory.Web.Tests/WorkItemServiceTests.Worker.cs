@@ -103,9 +103,10 @@ public partial class WorkItemServiceTests
         await SetRunAsync(first.Id, AgentRunStatus.Failed);
         Assert.Equal(CopilotProgress.Stopped, (await RefreshWorkerTaskAsync(task)).Progress);
 
+        // Another run on the item is a run of the same task.
         var second = await runs.StartRunAsync(Repo, task.Id, _cancellationToken);
-        Assert.Equal(AgentRunStatus.Pending, second.Status);
-        Assert.Equal([second.Id, first.Id], (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken)).Select(r => r.Id));
+        Assert.Equal((first.Id, AgentRunStatus.Pending), (second.Id, second.Status));
+        Assert.Equal([first.Id], (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken)).Select(r => r.Id));
         Assert.Equal(CopilotProgress.Queued, (await RefreshWorkerTaskAsync(task)).Progress);
     }
 
@@ -123,8 +124,13 @@ public partial class WorkItemServiceTests
         var assigned = await _service.AssignAgentAsync(Repo, task.Id, _cancellationToken);
         Assert.Null(assigned.AssignmentError);
         Assert.Equal(WorkItemStatus.InProgress, assigned.WorkItem.Status);
-        Assert.Equal(2, (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken)).Count);
+        Assert.Equal((run.Id, AgentRunStatus.Pending), Pick(Assert.Single(await runs.GetRunsAsync(Repo, task.Id, _cancellationToken))));
         Assert.DoesNotContain(_gitHub.Requests, r => r.Path.EndsWith("/assignees"));
+
+        static (Guid, AgentRunStatus) Pick(AgentRun reopened)
+        {
+            return (reopened.Id, reopened.Status);
+        }
     }
 
     /// <summary>A task for the worker whose first run opened pull request #7, refreshed so the item follows it.</summary>
@@ -150,7 +156,8 @@ public partial class WorkItemServiceTests
         Assert.Equal((true, (string?)null), (result.AgentRunStarted, result.Warning));
         var posted = Assert.Single(_gitHub.Requests, r => r is { Method: "POST", Path: "/repos/owner/repo/issues/7/comments" });
         Assert.Equal("Please add tests.", JsonDocument.Parse(posted.Body!).RootElement.GetProperty("body").GetString());
-        var revision = (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken))[0];
+        // The revision is a run of the task that opened the pull request, not a task of its own.
+        var revision = Assert.Single(await runs.GetRunsAsync(Repo, task.Id, _cancellationToken));
         Assert.Equal((AgentRunKind.Revise, AgentRunStatus.Pending, 7, "dghsf/42-task-1a2b3c4d", "claude-sonnet-4.5"),
             (revision.Kind, revision.Status, revision.PullRequestNumber, revision.Branch, revision.RequestedModel));
 

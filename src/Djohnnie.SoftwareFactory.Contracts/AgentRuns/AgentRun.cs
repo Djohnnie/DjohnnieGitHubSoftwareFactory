@@ -1,10 +1,11 @@
 namespace Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 
 /// <summary>
-/// One task of the DGHSF agent worker on a user story, bug or task: the worker clones the repository, lets the Copilot SDK
-/// agent implement the item on a new branch, pushes it and opens a pull request that closes the item's issue. Every time the
-/// worker starts the task it adds an <see cref="AgentRunAttempt"/> (a run), so retries are runs of the same task; the task
-/// keeps the final status and outcome and the totals of its runs. The SQL row is the source of truth; the Service Bus queue
+/// The task of the DGHSF agent worker on a user story, bug or task: the worker clones the repository, lets the Copilot SDK
+/// agent implement the item on a new branch, pushes it and opens a pull request that closes the item's issue. An item has
+/// one task: every time the worker starts it, it adds an <see cref="AgentRunAttempt"/> (a run), so retries, fresh starts and
+/// revisions on the pull request's feedback are all runs of the same task; the task keeps the latest status and outcome and
+/// the totals of its runs. The SQL row is the source of truth; the Service Bus queue
 /// only carries its id.
 /// </summary>
 public sealed record AgentRun
@@ -24,8 +25,8 @@ public sealed record AgentRun
     public AgentRunStatus Status { get; init; }
 
     /// <summary>
-    /// Whether the task opens a pull request or revises one; a revision has its <see cref="Branch"/> and
-    /// <see cref="PullRequestNumber"/> from the start.
+    /// What the task's latest run does: open a pull request or revise one; a revision has its <see cref="Branch"/> and
+    /// <see cref="PullRequestNumber"/> from the start. Each run keeps its own <see cref="AgentRunAttempt.Kind"/>.
     /// </summary>
     public AgentRunKind Kind { get; init; }
 
@@ -110,6 +111,9 @@ public sealed record AgentRunAttempt
 
     /// <summary>The number of this run within its task, starting at 1.</summary>
     public int Attempt { get; init; }
+
+    /// <summary>Whether the run implemented the item or revised the pull request on its feedback.</summary>
+    public AgentRunKind Kind { get; init; }
 
     public AgentRunStatus Status { get; init; }
     public string? Models { get; init; }

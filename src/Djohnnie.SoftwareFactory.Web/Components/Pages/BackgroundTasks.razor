@@ -184,7 +184,7 @@ else if (_runs.Count == 0)
                     {
                         <span>, ended <TimeAgo At="taskCompleted" /></span>
                     }
-                    <span> · @task.Run.Attempts of @task.Run.MaxAttempts @(task.Run.MaxAttempts == 1 ? "run" : "runs")</span>
+                    <span> · @task.Run.Attempts @(task.Run.Attempts == 1 ? "run" : "runs")</span>
                     @if (task.Run.RequestedModel is { } requested)
                     {
                         <span> · asked for @requested</span>
@@ -209,6 +209,7 @@ else if (_runs.Count == 0)
                     <MudTable T="AgentRunAttempt" Items="task.Runs" Dense="true" Hover="true" Elevation="0" Class="mt-3" aria-label="Runs">
                         <HeaderContent>
                             <MudTh>Run</MudTh>
+                            <MudTh>Kind</MudTh>
                             <MudTh>Status</MudTh>
                             <MudTh>Started</MudTh>
                             <MudTh>Duration</MudTh>
@@ -218,6 +219,7 @@ else if (_runs.Count == 0)
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Run">@context.Attempt</MudTd>
+                            <MudTd DataLabel="Kind">@(context.Kind == AgentRunKind.Revise ? "Revision" : "Implementation")</MudTd>
                             <MudTd DataLabel="Status">@AgentStatusChip(context.Status)</MudTd>
                             <MudTd DataLabel="Started"><TimeAgo At="context.StartedAt" /></MudTd>
                             <MudTd DataLabel="Duration">@(context.Duration is { } duration ? AgentRunsPanel.FormatDuration(duration) : "–")</MudTd>

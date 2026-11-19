@@ -9,14 +9,15 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 public interface IAgentRunStore
 {
     /// <summary>
-    /// Adds a <see cref="AgentRunStatus.Pending"/> run for a work item; the dispatcher picks it up. Refuses when the item
-    /// already has a run that hasn't ended.
+    /// Starts a <see cref="AgentRunStatus.Pending"/> run for a work item; the dispatcher picks it up. The item has one task:
+    /// the first call adds it, later calls reopen it with <paramref name="maxAttempts"/> more runs, so every run on the item
+    /// is a child of the same task. Refuses when the item already has a run that hasn't ended.
     /// </summary>
     Task<AgentRun> CreateAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Adds a <see cref="AgentRunStatus.Pending"/> <see cref="AgentRunKind.Revise"/> run for the pull request on
-    /// <paramref name="branch"/>; refuses like <see cref="CreateAsync"/>.
+    /// Starts a <see cref="AgentRunStatus.Pending"/> <see cref="AgentRunKind.Revise"/> run for the pull request on
+    /// <paramref name="branch"/> as a run of the item's task, like <see cref="CreateAsync"/>, and refuses like it.
     /// </summary>
     Task<AgentRun> CreateRevisionAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, string branch,
         int pullRequestNumber, string pullRequestUrl, CancellationToken cancellationToken = default);
@@ -59,6 +60,8 @@ public interface IAgentRunStore
     /// <summary>The newest tasks of a repository, newest first, each with its work item and its runs (one per attempt, newest first).</summary>
     Task<List<AgentRunOverview>> GetForRepositoryAsync(string repositoryFullName, int max, CancellationToken cancellationToken = default);
 
-    /// <summary>The newest run of a work item that wasn't cancelled, or <c>null</c>.</summary>
+    /// <summary>
+    /// The newest task of a work item that wasn't cancelled, or was cancelled after it opened a pull request; otherwise <c>null</c>.
+    /// </summary>
     Task<AgentRun?> GetLatestAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default);
 }

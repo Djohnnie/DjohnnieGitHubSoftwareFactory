@@ -75,6 +75,7 @@ internal static class ContractMapping
                 Id = value.Id,
                 AgentRunId = value.AgentRunId,
                 Attempt = value.Attempt,
+                Kind = value.Kind,
                 Status = value.Status,
                 Models = value.Models,
                 Branch = value.Branch,

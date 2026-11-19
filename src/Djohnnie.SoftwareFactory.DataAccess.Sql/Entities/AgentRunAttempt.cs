@@ -5,8 +5,8 @@ namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>
 /// One run (attempt) of a DGHSF agent worker task; see <see cref="Contracts.AgentRuns.AgentRunAttempt"/>. A child of its
-/// <see cref="AgentRun"/>: the worker adds one each time it starts the task, so a retry is a new row next to the run that
-/// failed. Deleting the task deletes its runs.
+/// <see cref="AgentRun"/>: the worker adds one each time it starts the task, so a retry, a fresh start and a revision on
+/// the pull request's feedback are new rows next to the earlier runs. Deleting the task deletes its runs.
 /// </summary>
 public class AgentRunAttempt : Entity
 {
@@ -14,6 +14,9 @@ public class AgentRunAttempt : Entity
 
     /// <summary>The number of this run within its task, starting at 1.</summary>
     public int Attempt { get; set; }
+
+    /// <summary>Whether the run implemented the item or revised its pull request.</summary>
+    public AgentRunKind Kind { get; set; }
 
     public AgentRunStatus Status { get; set; }
 

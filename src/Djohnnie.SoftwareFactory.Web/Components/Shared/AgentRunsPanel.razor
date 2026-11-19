@@ -4,8 +4,9 @@
 @inject AgentRunService AgentRuns
 @inject ISnackbar Snackbar
 
-@* The DGHSF agent worker's runs of one work item, newest first, with what each one cost. A revision run continues the pull
-   request an earlier run opened, on feedback sent from the pull request's discussion. *@
+@* The DGHSF agent worker's task on one work item, with what it cost. Every run on the item (a retry, a fresh start, or a
+   revision that continues the pull request on feedback sent from its discussion) is a run of that task; the background
+   tasks page lists them. *@
 <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Agent worker runs">
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
         <MudText Typo="Typo.h6">Agent worker runs</MudText>
@@ -24,7 +25,7 @@
         @if (_runs.Count > 0)
         {
             <MudText Typo="Typo.body2" Class="mb-2" aria-label="Total cost">
-                @_runs.Count @(_runs.Count == 1 ? "run" : "runs") · @AiModel.FormatCredits(TotalCredits)@(_runs.Any(r => r.NanoAiu is not null && !r.UsageComplete) ? " (at least)" : null)
+                @RunCount @(RunCount == 1 ? "run" : "runs") · @AiModel.FormatCredits(TotalCredits)@(_runs.Any(r => r.NanoAiu is not null && !r.UsageComplete) ? " (at least)" : null)
             </MudText>
         }
         else
@@ -49,7 +50,7 @@
                         }
                         @if (run.Attempts > 1)
                         {
-                            @* Retries are runs of the same task; the background tasks page lists them. *@
+                            @* Retries and revisions are runs of the same task; the background tasks page lists them. *@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">· @run.Attempts runs</MudText>
                         }
                         @if (run.PullRequestNumber is { } number)
@@ -130,6 +131,15 @@
         }
     }
 
+    /// <summary>The runs of the item's task (and of older tasks), counting the run a task waits to start.</summary>
+    private int RunCount
+    {
+        get
+        {
+            return _runs?.Sum(r => r.Attempts + (r.Status is AgentRunStatus.Pending or AgentRunStatus.Queued ? 1 : 0)) ?? 0;
+        }
+    }
+
     /// <summary>
     /// The pull request the worker opened for the item (the newest), which a revision continues; whether it is still open is
     /// checked when the revision starts.
@@ -138,7 +148,7 @@
     {
         get
         {
-            return _runs?.FirstOrDefault(r => r is { Kind: AgentRunKind.Implement, Status: AgentRunStatus.Succeeded, PullRequestNumber: not null })?.PullRequestNumber;
+            return _runs?.FirstOrDefault(r => r.PullRequestNumber is not null)?.PullRequestNumber;
         }
     }
 

@@ -83,12 +83,14 @@ public class BackgroundTasksPageTests : BunitContext
             });
             db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
             {
-                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 2, Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 12_500_000_000,
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 2, Kind = Contracts.AgentRuns.AgentRunKind.Revise,
+                Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 12_500_000_000,
                 Models = "claude-sonnet-4.5", PullRequestNumber = 7, PullRequestUrl = "https://github.com/owner/repo/pull/7", UsageComplete = true,
                 StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-8)
             });
             await db.SaveChangesAsync(_cancellationToken);
         }
+        // Another run on the same item is a run of its task, not a task of its own.
         await runs.CreateAsync("owner/repo", task.Id, null, 2, _cancellationToken);
         await runs.CreateAsync("owner/other", Guid.NewGuid(), null, 2, _cancellationToken);
 
@@ -96,26 +98,23 @@ public class BackgroundTasksPageTests : BunitContext
         var cut = Render<BackgroundTasks>();
 
         cut.WaitForAssertion(() => Assert.Contains("Agent worker tasks", cut.Markup));
-        Assert.Contains("The latest 2 tasks", cut.Markup);
-        var tasks = cut.FindAll(".agent-task");
-        Assert.Equal(2, tasks.Count);
-        Assert.Contains("Waiting", tasks[0].QuerySelector(".run-toggle")!.TextContent);
-        Assert.Contains(tasks[0].QuerySelectorAll("button"), b => b.TextContent.Trim() == "Cancel");
-        Assert.Contains("No runs yet", tasks[0].TextContent);
+        var waitingTask = Assert.Single(cut.FindAll(".agent-task"));
 
-        // Collapsed to the final status, the work item and the totals; the runs are listed once it is expanded.
-        var finishedTask = tasks[1];
-        Assert.Contains("Succeeded", finishedTask.QuerySelector(".run-toggle")!.TextContent);
-        Assert.Contains("Add the endpoint", finishedTask.QuerySelector(".run-toggle")!.TextContent);
-        Assert.Contains("12.5 AI credits", finishedTask.TextContent);
-        Assert.Contains("#7", finishedTask.TextContent);
-        Assert.Equal("false", finishedTask.QuerySelector(".run-toggle")!.GetAttribute("aria-expanded"));
+        // Collapsed to the latest status, the work item and the totals; the runs are listed once it is expanded.
+        Assert.Contains("Waiting", waitingTask.QuerySelector(".run-toggle")!.TextContent);
+        Assert.Contains("Add the endpoint", waitingTask.QuerySelector(".run-toggle")!.TextContent);
+        Assert.Contains(waitingTask.QuerySelectorAll("button"), b => b.TextContent.Trim() == "Cancel");
+        Assert.Contains("12.5 AI credits", waitingTask.TextContent);
+        Assert.Contains("#7", waitingTask.TextContent);
+        Assert.Equal("false", waitingTask.QuerySelector(".run-toggle")!.GetAttribute("aria-expanded"));
 
-        cut.FindAll(".agent-task .run-toggle")[1].Click();
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(".agent-task .run-toggle")[1].GetAttribute("aria-expanded")));
+        cut.Find(".agent-task .run-toggle").Click();
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find(".agent-task .run-toggle").GetAttribute("aria-expanded")));
         var rows = cut.FindComponent<MudTable<Contracts.AgentRuns.AgentRunAttempt>>().FindAll("tbody tr");
         Assert.Equal(2, rows.Count);
-        // Newest run first.
+        // Newest run first, each with what it did.
+        Assert.Contains("Revision", rows[0].TextContent);
+        Assert.Contains("Implementation", rows[1].TextContent);
         Assert.Contains("Succeeded", rows[0].TextContent);
         Assert.Contains("12 min", rows[0].TextContent);
         Assert.Contains("#7", rows[0].TextContent);

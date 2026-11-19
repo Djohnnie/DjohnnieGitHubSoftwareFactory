@@ -57,7 +57,117 @@ public class AgentRunTests
         Assert.True(done.UsageComplete);
         Assert.NotNull(done.CompletedAt);
         Assert.False(await store.RenewLeaseAsync(run.Id, Lease, _cancellationToken));
-        Assert.Equal(AgentRunStatus.Pending, (await store.CreateAsync(Repo, workItem, null, 2, _cancellationToken)).Status);
+
+        // Another run on the item reopens its task with more attempts; it keeps the pull request until it opens a new one.
+        var again = await store.CreateAsync(Repo, workItem, null, 2, _cancellationToken);
+        Assert.Equal((run.Id, AgentRunStatus.Pending, 1, 3, 7, (DateTimeOffset?)null), (again.Id, again.Status, again.Attempts, again.MaxAttempts, again.PullRequestNumber, again.CompletedAt));
+    }
+
+    [Fact]
+    public async Task Migration_FoldsTheTasksOfAWorkItemIntoItsFirstTask_LeavingItemsWithATaskGoingOn()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync("20261119123437_AddRepositoryArchived");
+        Guid opened = Guid.NewGuid(), failedRevision = Guid.NewGuid(), revision = Guid.NewGuid(), busyFirst = Guid.NewGuid(), busy = Guid.NewGuid();
+        Guid item = Guid.NewGuid(), busyItem = Guid.NewGuid();
+        await using (var old = database.Factory.CreateDbContext())
+        {
+            // Inserted one by one, so SysId follows the order the tasks were added in.
+            foreach (var (id, workItem, status, kind, attempts, nanoAiu, feedbackUntil, summary) in new (Guid, Guid, string, string, int, long, string?, string?)[]
+            {
+                (opened, item, "Succeeded", "Implement", 2, 1_000_000_000, "2026-11-19T10:00:00+00:00", "Opened it."),
+                (failedRevision, item, "Failed", "Revise", 1, 500_000_000, null, null),
+                (revision, item, "Succeeded", "Revise", 1, 200_000_000, "2026-11-19T12:00:00+00:00", "Revised it."),
+                (busyFirst, busyItem, "Succeeded", "Implement", 1, 0, null, null),
+                (busy, busyItem, "Running", "Revise", 1, 0, null, null)
+            })
+            {
+                await old.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO [AgentRuns] ([Id], [WorkItemId], [RepositoryFullName], [Status], [Kind], [Attempts], [MaxAttempts], [NanoAiu], [UsageComplete],
+                        [InputTokens], [OutputTokens], [CacheReadTokens], [CacheWriteTokens], [PullRequestNumber], [Branch], [FeedbackUntil], [Summary], [Error],
+                        [CreatedAt], [CompletedAt])
+                    VALUES ({0}, {1}, 'owner/repo', {2}, {3}, {4}, 2, {5}, 1, 10, 5, 0, 0, 7, 'dghsf/42', CAST(NULLIF({6}, '') AS datetimeoffset), NULLIF({7}, ''),
+                        CASE WHEN {2} = 'Failed' THEN 'No new feedback.' END, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET());
+                    """, [id, workItem, status, kind, attempts, nanoAiu, feedbackUntil ?? string.Empty, summary ?? string.Empty],
+                    _cancellationToken);
+                for (var attempt = 1; attempt <= attempts; attempt++)
+                {
+                    await old.Database.ExecuteSqlRawAsync("""
+                        INSERT INTO [AgentRunAttempts] ([Id], [AgentRunId], [Attempt], [Status], [UsageComplete], [InputTokens], [OutputTokens], [CacheReadTokens],
+                            [CacheWriteTokens], [StartedAt])
+                        VALUES (NEWID(), {0}, {1}, {2}, 1, 0, 0, 0, 0, SYSDATETIMEOFFSET());
+                        """, [id, attempt, attempt < attempts ? "Failed" : status], _cancellationToken);
+                }
+            }
+            await old.Database.ExecuteSqlRawAsync("""
+                INSERT INTO [AgentRunModelUsages] ([Id], [AgentRunId], [Attempt], [Model], [NanoAiu], [Complete], [Requests], [PremiumRequests], [InputTokens],
+                    [OutputTokens], [CacheReadTokens], [CacheWriteTokens], [ReasoningTokens], [OccurredAt])
+                VALUES (NEWID(), {0}, 1, 'claude-sonnet-4.5', 200000000, 1, 1, 1, 10, 5, 0, 0, 0, SYSDATETIMEOFFSET());
+                """, [revision], _cancellationToken);
+        }
+
+        await using var db = database.Factory.CreateDbContext();
+        await db.Database.MigrateAsync(_cancellationToken);
+
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var task = Assert.Single(await store.GetForWorkItemAsync(Repo, item, _cancellationToken));
+        Assert.Equal((opened, AgentRunStatus.Succeeded, AgentRunKind.Revise, 4, 1.7m, 30L, "Revised it.", (string?)null),
+            (task.Id, task.Status, task.Kind, task.Attempts, task.AiCredits, task.InputTokens, task.Summary, task.Error));
+        Assert.Equal(DateTimeOffset.Parse("2026-11-19T12:00:00+00:00"), task.FeedbackUntil);
+        var overview = (await store.GetForRepositoryAsync(Repo, 10, _cancellationToken)).Single(t => t.Run.Id == opened);
+        Assert.Equal(
+            [(4, AgentRunKind.Revise), (3, AgentRunKind.Revise), (2, AgentRunKind.Implement), (1, AgentRunKind.Implement)],
+            overview.Runs.Select(r => (r.Attempt, r.Kind)));
+        var usage = await db.AgentRunModelUsages.SingleAsync(_cancellationToken);
+        Assert.Equal((opened, 4), (usage.AgentRunId, usage.Attempt));
+
+        // An item whose follow-up run is still going on keeps its tasks, so the worker's run isn't moved under it.
+        Assert.Equal([busy, busyFirst], (await store.GetForWorkItemAsync(Repo, busyItem, _cancellationToken)).Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task EveryRunOnAWorkItem_RetriesRevisionsAndFreshStarts_IsARunOfItsOneTask()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var run = await StartedAsync(store, maxAttempts: 2);
+        Assert.Equal(AgentRunStatus.Pending, await store.FailAsync(run.Id, "git clone failed (128).", null, retry: true, _cancellationToken));
+        await store.ClaimDueAsync(10, _cancellationToken);
+        await store.TryStartAsync(run.Id, Lease, _cancellationToken);
+        var opened = new AgentRunResult("dghsf/42-task-1a2b3c4d", 7, "https://github.com/owner/repo/pull/7", "Did it.", Usage);
+        Assert.True(await store.CompleteAsync(run.Id, opened, _cancellationToken));
+        var handled = (await store.GetAsync(run.Id, _cancellationToken))!.FeedbackUntil;
+
+        // A revision on the pull request's feedback is the task's third run, which works on the pull request from the start.
+        var revision = await store.CreateRevisionAsync(Repo, run.WorkItemId, "gpt-5", 1, "dghsf/42-task-1a2b3c4d", 7, "https://github.com/owner/repo/pull/7", _cancellationToken);
+        Assert.Equal((run.Id, AgentRunKind.Revise, AgentRunStatus.Pending, 3, "gpt-5"), (revision.Id, revision.Kind, revision.Status, revision.MaxAttempts, revision.RequestedModel));
+        await Assert.ThrowsAsync<DomainRuleException>(() => store.CreateRevisionAsync(Repo, run.WorkItemId, null, 1, "b", 7, "u", _cancellationToken));
+        await store.ClaimDueAsync(10, _cancellationToken);
+        Assert.Equal(3, (await store.TryStartAsync(run.Id, Lease, _cancellationToken))!.Attempts);
+        Assert.Equal(AgentRunStatus.Failed, await store.FailAsync(run.Id, "No new feedback.", null, retry: false, _cancellationToken));
+
+        // A failed revision keeps the pull request and how far its discussion was handled.
+        var failed = (await store.GetAsync(run.Id, _cancellationToken))!;
+        Assert.Equal((AgentRunStatus.Failed, 7, handled, "Did it."), (failed.Status, failed.PullRequestNumber, failed.FeedbackUntil, failed.Summary));
+        Assert.Equal(handled, PullRequestDiscussion.HandledUntil([failed], 7));
+
+        // A fresh start is a run of the same task too; a cancelled one leaves the task with its pull request.
+        var fresh = await store.CreateAsync(Repo, run.WorkItemId, null, 1, _cancellationToken);
+        Assert.Equal((run.Id, AgentRunKind.Implement, 7), (fresh.Id, fresh.Kind, fresh.PullRequestNumber));
+        await store.ClaimDueAsync(10, _cancellationToken);
+        await store.TryStartAsync(run.Id, Lease, _cancellationToken);
+        Assert.True(await store.CancelAsync(Repo, run.Id, _cancellationToken));
+        Assert.Equal(run.Id, (await store.GetLatestAsync(Repo, run.WorkItemId, _cancellationToken))?.Id);
+
+        var task = Assert.Single(await store.GetForRepositoryAsync(Repo, 10, _cancellationToken));
+        Assert.Equal(4, task.Run.Attempts);
+        Assert.Equal(
+            [
+                (4, AgentRunKind.Implement, AgentRunStatus.Cancelled, (int?)null),
+                (3, AgentRunKind.Revise, AgentRunStatus.Failed, 7),
+                (2, AgentRunKind.Implement, AgentRunStatus.Succeeded, 7),
+                (1, AgentRunKind.Implement, AgentRunStatus.Failed, null)
+            ],
+            task.Runs.Select(r => (r.Attempt, r.Kind, r.Status, r.PullRequestNumber)));
     }
 
     [Fact]
@@ -312,8 +422,10 @@ public class AgentRunTests
         // Only the first run opened a pull request.
         Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/pulls");
 
+        Assert.Equal(worker.Run.Id, revision.Id);
         var revised = (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!;
-        Assert.Equal((AgentRunKind.Revise, 7, "dghsf/42-add-the-endpoint-review", 2.5m), (revised.Kind, revised.PullRequestNumber, revised.Branch, revised.AiCredits));
+        // The task's cost adds up the run that opened the pull request and the revision.
+        Assert.Equal((AgentRunKind.Revise, 7, "dghsf/42-add-the-endpoint-review", 5m), (revised.Kind, revised.PullRequestNumber, revised.Branch, revised.AiCredits));
         Assert.True(revised.FeedbackUntil > now.AddMinutes(-1));
         Assert.Null(revised.Error);
     }
@@ -333,7 +445,8 @@ public class AgentRunTests
         Assert.Equal(calls, worker.Agent.Calls);
         var failed = (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!;
         Assert.Contains("no new feedback on pull request #7", failed.Error);
-        Assert.Null(failed.AiCredits);
+        var run = Assert.Single(await worker.Runs.GetForRepositoryAsync(Repo, 10, _cancellationToken)).Runs[0];
+        Assert.Equal((2, AgentRunKind.Revise, (decimal?)null), (run.Attempt, run.Kind, run.AiCredits));
     }
 
     [Fact]
@@ -398,21 +511,20 @@ public class AgentRunTests
     }
 
     [Fact]
-    public void HandledUntil_IsTheNewestSucceededTaskOnThePullRequest()
+    public void HandledUntil_IsTheLatestSuccessOnThePullRequest_AlsoWhileALaterRunOfItsTaskGoesOn()
     {
-        var current = Guid.NewGuid();
         var start = DateTimeOffset.UnixEpoch;
         AgentRun[] runs =
         [
             new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, CompletedAt = start.AddHours(1) },
-            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, FeedbackUntil = start.AddHours(3), CompletedAt = start.AddHours(4) },
             new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Failed, PullRequestNumber = 7, CompletedAt = start.AddHours(6) },
-            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 8, CompletedAt = start.AddHours(7) },
-            new() { Id = current, Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, CompletedAt = start.AddHours(8) }
+            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 8, CompletedAt = start.AddHours(7) }
         ];
+        AgentRun running = new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Running, PullRequestNumber = 7, FeedbackUntil = start.AddHours(3) };
 
-        Assert.Equal(start.AddHours(3), PullRequestDiscussion.HandledUntil(runs, current, 7));
-        Assert.Equal(DateTimeOffset.MinValue, PullRequestDiscussion.HandledUntil(runs, current, 9));
+        Assert.Equal(start.AddHours(1), PullRequestDiscussion.HandledUntil(runs, 7));
+        Assert.Equal(start.AddHours(3), PullRequestDiscussion.HandledUntil([.. runs, running], 7));
+        Assert.Equal(DateTimeOffset.MinValue, PullRequestDiscussion.HandledUntil(runs, 9));
     }
 
     [Fact]

@@ -24,6 +24,7 @@ internal static class AgentRunConfiguration
                 attempt.HasOne<AgentRun>().WithMany().HasForeignKey(a => a.AgentRunId).OnDelete(DeleteBehavior.Cascade);
                 attempt.HasIndex(a => new { a.AgentRunId, a.Attempt }).IsUnique();
                 attempt.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+                attempt.Property(a => a.Kind).HasConversion<string>().HasMaxLength(20);
                 attempt.Property(a => a.PremiumRequests).HasPrecision(18, 4);
             });
             modelBuilder.Entity<AgentRunModelUsage>(usage =>

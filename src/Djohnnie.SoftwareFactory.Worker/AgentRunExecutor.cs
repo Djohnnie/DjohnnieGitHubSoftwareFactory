@@ -191,7 +191,7 @@ public sealed class AgentRunExecutor(
 
         // Feedback written from now on is for the next revision, also when it arrives while this one runs.
         var until = timeProvider.GetUtcNow();
-        var since = PullRequestDiscussion.HandledUntil(await runs.GetForWorkItemAsync(run.RepositoryFullName, run.WorkItemId, cancellationToken), run.Id, number);
+        var since = PullRequestDiscussion.HandledUntil(await runs.GetForWorkItemAsync(run.RepositoryFullName, run.WorkItemId, cancellationToken), number);
         var discussion = await PullRequestDiscussion.LoadAsync(gitHub, run.RepositoryFullName, number, since, until, cancellationToken);
         if (discussion.Feedback.Count == 0)
         {

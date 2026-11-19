@@ -202,6 +202,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             return null;
         }
         var runs = await agentRuns.GetForWorkItemAsync(item.RepositoryFullName, item.Id, cancellationToken);
-        return runs.Any(r => r is { Kind: AgentRunKind.Implement, Status: AgentRunStatus.Succeeded } && r.PullRequestNumber == number) ? runs : null;
+        // A task keeps the pull request it opened, also while a later run on it is going on or after one failed.
+        return runs.Any(r => r.PullRequestNumber == number) ? runs : null;
     }
 }

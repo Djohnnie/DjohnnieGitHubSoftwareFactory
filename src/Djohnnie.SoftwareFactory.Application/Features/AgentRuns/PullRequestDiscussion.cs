@@ -97,13 +97,14 @@ public sealed record PullRequestDiscussion(IReadOnlyList<PullRequestDiscussionEn
     }
 
     /// <summary>
-    /// Until when the pull request's discussion was handled: by the newest task on it that succeeded (the one that opened it
-    /// or an earlier revision), leaving out <paramref name="current"/>.
+    /// Until when the pull request's discussion was handled: by the latest run on it that succeeded (the one that opened it
+    /// or an earlier revision). A task keeps that time while a later run of it is going on or after one failed; tasks from
+    /// before an item had one task only have it when they succeeded.
     /// </summary>
-    public static DateTimeOffset HandledUntil(IEnumerable<AgentRun> runs, Guid current, int pullRequestNumber)
+    public static DateTimeOffset HandledUntil(IEnumerable<AgentRun> runs, int pullRequestNumber)
     {
         return runs
-            .Where(r => r.Id != current && r.Status == AgentRunStatus.Succeeded && r.PullRequestNumber == pullRequestNumber)
+            .Where(r => r.PullRequestNumber == pullRequestNumber && (r.FeedbackUntil is not null || r.Status == AgentRunStatus.Succeeded))
             .Select(r => r.FeedbackUntil ?? r.CompletedAt ?? DateTimeOffset.MinValue)
             .DefaultIfEmpty(DateTimeOffset.MinValue)
             .Max();
