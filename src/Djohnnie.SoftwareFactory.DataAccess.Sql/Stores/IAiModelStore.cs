@@ -14,6 +14,12 @@ public interface IAiModelStore
     /// <summary>The agent worker sessions that were counted on a model, newest first, each with its work item.</summary>
     Task<PagedResult<AiModelUsage>> GetUsagePageAsync(AiModelUsageQuery query, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The agent worker sessions that were counted on any model. A session that used several models counts once, which
+    /// summing the running totals of the models would not.
+    /// </summary>
+    Task<int> CountUsageSessionsAsync(CancellationToken cancellationToken = default);
+
     Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default);
 
     Task SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken = default);

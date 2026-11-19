@@ -27,6 +27,12 @@ public sealed class AiModelService(ISender mediator)
         return (await mediator.Send(new GetModelUsageQuery(query), cancellationToken)).Dto;
     }
 
+    /// <summary>The DGHSF agent worker sessions that were counted on any model; one that used several models counts once.</summary>
+    public async Task<int> CountUsageSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetModelSessionCountQuery(new()), cancellationToken)).Dto;
+    }
+
     public async Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new SaveModelCommand(model), cancellationToken)).Dto;

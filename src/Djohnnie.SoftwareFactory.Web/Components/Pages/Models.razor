@@ -25,6 +25,10 @@
     </MudStack>
 </MudStack>
 
+<div aria-label="Usage">
+    <UsageTileGrid Tiles="UsageTiles" SingleRow="true" />
+</div>
+
 @if (_error is not null)
 {
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
@@ -221,6 +225,7 @@
     private readonly TableGroupDefinition<AiModel> _groupByProvider = new() { Selector = m => m.Provider ?? "Other" };
 
     private List<AiModel> _models = [];
+    private int _sessions;
     private bool _loading = true;
     private string? _error;
     private string? _search;
@@ -250,6 +255,7 @@
         try
         {
             _models = await ModelService.GetAllAsync();
+            _sessions = await ModelService.CountUsageSessionsAsync();
         }
         catch (Exception ex)
         {
@@ -258,6 +264,25 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    /// <summary>
+    /// What agent worker sessions spent on all models, whatever the filter. Sessions are counted once even when they used
+    /// several models; the other figures are the sums of the models' running totals.
+    /// </summary>
+    private List<UsageTile> UsageTiles
+    {
+        get
+        {
+            return
+            [
+                new("Sessions", _sessions.ToString("N0"), "usage-requests"),
+                new("Requests", _models.Sum(m => (long)m.Usage.Requests).ToString("N0"), "usage-credits"),
+                new("AI credits", AiModel.FormatCredits(_models.Sum(m => m.Usage.AiCredits)), "usage-total"),
+                new("Input tokens", _models.Sum(m => m.Usage.InputTokens).ToString("N0"), "usage-input"),
+                new("Output tokens", _models.Sum(m => m.Usage.OutputTokens).ToString("N0"), "usage-output")
+            ];
         }
     }
 

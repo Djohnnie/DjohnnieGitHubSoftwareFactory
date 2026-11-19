@@ -1,6 +1,6 @@
 @* Colored usage figures in two columns, or next to each other; one color per kind of figure. *@
 
-<div class="usage-grid @(SingleRow ? "usage-grid-row" : string.Empty)">
+<div class="usage-grid @(SingleRow ? "usage-grid-row" : string.Empty)" style="@(SingleRow ? $"--usage-columns: {Tiles.Count}" : null)">
     @foreach (var tile in Tiles)
     {
         <div class="usage-stat @tile.ColorClass @(tile.Wide ? "usage-wide" : string.Empty)">

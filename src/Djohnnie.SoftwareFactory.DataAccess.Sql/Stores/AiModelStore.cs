@@ -56,6 +56,16 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         return new(page.Select(x => x.Usage.ToContract(x.Run, items.GetValueOrDefault((x.Run.WorkItemId, x.Run.RepositoryFullName)))).ToList(), total);
     }
 
+    public async Task<int> CountUsageSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.AgentRunModelUsages.AsNoTracking()
+            .Where(u => u.AiModelId != null)
+            .Select(u => new { u.AgentRunId, u.Attempt })
+            .Distinct()
+            .CountAsync(cancellationToken);
+    }
+
     public async Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default)
     {
         model.Name = model.Name.Trim();

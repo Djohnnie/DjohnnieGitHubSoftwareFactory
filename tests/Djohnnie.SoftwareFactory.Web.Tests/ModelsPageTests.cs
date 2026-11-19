@@ -128,6 +128,46 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tiles_ShowTheTotalsOfAllModels_CountingASessionOnSeveralModelsOnce()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        var service = Services.GetRequiredService<AiModelService>();
+        var grok = await service.SaveAsync(new AiModel { Name = "Grok 4.7", ModelId = "grok-4.7", Provider = "xAI" }, ct);
+        var codex = await service.SaveAsync(new AiModel { Name = "GPT-5.3-Codex", ModelId = "gpt-5.3-codex", Provider = "OpenAI" }, ct);
+        await SeedSessionAsync(grok.Id, 1_250_000_000, ct);
+        await SeedSessionAsync(grok.Id, 250_000_000, ct);
+        await using (var db = _dbFactory.CreateDbContext())
+        {
+            // The first session also used the second model.
+            var first = await db.AgentRunModelUsages.OrderBy(u => u.OccurredAt).FirstAsync(ct);
+            db.AgentRunModelUsages.Add(new DataAccess.Sql.Entities.AgentRunModelUsage
+            {
+                Id = Guid.NewGuid(), AgentRunId = first.AgentRunId, AiModelId = codex.Id, Attempt = first.Attempt, Model = "gpt-5.3-codex",
+                NanoAiu = 500_000_000, Complete = true, Requests = 4, InputTokens = 1000, OutputTokens = 200, OccurredAt = DateTimeOffset.UtcNow
+            });
+            var model = await db.AiModels.SingleAsync(m => m.Id == codex.Id, ct);
+            model.UsageSessions++;
+            model.UsageNanoAiu += 500_000_000;
+            model.UsageRequests += 4;
+            model.UsageInputTokens += 1000;
+            model.UsageOutputTokens += 200;
+            await db.SaveChangesAsync(ct);
+        }
+
+        Render<MudPopoverProvider>();
+        var cut = Render<Models>();
+        cut.WaitForAssertion(() => Assert.Contains("grok-4.7", cut.Markup));
+
+        var tiles = cut.FindAll("[aria-label=Usage] .usage-stat")
+            .ToDictionary(t => t.QuerySelector(".usage-label")!.TextContent.Trim(), t => t.QuerySelector(".usage-value")!.TextContent.Trim());
+        Assert.Equal("2", tiles["Sessions"]);
+        Assert.Equal("12", tiles["Requests"]);
+        Assert.Equal("2 AI credits", tiles["AI credits"]);
+        Assert.Equal(3000.ToString("N0"), tiles["Input tokens"]);
+        Assert.Equal("600", tiles["Output tokens"]);
+    }
+
+    [Fact]
     public async Task ModelPage_ShowsTheRunningTotals_AndTheSessions_AndSavingKeepsThem()
     {
         var ct = Xunit.TestContext.Current.CancellationToken;

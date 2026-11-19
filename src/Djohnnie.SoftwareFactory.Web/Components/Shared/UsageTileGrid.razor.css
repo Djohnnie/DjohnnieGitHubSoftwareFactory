@@ -10,7 +10,8 @@
 }
 
 .usage-grid-row {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    /* One column per tile, set by the component. */
+    grid-template-columns: repeat(var(--usage-columns, 8), minmax(0, 1fr));
     margin-top: 0;
     margin-bottom: 16px;
 }
