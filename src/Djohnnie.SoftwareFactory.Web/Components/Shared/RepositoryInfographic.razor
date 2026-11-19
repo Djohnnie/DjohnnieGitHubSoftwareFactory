@@ -5,7 +5,7 @@
 <div class="infographic mb-6">
     <div class="infographic-stats">
         <MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
-            <MudIcon Icon="@Icons.Material.Filled.IntegrationInstructions" Color="Color.Primary" />
+            <MudIcon Icon="@Icons.Material.Filled.IntegrationInstructions" Class="infographic-stat-icon" />
             <div>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">Copilot instructions</MudText>
                 @if (_loading)
@@ -28,7 +28,7 @@
         </MudPaper>
 
         <MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
-            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" />
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="infographic-stat-icon" />
             @* Two counts side by side, split by a thin line; each part has the same label and number rows as the other boxes, so the box keeps its size. *@
             <div class="infographic-split">
                 <div class="infographic-part">

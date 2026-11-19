@@ -316,7 +316,7 @@ public class AgentRunTests
         var body = pullRequest.GetProperty("body").GetString()!;
         Assert.Contains("Added the endpoint and its tests.", body);
         Assert.Contains("Closes #42", body);
-        Assert.Contains("2.5 AI credits", body);
+        Assert.Contains("3 AI credits", body);
         Assert.False(Directory.Exists(worker.Folder));
     }
 
@@ -612,7 +612,7 @@ public class AgentRunTests
         var body = AgentRunPrompt.PullRequestBody(item, runId, null, Usage with { Complete = false }, "Stopped early.", "djohnnie");
         Assert.StartsWith("<sub>🤖 **DGHSF** on behalf of [djohnnie](https://github.com/djohnnie)</sub>\n\n> [!WARNING]\n> Stopped early.", body);
         Assert.Contains("_The agent didn't write a summary._", body);
-        Assert.Contains("2.5 AI credits (at least)", body);
+        Assert.Contains("3 AI credits (at least)", body);
     }
 
     [Fact]

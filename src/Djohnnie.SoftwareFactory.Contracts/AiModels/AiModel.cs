@@ -74,10 +74,16 @@ public sealed record AiModel
         return usd * CreditsPerUsd;
     }
 
-    /// <summary>Formats an amount of GitHub AI credits, e.g. "1,400 AI credits".</summary>
+    /// <summary>Formats an amount of GitHub AI credits, rounded to a whole number, e.g. "1,400 AI credits".</summary>
     public static string FormatCredits(decimal? credits)
     {
-        return credits is null ? "–" : $"{credits.Value.ToString("#,0.##", System.Globalization.CultureInfo.InvariantCulture)} AI credits";
+        return credits is null ? "–" : $"{FormatCreditsNumber(credits.Value)} AI credits";
+    }
+
+    /// <summary>Formats an amount of GitHub AI credits as a bare whole number, e.g. "1,400".</summary>
+    public static string FormatCreditsNumber(decimal credits)
+    {
+        return Math.Round(credits, 0, MidpointRounding.AwayFromZero).ToString("#,0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>Formats a euro amount, used for the Microsoft Foundry models DGHSF itself runs on.</summary>

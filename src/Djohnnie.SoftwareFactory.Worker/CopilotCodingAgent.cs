@@ -78,7 +78,7 @@ public sealed class CopilotCodingAgent(ILogger<CopilotCodingAgent> logger, Micro
                     case SessionLimitsExhaustedRequestedEvent limit:
                         // Nobody can raise the limit: refuse the model call, so the turn ends and the worker pushes what there is.
                         stoppedEarly = string.Create(CultureInfo.InvariantCulture,
-                            $"The agent reached the limit of {limit.Data.MaxAiCredits:#,0.##} AI credits per run ({limit.Data.UsedAiCredits:#,0.##} used) before it finished.");
+                            $"The agent reached the limit of {limit.Data.MaxAiCredits:#,0} AI credits per run ({limit.Data.UsedAiCredits:#,0} used) before it finished.");
                         _ = RefuseMoreCreditsAsync(session, limit.Data.RequestId);
                         break;
                     case SessionErrorEvent error:

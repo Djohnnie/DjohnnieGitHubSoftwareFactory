@@ -104,7 +104,7 @@ public class BackgroundTasksPageTests : BunitContext
         Assert.Contains("Waiting", waitingTask.QuerySelector(".run-toggle")!.TextContent);
         Assert.Contains("Add the endpoint", waitingTask.QuerySelector(".run-toggle")!.TextContent);
         Assert.Contains(waitingTask.QuerySelectorAll("button"), b => b.TextContent.Trim() == "Cancel");
-        Assert.Contains("12.5 AI credits", waitingTask.TextContent);
+        Assert.Contains("13 AI credits", waitingTask.TextContent);
         Assert.Contains("#7", waitingTask.TextContent);
         Assert.Equal("false", waitingTask.QuerySelector(".run-toggle")!.GetAttribute("aria-expanded"));
 

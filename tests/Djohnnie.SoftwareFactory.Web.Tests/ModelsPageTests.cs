@@ -121,9 +121,9 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
         cut.WaitForAssertion(() => Assert.Contains("grok-4.7", cut.Markup));
 
         var usage = cut.FindAll("td.model-usage").Select(td => td.TextContent.Trim()).ToList();
-        Assert.Contains(usage, text => text.Contains("1.5 AI credits") && text.Contains("2 sessions"));
+        Assert.Contains(usage, text => text.Contains("2 AI credits") && text.Contains("2 sessions"));
         Assert.Contains("–", usage);
-        Assert.Equal("1.5 AI credits", cut.Find(".models-usage-total").TextContent.Trim());
+        Assert.Equal("2 AI credits", cut.Find(".models-usage-total").TextContent.Trim());
         Assert.Contains(cut.FindAll("a"), a => a.GetAttribute("href") == $"/models/{used.Id}");
     }
 

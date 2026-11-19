@@ -262,9 +262,9 @@ h1:focus {
 /* Overview infographic */
 .infographic,
 .usage-infographic {
-    --infographic-existing-color: color-mix(in srgb, var(--mud-palette-text-secondary) 25%, var(--mud-palette-surface));
-    --infographic-accepted-color: color-mix(in srgb, var(--mud-palette-primary) 50%, var(--mud-palette-surface));
-    --infographic-finished-color: var(--mud-palette-primary-darken);
+    --infographic-existing-color: color-mix(in srgb, var(--mud-palette-warning) 40%, var(--mud-palette-surface));
+    --infographic-accepted-color: var(--mud-palette-info);
+    --infographic-finished-color: var(--mud-palette-success);
 }
 
 .infographic {
@@ -279,11 +279,46 @@ h1:focus {
     gap: 1rem;
 }
 
+/* Every stat box has its own accent color, cycling through the palette: a tinted background, a colored edge and a colored icon badge. */
 .infographic-stat {
+    --stat-accent: var(--mud-palette-primary);
     display: flex;
     align-items: center;
     gap: 1rem;
     padding: 1rem;
+    background-color: color-mix(in srgb, var(--stat-accent) 7%, var(--mud-palette-surface)) !important;
+    border-color: color-mix(in srgb, var(--stat-accent) 30%, var(--mud-palette-surface)) !important;
+    border-left: 4px solid var(--stat-accent) !important;
+}
+
+.infographic-stat:nth-child(5n + 2) {
+    --stat-accent: var(--mud-palette-tertiary);
+}
+
+.infographic-stat:nth-child(5n + 3) {
+    --stat-accent: var(--mud-palette-info);
+}
+
+.infographic-stat:nth-child(5n + 4) {
+    --stat-accent: var(--mud-palette-success);
+}
+
+.infographic-stat:nth-child(5n + 5) {
+    --stat-accent: var(--mud-palette-warning);
+}
+
+.infographic-stat-icon {
+    flex: none;
+    box-sizing: content-box;
+    padding: 0.5rem;
+    border-radius: 50%;
+    color: var(--stat-accent);
+    background-color: color-mix(in srgb, var(--stat-accent) 16%, var(--mud-palette-surface));
+}
+
+.infographic-stat .mud-typography-h6 {
+    color: color-mix(in srgb, var(--stat-accent) 70%, var(--mud-palette-text-primary));
+    font-weight: 600;
 }
 
 /* A box with two counts: equal halves split by a thin vertical line. */
@@ -394,6 +429,27 @@ h1:focus {
     flex-wrap: wrap;
     align-items: baseline;
     column-gap: 1rem;
+}
+
+/* A colored bar in front of every section title. */
+.usage-infographic-header::before {
+    content: "";
+    align-self: center;
+    width: 0.375rem;
+    height: 1.5rem;
+    margin-right: -0.5rem;
+    border-radius: 3px;
+    background: linear-gradient(180deg, var(--mud-palette-primary), var(--mud-palette-tertiary));
+}
+
+/* The chart and table panels get a colored top edge. */
+.infographic-work-items,
+.usage-infographic-panel {
+    border-top: 3px solid var(--mud-palette-tertiary) !important;
+}
+
+.infographic-table tbody tr:hover {
+    background-color: color-mix(in srgb, var(--mud-palette-tertiary) 6%, transparent);
 }
 
 .usage-infographic-stats {

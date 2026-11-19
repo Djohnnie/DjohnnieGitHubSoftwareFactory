@@ -54,7 +54,7 @@ public class ModelPricingScraperTests
     public void FormatCredits_ShowsAmountInAiCredits()
     {
         Assert.Equal("1,400 AI credits", AiModel.FormatCredits(1400m));
-        Assert.Equal("17.5 AI credits", AiModel.FormatCredits(17.5m));
+        Assert.Equal("18 AI credits", AiModel.FormatCredits(17.5m));
         Assert.Equal("0 AI credits", AiModel.FormatCredits(0m));
         Assert.Equal("–", AiModel.FormatCredits(null));
         Assert.Equal("175 AI credits in / 1,400 AI credits out per 1M tokens", AiModel.FormatCost(175m, 1400m));

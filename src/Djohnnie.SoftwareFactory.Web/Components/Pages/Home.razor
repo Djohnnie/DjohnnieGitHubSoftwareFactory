@@ -8,7 +8,7 @@
     <PageBreadcrumbs />
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-6">
-        <MudAvatar Size="Size.Large">
+        <MudAvatar Size="Size.Large" Color="Color.Primary">
             @if (Repository.IsRemovedFromGitHub || repo.Owner.AvatarUrl is null)
             {
                 <MudIcon Icon="@Icons.Material.Filled.Inventory2" />
@@ -30,27 +30,27 @@
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap">
         @if (Repository.IsRemovedFromGitHub)
         {
-            <MudChip Variant="Variant.Outlined" T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Inventory2">Removed from GitHub</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Inventory2">Removed from GitHub</MudChip>
         }
         else
         {
-            <MudChip Variant="Variant.Outlined" T="string" Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">@(repo.Private ? "Private" : "Public")</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="@(repo.Private ? Color.Warning : Color.Success)" Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">@(repo.Private ? "Private" : "Public")</MudChip>
         }
         @if (!string.IsNullOrEmpty(repo.Language))
         {
-            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Code">@repo.Language</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Tertiary" Icon="@Icons.Material.Filled.Code">@repo.Language</MudChip>
         }
         @if (!string.IsNullOrEmpty(repo.DefaultBranch))
         {
-            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.AccountTree">@repo.DefaultBranch</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Info" Icon="@Icons.Material.Filled.AccountTree">@repo.DefaultBranch</MudChip>
         }
         @if (repo.PushedAt is { } pushedAt)
         {
-            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Schedule">Last push @pushedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Secondary" Icon="@Icons.Material.Filled.Schedule">Last push @pushedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudChip>
         }
         @if (!Repository.IsRemovedFromGitHub)
         {
-            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Primary" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
         }
     </MudStack>
 

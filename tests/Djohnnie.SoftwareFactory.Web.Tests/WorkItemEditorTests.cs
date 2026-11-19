@@ -368,7 +368,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
         cut.WaitForAssertion(() => Assert.Contains("Agent worker runs", cut.Markup));
         var panel = cut.FindComponent<AgentRunsPanel>();
-        Assert.Contains("1 run · 2.5 AI credits", panel.Markup);
+        Assert.Contains("1 run · 3 AI credits", panel.Markup);
         Assert.Contains("claude-sonnet-4.5", panel.Markup);
         Assert.Contains("without changing any files", panel.Markup);
         Assert.Contains("9 min", panel.Markup);
@@ -429,7 +429,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         // The run that goes on costs nothing yet: it shows the model it asked for, not the totals of the runs before it.
         Assert.Contains("gpt-5", row.TextContent);
         Assert.DoesNotContain("claude-sonnet-4.5", row.TextContent);
-        Assert.Contains("2 runs · 2.5 AI credits", panel.Markup);
+        Assert.Contains("2 runs · 3 AI credits", panel.Markup);
     }
 
     [Fact]

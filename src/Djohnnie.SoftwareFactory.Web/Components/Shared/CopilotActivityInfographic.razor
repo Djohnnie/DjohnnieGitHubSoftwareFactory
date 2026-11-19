@@ -183,7 +183,7 @@
     private static RenderFragment Stat(string icon, string label, int value, string? detail)
     {
         return @<MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
-            <MudIcon Icon="@icon" Color="Color.Primary" />
+            <MudIcon Icon="@icon" Class="infographic-stat-icon" />
             <div>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@label</MudText>
                 <MudText Typo="Typo.h6">@value.ToString("#,0", CultureInfo.InvariantCulture)</MudText>

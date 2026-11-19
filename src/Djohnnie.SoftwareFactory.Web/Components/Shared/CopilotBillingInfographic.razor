@@ -15,7 +15,7 @@
     {
         <div class="usage-infographic-stats">
             @Stat(Icons.Material.Filled.Bolt, "Premium requests", _premiumRequests is null ? null : Quantity(_premiumRequests.Items.Sum(i => i.GrossQuantity)))
-            @Stat(Icons.Material.Filled.Toll, "AI credits", _aiCredits is null ? null : Quantity(_aiCredits.Items.Sum(i => i.GrossQuantity)))
+            @Stat(Icons.Material.Filled.Toll, "AI credits", _aiCredits is null ? null : AiModel.FormatCreditsNumber(_aiCredits.Items.Sum(i => i.GrossQuantity)))
             @Stat(Icons.Material.Filled.CardGiftcard, "Included in the plan", Loaded.Any() ? Amount(Items.Sum(i => i.DiscountAmount)) : null)
             @Stat(Icons.Material.Filled.ReceiptLong, "Billed", Loaded.Any() ? Amount(Items.Sum(i => i.NetAmount)) : null)
         </div>
@@ -62,7 +62,7 @@
                                         }
                                     </td>
                                     <td class="infographic-number">@(row.PremiumRequests is { } requests ? Quantity(requests) : "–")</td>
-                                    <td class="infographic-number">@(row.AiCredits is { } credits ? Quantity(credits) : "–")</td>
+                                    <td class="infographic-number">@(row.AiCredits is { } credits ? AiModel.FormatCreditsNumber(credits) : "–")</td>
                                     <td class="infographic-number">@Amount(row.Included)</td>
                                     <td class="infographic-number">@Amount(row.Net)</td>
                                 </tr>
@@ -170,7 +170,7 @@
     private static RenderFragment Stat(string icon, string label, string? value)
     {
         return @<MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
-            <MudIcon Icon="@icon" Color="Color.Primary" />
+            <MudIcon Icon="@icon" Class="infographic-stat-icon" />
             <div>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@label</MudText>
                 @if (value is not null)
