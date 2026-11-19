@@ -17,6 +17,14 @@ internal static class AgentRunConfiguration
                 entry.HasIndex(e => e.Status);
                 entry.HasIndex(e => e.WorkItemId);
             });
+            modelBuilder.Entity<AgentRunAttempt>(attempt =>
+            {
+                // The runs of a task: one per attempt, deleted with the task.
+                attempt.HasOne<AgentRun>().WithMany().HasForeignKey(a => a.AgentRunId).OnDelete(DeleteBehavior.Cascade);
+                attempt.HasIndex(a => new { a.AgentRunId, a.Attempt }).IsUnique();
+                attempt.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+                attempt.Property(a => a.PremiumRequests).HasPrecision(18, 4);
+            });
             modelBuilder.Entity<AgentRunModelUsage>(usage =>
             {
                 usage.HasOne<AgentRun>().WithMany().HasForeignKey(u => u.AgentRunId).OnDelete(DeleteBehavior.Cascade);

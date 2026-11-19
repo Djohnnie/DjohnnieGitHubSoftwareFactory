@@ -1,9 +1,11 @@
 namespace Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 
 /// <summary>
-/// One run of the DGHSF agent worker on a user story, bug or task: the worker clones the repository, lets the Copilot SDK
-/// agent implement the item on a new branch, pushes it and opens a pull request that closes the item's issue. The SQL row
-/// is the source of truth; the Service Bus queue only carries its id.
+/// One task of the DGHSF agent worker on a user story, bug or task: the worker clones the repository, lets the Copilot SDK
+/// agent implement the item on a new branch, pushes it and opens a pull request that closes the item's issue. Every time the
+/// worker starts the task it adds an <see cref="AgentRunAttempt"/> (a run), so retries are runs of the same task; the task
+/// keeps the final status and outcome and the totals of its runs. The SQL row is the source of truth; the Service Bus queue
+/// only carries its id.
 /// </summary>
 public sealed record AgentRun
 {
@@ -85,8 +87,63 @@ public sealed record AgentRun
     }
 }
 
-/// <summary>A run with the work item it belongs to, for lists of runs; <paramref name="WorkItem"/> is <c>null</c> when the item was deleted.</summary>
-public sealed record AgentRunOverview(AgentRun Run, WorkItems.WorkItemReference? WorkItem);
+/// <summary>
+/// One run (attempt) of an <see cref="AgentRun"/> task: what the agent did, cost and ended with the time the worker started it.
+/// </summary>
+public sealed record AgentRunAttempt
+{
+    public Guid Id { get; init; }
+    public Guid AgentRunId { get; init; }
+
+    /// <summary>The number of this run within its task, starting at 1.</summary>
+    public int Attempt { get; init; }
+
+    public AgentRunStatus Status { get; init; }
+    public string? Models { get; init; }
+    public string? Branch { get; init; }
+    public int? PullRequestNumber { get; init; }
+    public string? PullRequestUrl { get; init; }
+    public string? Summary { get; init; }
+
+    /// <summary>Why the run failed, or for a run that succeeded, why the agent stopped early.</summary>
+    public string? Error { get; init; }
+
+    /// <summary>The run's cost in nano AI units, or <c>null</c> when the agent never started.</summary>
+    public long? NanoAiu { get; init; }
+
+    public bool UsageComplete { get; init; }
+    public decimal? PremiumRequests { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheWriteTokens { get; init; }
+    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+
+    /// <summary>The run's cost in GitHub AI credits (1 credit = 0.01 USD).</summary>
+    public decimal? AiCredits
+    {
+        get
+        {
+            return NanoAiu is { } nano ? nano / AgentRun.NanoAiuPerCredit : null;
+        }
+    }
+
+    /// <summary>How long the run took, for a run that ended.</summary>
+    public TimeSpan? Duration
+    {
+        get
+        {
+            return CompletedAt is { } completed ? completed - StartedAt : null;
+        }
+    }
+}
+
+/// <summary>
+/// A task with the work item it belongs to and its runs (newest first), for lists of tasks; <paramref name="WorkItem"/> is
+/// <c>null</c> when the item was deleted.
+/// </summary>
+public sealed record AgentRunOverview(AgentRun Run, WorkItems.WorkItemReference? WorkItem, IReadOnlyList<AgentRunAttempt> Runs);
 
 /// <summary>What one session of the agent cost, as the Copilot SDK reported it at the end.</summary>
 /// <param name="PerModel">The same usage per model that answered, which is linked to the GitHub Copilot model catalog.</param>

@@ -64,6 +64,35 @@ internal static class ContractMapping
         }
     }
 
+    extension(Entities.AgentRunAttempt value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.AgentRuns.AgentRunAttempt ToContract()
+        {
+            return new()
+            {
+                Id = value.Id,
+                AgentRunId = value.AgentRunId,
+                Attempt = value.Attempt,
+                Status = value.Status,
+                Models = value.Models,
+                Branch = value.Branch,
+                PullRequestNumber = value.PullRequestNumber,
+                PullRequestUrl = value.PullRequestUrl,
+                Summary = value.Summary,
+                Error = value.Error,
+                NanoAiu = value.NanoAiu,
+                UsageComplete = value.UsageComplete,
+                PremiumRequests = value.PremiumRequests,
+                InputTokens = value.InputTokens,
+                OutputTokens = value.OutputTokens,
+                CacheReadTokens = value.CacheReadTokens,
+                CacheWriteTokens = value.CacheWriteTokens,
+                StartedAt = value.StartedAt,
+                CompletedAt = value.CompletedAt
+            };
+        }
+    }
+
     extension(Entities.SyncLogEvent value)
     {
         public Djohnnie.SoftwareFactory.Contracts.SyncLog.SyncLogEvent ToContract()

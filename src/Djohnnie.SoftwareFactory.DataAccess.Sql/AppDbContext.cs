@@ -27,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SyncLogEvent> SyncLogEvents => Set<SyncLogEvent>();
     public DbSet<TodoTask> TodoTasks => Set<TodoTask>();
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
+    public DbSet<AgentRunAttempt> AgentRunAttempts => Set<AgentRunAttempt>();
     public DbSet<AgentRunModelUsage> AgentRunModelUsages => Set<AgentRunModelUsage>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

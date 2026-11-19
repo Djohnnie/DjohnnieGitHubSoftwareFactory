@@ -72,8 +72,21 @@ public class BackgroundTasksPageTests : BunitContext
             run.Models = "claude-sonnet-4.5";
             run.PullRequestNumber = 7;
             run.PullRequestUrl = "https://github.com/owner/repo/pull/7";
-            run.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+            run.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-25);
             run.CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-8);
+            run.Attempts = 2;
+            // A retry is a second run of the same task.
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 1, Status = Contracts.AgentRuns.AgentRunStatus.Failed, Error = "git clone failed (128).",
+                UsageComplete = true, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-25), CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-24)
+            });
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 2, Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 12_500_000_000,
+                Models = "claude-sonnet-4.5", PullRequestNumber = 7, PullRequestUrl = "https://github.com/owner/repo/pull/7", UsageComplete = true,
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-8)
+            });
             await db.SaveChangesAsync(_cancellationToken);
         }
         await runs.CreateAsync("owner/repo", task.Id, null, 2, _cancellationToken);
@@ -82,16 +95,32 @@ public class BackgroundTasksPageTests : BunitContext
         Render<MudPopoverProvider>();
         var cut = Render<BackgroundTasks>();
 
-        cut.WaitForAssertion(() => Assert.Contains("Agent worker runs", cut.Markup));
-        var rows = cut.FindComponent<MudTable<Contracts.AgentRuns.AgentRunOverview>>().FindAll("tbody tr");
+        cut.WaitForAssertion(() => Assert.Contains("Agent worker tasks", cut.Markup));
+        Assert.Contains("The latest 2 tasks", cut.Markup);
+        var tasks = cut.FindAll(".agent-task");
+        Assert.Equal(2, tasks.Count);
+        Assert.Contains("Waiting", tasks[0].QuerySelector(".run-toggle")!.TextContent);
+        Assert.Contains(tasks[0].QuerySelectorAll("button"), b => b.TextContent.Trim() == "Cancel");
+        Assert.Contains("No runs yet", tasks[0].TextContent);
+
+        // Collapsed to the final status, the work item and the totals; the runs are listed once it is expanded.
+        var finishedTask = tasks[1];
+        Assert.Contains("Succeeded", finishedTask.QuerySelector(".run-toggle")!.TextContent);
+        Assert.Contains("Add the endpoint", finishedTask.QuerySelector(".run-toggle")!.TextContent);
+        Assert.Contains("12.5 AI credits", finishedTask.TextContent);
+        Assert.Contains("#7", finishedTask.TextContent);
+        Assert.Equal("false", finishedTask.QuerySelector(".run-toggle")!.GetAttribute("aria-expanded"));
+
+        cut.FindAll(".agent-task .run-toggle")[1].Click();
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(".agent-task .run-toggle")[1].GetAttribute("aria-expanded")));
+        var rows = cut.FindComponent<MudTable<Contracts.AgentRuns.AgentRunAttempt>>().FindAll("tbody tr");
         Assert.Equal(2, rows.Count);
-        Assert.Contains("Waiting", rows[0].TextContent);
-        Assert.Contains("Cancel run", rows[0].TextContent);
-        Assert.Contains("Add the endpoint", rows[1].TextContent);
-        Assert.Contains("12.5 AI credits", rows[1].TextContent);
-        Assert.Contains("12 min", rows[1].TextContent);
-        Assert.Contains("#7", rows[1].TextContent);
-        Assert.Contains("The latest 2 runs", cut.Markup);
+        // Newest run first.
+        Assert.Contains("Succeeded", rows[0].TextContent);
+        Assert.Contains("12 min", rows[0].TextContent);
+        Assert.Contains("#7", rows[0].TextContent);
+        Assert.Contains("Failed", rows[1].TextContent);
+        Assert.Contains("git clone failed", rows[1].TextContent);
     }
 
     [Fact]

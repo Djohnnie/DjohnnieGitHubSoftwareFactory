@@ -75,6 +75,35 @@ public class AgentRunTests
         Assert.Equal((AgentRunStatus.Failed, "The agent finished without changing any files."), (failed.Status, failed.Error));
         Assert.Equal(2.5m, failed.AiCredits);
         Assert.Null(await store.FailAsync(run.Id, "Again.", null, retry: false, _cancellationToken));
+
+        // The retry is a second run of the same task, each with its own outcome and cost.
+        var task = Assert.Single(await store.GetForRepositoryAsync(Repo, 10, _cancellationToken));
+        Assert.Equal(run.Id, task.Run.Id);
+        Assert.Equal([2, 1], task.Runs.Select(r => r.Attempt));
+        Assert.All(task.Runs, r => Assert.Equal((run.Id, AgentRunStatus.Failed), (r.AgentRunId, r.Status)));
+        Assert.All(task.Runs, r => Assert.NotNull(r.CompletedAt));
+        Assert.Equal(("The agent finished without changing any files.", 2.5m, "claude-sonnet-4.5"), (task.Runs[0].Error, task.Runs[0].AiCredits, task.Runs[0].Models));
+        Assert.Equal(("git clone failed (128).", null), (task.Runs[1].Error, task.Runs[1].AiCredits));
+        Assert.Equal(task.Runs[1].StartedAt, task.Run.StartedAt);
+    }
+
+    [Fact]
+    public async Task ARunThatSucceeds_IsStoredAsARunOfItsTask_AndCancel_EndsTheRunThatIsGoingOn()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var run = await StartedAsync(store, maxAttempts: 2);
+        var result = new AgentRunResult("dghsf/42-task-1a2b3c4d", 7, "https://github.com/owner/repo/pull/7", "Did it.", Usage, "Stopped at the credit limit.");
+        Assert.True(await store.CompleteAsync(run.Id, result, _cancellationToken));
+        var succeeded = Assert.Single(Assert.Single(await store.GetForRepositoryAsync(Repo, 10, _cancellationToken)).Runs);
+        Assert.Equal((AgentRunStatus.Succeeded, 7, "dghsf/42-task-1a2b3c4d", "Did it.", "Stopped at the credit limit.", 2.5m),
+            (succeeded.Status, succeeded.PullRequestNumber, succeeded.Branch, succeeded.Summary, succeeded.Error, succeeded.AiCredits));
+
+        var other = await StartedAsync(store, maxAttempts: 2);
+        Assert.True(await store.CancelAsync(Repo, other.Id, _cancellationToken));
+        var cancelled = (await store.GetForRepositoryAsync(Repo, 10, _cancellationToken)).Single(t => t.Run.Id == other.Id);
+        Assert.Equal(AgentRunStatus.Cancelled, cancelled.Run.Status);
+        Assert.Equal(AgentRunStatus.Cancelled, Assert.Single(cancelled.Runs).Status);
     }
 
     [Fact]

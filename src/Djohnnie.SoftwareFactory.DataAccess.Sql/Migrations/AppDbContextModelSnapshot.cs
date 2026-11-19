@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118235551_AddAgentRunModelUsages";
+    public override string LastMigrationId => "20261119092017_AddAgentRunAttempts";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -172,6 +172,94 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("WorkItemId");
 
                 b.ToTable("AgentRuns");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunAttempt", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<Guid>("AgentRunId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<int>("Attempt")
+                    .HasColumnType("int");
+
+                b.Property<string>("Branch")
+                    .HasMaxLength(250)
+                    .HasColumnType("nvarchar(250)");
+
+                b.Property<long>("CacheReadTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("CacheWriteTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Error")
+                    .HasMaxLength(4000)
+                    .HasColumnType("nvarchar(4000)");
+
+                b.Property<long>("InputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<string>("Models")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
+
+                b.Property<long?>("NanoAiu")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("OutputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<decimal?>("PremiumRequests")
+                    .HasPrecision(18, 4)
+                    .HasColumnType("decimal(18,4)");
+
+                b.Property<int?>("PullRequestNumber")
+                    .HasColumnType("int");
+
+                b.Property<string>("PullRequestUrl")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
+
+                b.Property<DateTimeOffset>("StartedAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasColumnType("nvarchar(20)");
+
+                b.Property<string>("Summary")
+                    .HasMaxLength(20000)
+                    .HasColumnType("nvarchar(max)");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                b.Property<bool>("UsageComplete")
+                    .HasColumnType("bit");
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("AgentRunId", "Attempt")
+                    .IsUnique();
+
+                b.ToTable("AgentRunAttempts");
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunModelUsage", b =>
@@ -1497,6 +1585,15 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsRequired();
 
                 b.Navigation("Repository");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunAttempt", b =>
+            {
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRun", null)
+                    .WithMany()
+                    .HasForeignKey("AgentRunId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunModelUsage", b =>

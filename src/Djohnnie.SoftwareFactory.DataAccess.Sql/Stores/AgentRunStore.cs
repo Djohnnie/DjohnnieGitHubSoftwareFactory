@@ -78,13 +78,27 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         {
             var retry = run.Attempts < run.MaxAttempts;
             var error = $"The worker stopped before the run finished (attempt {run.Attempts} of {run.MaxAttempts}).";
-            changed += await db.AgentRuns
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var updated = await db.AgentRuns
                 .Where(r => r.Id == run.Id && r.Status == AgentRunStatus.Running && r.LeaseUntil < now)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(r => r.Status, retry ? AgentRunStatus.Pending : AgentRunStatus.Failed)
                     .SetProperty(r => r.Error, error)
                     .SetProperty(r => r.LeaseUntil, (DateTimeOffset?)null)
                     .SetProperty(r => r.CompletedAt, retry ? null : now), cancellationToken);
+            if (updated == 0)
+            {
+                continue;
+            }
+
+            // The run that was going on failed; a retry is a new run of the same task.
+            await RunningAttempt(db, run.Id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.Status, AgentRunStatus.Failed)
+                    .SetProperty(a => a.Error, error)
+                    .SetProperty(a => a.CompletedAt, now), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            changed += updated;
         }
         return changed;
     }
@@ -94,11 +108,13 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
         var leaseUntil = now + lease;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var updated = await db.AgentRuns
             .Where(r => r.Id == id && r.Status == AgentRunStatus.Queued)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.Status, AgentRunStatus.Running)
-                .SetProperty(r => r.StartedAt, now)
+                // The task started with its first run; every run has its own start.
+                .SetProperty(r => r.StartedAt, r => r.StartedAt ?? now)
                 .SetProperty(r => r.CompletedAt, (DateTimeOffset?)null)
                 .SetProperty(r => r.LeaseUntil, leaseUntil)
                 .SetProperty(r => r.Attempts, r => r.Attempts + 1), cancellationToken);
@@ -108,6 +124,17 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         }
 
         var entity = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.Id == id, cancellationToken);
+        db.AgentRunAttempts.Add(new Entities.AgentRunAttempt
+        {
+            Id = Guid.NewGuid(),
+            AgentRunId = id,
+            Attempt = entity.Attempts,
+            Status = AgentRunStatus.Running,
+            UsageComplete = true,
+            StartedAt = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return entity.ToContract();
     }
 
@@ -155,6 +182,23 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             return false;
         }
 
+        await RunningAttempt(db, id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.Status, AgentRunStatus.Succeeded)
+                .SetProperty(a => a.Branch, branch)
+                .SetProperty(a => a.PullRequestNumber, result.PullRequestNumber)
+                .SetProperty(a => a.PullRequestUrl, url)
+                .SetProperty(a => a.Summary, summary)
+                .SetProperty(a => a.Error, warning)
+                .SetProperty(a => a.NanoAiu, usage.NanoAiu)
+                .SetProperty(a => a.UsageComplete, usage.Complete)
+                .SetProperty(a => a.PremiumRequests, usage.PremiumRequests)
+                .SetProperty(a => a.InputTokens, usage.InputTokens)
+                .SetProperty(a => a.OutputTokens, usage.OutputTokens)
+                .SetProperty(a => a.CacheReadTokens, usage.CacheReadTokens)
+                .SetProperty(a => a.CacheWriteTokens, usage.CacheWriteTokens)
+                .SetProperty(a => a.Models, models)
+                .SetProperty(a => a.CompletedAt, now), cancellationToken);
         await RecordModelUsageAsync(db, id, usage, now, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
@@ -201,6 +245,22 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             return null;
         }
 
+        // This run failed either way; a retry is a new run of the same task.
+        long? nanoAiu = hasUsage ? spent.NanoAiu : null;
+        var premiumRequests = usage?.PremiumRequests;
+        await RunningAttempt(db, id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.Status, AgentRunStatus.Failed)
+                .SetProperty(a => a.Error, text)
+                .SetProperty(a => a.NanoAiu, nanoAiu)
+                .SetProperty(a => a.UsageComplete, spent.Complete)
+                .SetProperty(a => a.PremiumRequests, premiumRequests)
+                .SetProperty(a => a.InputTokens, spent.InputTokens)
+                .SetProperty(a => a.OutputTokens, spent.OutputTokens)
+                .SetProperty(a => a.CacheReadTokens, spent.CacheReadTokens)
+                .SetProperty(a => a.CacheWriteTokens, spent.CacheWriteTokens)
+                .SetProperty(a => a.Models, models)
+                .SetProperty(a => a.CompletedAt, now), cancellationToken);
         await RecordModelUsageAsync(db, id, spent, now, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return status;
@@ -211,13 +271,25 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
         var normalized = Entities.Repository.Normalize(repositoryFullName);
-        return await db.AgentRuns
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var updated = await db.AgentRuns
             .Where(r => r.Id == id && r.RepositoryFullName == normalized)
             .Where(r => r.Status != AgentRunStatus.Succeeded && r.Status != AgentRunStatus.Failed && r.Status != AgentRunStatus.Cancelled)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.Status, AgentRunStatus.Cancelled)
                 .SetProperty(r => r.LeaseUntil, (DateTimeOffset?)null)
-                .SetProperty(r => r.CompletedAt, now), cancellationToken) == 1;
+                .SetProperty(r => r.CompletedAt, now), cancellationToken);
+        if (updated == 0)
+        {
+            return false;
+        }
+
+        await RunningAttempt(db, id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.Status, AgentRunStatus.Cancelled)
+                .SetProperty(a => a.CompletedAt, now), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task<AgentRun?> GetAsync(Guid id, CancellationToken cancellationToken = default)
@@ -251,7 +323,14 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var items = await db.WorkItems.AsNoTracking()
             .Where(e => ids.Contains(e.Id) && e.Repository.FullName == normalized)
             .ToDictionaryAsync(e => e.Id, cancellationToken);
-        return runs.Select(r => new AgentRunOverview(r.ToContract(), items.GetValueOrDefault(r.WorkItemId)?.ToReference())).ToList();
+        var runIds = runs.Select(r => r.Id).ToList();
+        var attempts = (await db.AgentRunAttempts.AsNoTracking()
+                .Where(a => runIds.Contains(a.AgentRunId))
+                .OrderByDescending(a => a.Attempt)
+                .ToListAsync(cancellationToken))
+            .ToLookup(a => a.AgentRunId);
+        return runs.Select(r => new AgentRunOverview(r.ToContract(), items.GetValueOrDefault(r.WorkItemId)?.ToReference(),
+            attempts[r.Id].Select(a => a.ToContract()).ToList())).ToList();
     }
 
     public async Task<AgentRun?> GetLatestAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)
@@ -330,6 +409,12 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             }
         }
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>The run of a task that is going on; a task has at most one, because only a running task has a running run.</summary>
+    private static IQueryable<Entities.AgentRunAttempt> RunningAttempt(AppDbContext db, Guid runId)
+    {
+        return db.AgentRunAttempts.Where(a => a.AgentRunId == runId && a.Status == AgentRunStatus.Running);
     }
 
     private static string? Truncate(string? value, int maxLength)

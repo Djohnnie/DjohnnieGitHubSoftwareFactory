@@ -42,6 +42,11 @@
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">· @FormatDuration(duration)</MudText>
                         }
+                        @if (run.Attempts > 1)
+                        {
+                            @* Retries are runs of the same task; the background tasks page lists them. *@
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">· @run.Attempts runs</MudText>
+                        }
                         @if (run.PullRequestNumber is { } number)
                         {
                             <MudLink Href="@run.PullRequestUrl" Target="_blank" Typo="Typo.caption">#@number</MudLink>
