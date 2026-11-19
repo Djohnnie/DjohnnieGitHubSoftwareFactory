@@ -62,8 +62,54 @@ public static class ChatMarkdown
         var renderer = new HtmlRenderer(writer);
         Pipeline.Setup(renderer);
         renderer.Render(document);
-        return writer.ToString();
+        return AllowSubscript(writer.ToString());
     }
+
+    /// <summary>
+    /// Turns an escaped <c>&lt;sub&gt;…&lt;/sub&gt;</c> pair on one line back into a subscript, as GitHub shows it (the DGHSF
+    /// agent writes its header and footer that way). The tags have no attributes and the text between them is already safe
+    /// HTML, so this adds no markup of its own; a pair in code, or one whose text opens or closes a tag it doesn't close or
+    /// open (e.g. across paragraphs or table cells), stays escaped.
+    /// </summary>
+    private static string AllowSubscript(string html)
+    {
+        return Subscript.Replace(html, match =>
+        {
+            if (match.Groups["code"].Success || !IsBalanced(match.Groups["text"].Value))
+            {
+                return match.Value;
+            }
+            return $"<sub>{match.Groups["text"].Value}</sub>";
+        });
+    }
+
+    private static bool IsBalanced(string html)
+    {
+        var open = new Stack<string>();
+        foreach (System.Text.RegularExpressions.Match tag in Tag.Matches(html))
+        {
+            var name = tag.Groups["name"].Value.ToLowerInvariant();
+            if (tag.Groups["close"].Success)
+            {
+                if (!open.TryPop(out var opened) || opened != name)
+                {
+                    return false;
+                }
+            }
+            else if (!tag.Value.EndsWith("/>", StringComparison.Ordinal))
+            {
+                open.Push(name);
+            }
+        }
+        return open.Count == 0;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Subscript = new(
+        @"(?<code><pre[\s\S]*?</pre>|<code[^>]*>[\s\S]*?</code>)|&lt;sub&gt;(?<text>(?:(?!&lt;/?sub&gt;)[^\n])*?)&lt;/sub&gt;",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex Tag = new(
+        @"<(?<close>/)?(?<name>[a-zA-Z][a-zA-Z0-9]*)[^>]*>", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static void MakeSafe(LinkInline link, bool allowAppLinks)
     {

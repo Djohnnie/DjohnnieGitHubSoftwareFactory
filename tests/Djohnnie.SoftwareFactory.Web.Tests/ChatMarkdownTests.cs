@@ -40,6 +40,30 @@ public class ChatMarkdownTests
     }
 
     [Fact]
+    public void ToHtml_RendersTheSubscriptOfTheAgentsHeaderAndFooter()
+    {
+        var html = ChatMarkdown.ToHtml(
+            "<sub>🤖 **DGHSF** on behalf of [djohnnie](https://github.com/djohnnie)</sub>\n\nDone.\n\n<sub>🤖 Revised · run `abc`</sub>\n");
+
+        Assert.Contains("<sub>🤖 <strong>DGHSF</strong> on behalf of <a href=\"https://github.com/djohnnie\"", html);
+        Assert.Contains("<sub>🤖 Revised · run <code>abc</code></sub>", html);
+        Assert.DoesNotContain("&lt;", html);
+    }
+
+    [Theory]
+    [InlineData("`<sub>x</sub>`")]
+    [InlineData("<sub>one\n\ntwo</sub>")]
+    [InlineData("<sub onclick=\"alert(1)\">x</sub>")]
+    [InlineData("<sub>x")]
+    public void ToHtml_KeepsOtherSubscriptTagsEscaped(string markdown)
+    {
+        var html = ChatMarkdown.ToHtml(markdown);
+
+        Assert.DoesNotContain("<sub", html);
+        Assert.Contains("&lt;sub", html);
+    }
+
+    [Fact]
     public void ToHtml_OpensSafeLinksInANewTabWithoutReferrer()
     {
         var html = ChatMarkdown.ToHtml("See [the docs](https://docs.github.com/copilot) or https://github.com.");

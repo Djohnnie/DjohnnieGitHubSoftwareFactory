@@ -187,7 +187,7 @@
                 </MudText>
                 <MudAlert Variant="Variant.Text" Severity="readiness.Severity" Dense="true" Class="mt-2 pr-merge-readiness">@readiness.Text</MudAlert>
                 <MudStack Row="true" AlignItems="AlignItems.End" Wrap="Wrap.Wrap" Spacing="3" Class="mt-2">
-                    <MudSelect T="PullRequestMergeMethod" Value="State.MergeMethod" ValueChanged="ChangeMergeMethod" Label="How to merge" Dense="true"
+                    <MudSelect T="PullRequestMergeMethod" Value="State.MergeMethod" ValueChanged="ChangeMergeMethod" Label="How to merge" Dense="true" Variant="Variant.Outlined"
                                Disabled="@(State.Sending || Changes.IsDraft)" Class="pr-merge-method" Style="min-width: 260px; max-width: 320px"
                                HelperText="@MergeMethodHelp(State.MergeMethod)">
                         <MudSelectItem Value="PullRequestMergeMethod.Merge">Create a merge commit</MudSelectItem>
