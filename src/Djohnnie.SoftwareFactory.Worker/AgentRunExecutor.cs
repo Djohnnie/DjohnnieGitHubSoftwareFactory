@@ -166,8 +166,9 @@ public sealed class AgentRunExecutor(
 
         await git.CommitAllAsync(repository, AgentRunPrompt.CommitMessage(item, run.Id), settings.CommitAuthorName, settings.CommitAuthorEmail, cancellationToken);
         await git.PushAsync(repository, branch, settings.GitHubToken, cancellationToken);
+        var onBehalfOf = await GetLoginQuietlyAsync(run);
         var pullRequest = await gitHub.CreatePullRequestAsync(run.RepositoryFullName, item.Title.Trim(), branch, baseBranch,
-            AgentRunPrompt.PullRequestBody(item, run.Id, outcome.Summary, usage, outcome.StoppedEarly),
+            AgentRunPrompt.PullRequestBody(item, run.Id, outcome.Summary, usage, outcome.StoppedEarly, onBehalfOf),
             draft: settings.DraftPullRequests || outcome.StoppedEarly is not null, CancellationToken.None);
         logger.LogInformation("Run {Run}: opened pull request #{PullRequest}.", run.Id, pullRequest.Number);
         return new AgentRunResult(branch, pullRequest.Number, pullRequest.HtmlUrl, outcome.Summary, usage, outcome.StoppedEarly);
@@ -250,6 +251,7 @@ public sealed class AgentRunExecutor(
         bool pushed, string branch, string baseBranch, GitMergeResult merge)
     {
         var problems = new List<string>();
+        var onBehalfOf = await GetLoginQuietlyAsync(run);
         foreach (var entry in discussion.Feedback.Where(f => f is { Kind: PullRequestDiscussionKind.LineComment, ThreadId: not null }))
         {
             if (replies.ReplyTo(entry.Id!) is not { } reply)
@@ -258,7 +260,7 @@ public sealed class AgentRunExecutor(
             }
             try
             {
-                await gitHub.ReplyToReviewCommentAsync(run.RepositoryFullName, number, entry.ThreadId!.Value, AgentRunPrompt.ReplyBody(run.Id, reply), CancellationToken.None);
+                await gitHub.ReplyToReviewCommentAsync(run.RepositoryFullName, number, entry.ThreadId!.Value, AgentRunPrompt.ReplyBody(run.Id, reply, onBehalfOf), CancellationToken.None);
             }
             catch (Exception ex) when (ex is GitHubApiException or HttpRequestException)
             {
@@ -270,7 +272,7 @@ public sealed class AgentRunExecutor(
         try
         {
             await gitHub.CreateIssueCommentAsync(run.RepositoryFullName, number,
-                AgentRunPrompt.RevisionComment(run.Id, outcome.Summary, outcome.Usage, outcome.StoppedEarly, discussion, replies, pushed, branch, baseBranch, merge),
+                AgentRunPrompt.RevisionComment(run.Id, outcome.Summary, outcome.Usage, outcome.StoppedEarly, discussion, replies, pushed, branch, baseBranch, merge, onBehalfOf),
                 CancellationToken.None);
         }
         catch (Exception ex) when (ex is GitHubApiException or HttpRequestException)
@@ -279,6 +281,23 @@ public sealed class AgentRunExecutor(
             problems.Add($"Could not comment on pull request #{number}: {ex.Message}");
         }
         return problems;
+    }
+
+    /// <summary>
+    /// The login of the token's account, for the "on behalf of" header; <c>null</c> when GitHub won't say (e.g. a token
+    /// without access to <c>/user</c>), because the header is not worth failing a run that already pushed.
+    /// </summary>
+    private async Task<string?> GetLoginQuietlyAsync(AgentRun run)
+    {
+        try
+        {
+            return (await gitHub.GetAuthenticatedUserAsync(CancellationToken.None)).Login;
+        }
+        catch (Exception ex) when (ex is GitHubApiException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "Run {Run}: could not read the token's account; DGHSF posts without naming it.", run.Id);
+            return null;
+        }
     }
 
     /// <summary>The files that still have a conflict marker at the start of a line; files that were deleted have none.</summary>

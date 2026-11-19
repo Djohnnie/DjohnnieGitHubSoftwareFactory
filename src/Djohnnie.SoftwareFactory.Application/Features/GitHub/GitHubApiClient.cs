@@ -20,6 +20,15 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
 {
     private const int PageSize = 100;
 
+    /// <summary>The account the token belongs to: the author of everything posted with it.</summary>
+    public async Task<GitHubOwner> GetAuthenticatedUserAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, "user", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<GitHubOwner>(cancellationToken)
+            ?? throw new GitHubApiException(HttpStatusCode.InternalServerError, "GitHub returned an empty user.");
+    }
+
     public async Task<GitHubRepository> GetRepositoryAsync(string repositoryFullName, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, $"repos/{repositoryFullName}", null, cancellationToken);

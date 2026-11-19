@@ -153,10 +153,21 @@ public static partial class AgentRunPrompt
         return $"{title}\n\nRefs #{item.IssueNumber}\n\nRevised by the DGHSF agent worker (run {runId}).\n";
     }
 
-    /// <summary>An answer to a line comment, posted in its thread.</summary>
-    public static string ReplyBody(Guid runId, string reply)
+    /// <summary>
+    /// The first line of everything the agent posts: GitHub shows the token's account as the author, so this says that DGHSF
+    /// wrote it on that account's behalf. Without a known account it only names DGHSF.
+    /// </summary>
+    public static string Header(string? onBehalfOf)
     {
-        return $"{reply.Trim()}\n\n{PullRequestDiscussion.Marker(runId)}";
+        return string.IsNullOrWhiteSpace(onBehalfOf)
+            ? "<sub>🤖 **DGHSF**</sub>\n\n"
+            : $"<sub>🤖 **DGHSF** on behalf of [{onBehalfOf}](https://github.com/{onBehalfOf})</sub>\n\n";
+    }
+
+    /// <summary>An answer to a line comment, posted in its thread.</summary>
+    public static string ReplyBody(Guid runId, string reply, string? onBehalfOf)
+    {
+        return $"{Header(onBehalfOf)}{reply.Trim()}\n\n{PullRequestDiscussion.Marker(runId)}";
     }
 
     /// <summary>
@@ -164,9 +175,9 @@ public static partial class AgentRunPrompt
     /// (line comments get theirs in their thread), what was pushed and merged, and what the revision cost.
     /// </summary>
     public static string RevisionComment(Guid runId, string? summary, AgentRunUsage usage, string? warning, PullRequestDiscussion discussion,
-        FeedbackReplies replies, bool pushed, string branch, string baseBranch, GitMergeResult merge)
+        FeedbackReplies replies, bool pushed, string branch, string baseBranch, GitMergeResult merge, string? onBehalfOf)
     {
-        var body = new StringBuilder();
+        var body = new StringBuilder(Header(onBehalfOf));
         if (warning is not null)
         {
             body.Append(CultureInfo.InvariantCulture, $"> [!WARNING]\n> {warning}\n\n");
@@ -217,9 +228,9 @@ public static partial class AgentRunPrompt
     }
 
     /// <summary>The agent's summary, the issue it closes and what the run cost.</summary>
-    public static string PullRequestBody(WorkItem item, Guid runId, string? summary, AgentRunUsage usage, string? warning)
+    public static string PullRequestBody(WorkItem item, Guid runId, string? summary, AgentRunUsage usage, string? warning, string? onBehalfOf)
     {
-        var body = new StringBuilder();
+        var body = new StringBuilder(Header(onBehalfOf));
         if (warning is not null)
         {
             body.Append(CultureInfo.InvariantCulture, $"> [!WARNING]\n> {warning}\n\n");

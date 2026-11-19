@@ -411,10 +411,10 @@ public class AgentRunTests
         Assert.Contains("# Add the endpoint", prompt);
 
         var reply = Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/pulls/7/comments/100/replies");
-        Assert.StartsWith("Renamed it to Endpoint.", Body(reply.Body));
+        Assert.StartsWith("<sub>🤖 **DGHSF** on behalf of [djohnnie](https://github.com/djohnnie)</sub>\n\nRenamed it to Endpoint.", Body(reply.Body));
         Assert.Contains("<!-- dghsf:agent-run:" + revision.Id, Body(reply.Body));
         var comment = Body(Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/issues/7/comments").Body);
-        Assert.StartsWith("Renamed the endpoint.", comment);
+        Assert.StartsWith("<sub>🤖 **DGHSF** on behalf of [djohnnie](https://github.com/djohnnie)</sub>\n\nRenamed the endpoint.", comment);
         Assert.Contains("> Please also log it.", comment);
         Assert.Contains("_The agent didn't answer this._", comment);
         Assert.Contains("Pushed the changes to `dghsf/42-add-the-endpoint-review`. Merged the latest `main` into the branch.", comment);
@@ -548,8 +548,8 @@ public class AgentRunTests
         Assert.Contains("## Additional instructions\n\nKeep it small.", prompt);
         Assert.Contains("- Epic #10: Passkeys\n- Feature #11: Passkey login\n", prompt);
 
-        var body = AgentRunPrompt.PullRequestBody(item, runId, null, Usage with { Complete = false }, "Stopped early.");
-        Assert.StartsWith("> [!WARNING]\n> Stopped early.", body);
+        var body = AgentRunPrompt.PullRequestBody(item, runId, null, Usage with { Complete = false }, "Stopped early.", "djohnnie");
+        Assert.StartsWith("<sub>🤖 **DGHSF** on behalf of [djohnnie](https://github.com/djohnnie)</sub>\n\n> [!WARNING]\n> Stopped early.", body);
         Assert.Contains("_The agent didn't write a summary._", body);
         Assert.Contains("2.5 AI credits (at least)", body);
     }
@@ -804,6 +804,8 @@ public class AgentRunTests
             {
                 switch (path)
                 {
+                    case "/user":
+                        return Json("""{"login":"djohnnie","avatar_url":null,"type":"User"}""");
                     case "/repos/owner/repo/pulls/7":
                         return Json("""{"number":7,"title":"Add the endpoint","html_url":"https://github.com/owner/repo/pull/7","state":"open","draft":false,"user":null,"merged_at":null,"additions":1,"deletions":0,"changed_files":1,"head":{"ref":"dghsf/42-add-the-endpoint-review","sha":"abc123"},"base":{"ref":"main","sha":"def456"}}""");
                     case "/repos/owner/repo/issues/7/comments":
