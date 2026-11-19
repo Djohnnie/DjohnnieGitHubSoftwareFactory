@@ -162,6 +162,8 @@ Then run `func start --port 7072` in that directory, so it can run next to the s
 
 Then accept a story, bug or task with **Runs on** set to *DGHSF agent worker* and run `dotnet run --project src/Djohnnie.SoftwareFactory.Worker --environment Development` once it is queued. The agent may run any command on your machine, so prefer the container image (`src/Djohnnie.SoftwareFactory.Worker/Dockerfile`).
 
+With **Include UI screenshots** on (the default), the agent starts the app it changed, takes screenshots of the screens it changed with Playwright and adds them to the pull request. That needs the `ImageUploads` settings of the web app in the worker's settings too, and Node.js with `playwright` and its Chromium on the machine (the container image has them).
+
 ## Tests
 
 ```shell

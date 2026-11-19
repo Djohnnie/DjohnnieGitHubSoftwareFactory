@@ -16,7 +16,17 @@ RUN dotnet publish src/Djohnnie.SoftwareFactory.Worker/Djohnnie.SoftwareFactory.
 FROM mcr.microsoft.com/dotnet/sdk:11.0
 ENV DOTNET_NOLOGO=1 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
-    AgentWorker__WorkDirectory=/tmp/dghsf-agent-worker
+    AgentWorker__WorkDirectory=/tmp/dghsf-agent-worker \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    NODE_PATH=/usr/local/lib/node_modules:/usr/lib/node_modules
+# Node.js, Playwright and a headless Chromium (with its system libraries), so the agent can start the app it changed and
+# take screenshots of its user interface for the pull request. The browsers go to a shared folder the app user can read.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && npm install -g playwright@1.55.0 \
+    && playwright install --with-deps chromium \
+    && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH" \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 WORKDIR /app
 COPY --from=build /app .
 # The SDK image's non-root user.

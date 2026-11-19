@@ -400,6 +400,28 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task TaskOnTheWorker_IncludesScreenshotsByDefault_AndSavesTurningThemOff()
+    {
+        await SelectRepositoryAsync();
+        var task = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Worker task", Description = "About it.", Executor = AgentExecutor.DghsfWorker
+        }, _cancellationToken);
+        Assert.True(task.IncludeScreenshots);
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Include UI screenshots", cut.Markup));
+        var screenshots = cut.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == "Include UI screenshots");
+        Assert.True(screenshots.Instance.GetState(x => x.Value));
+        await cut.InvokeAsync(() => screenshots.Find("input").Change(false));
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(b => b.TextContent.Contains("Save draft")).Click());
+
+        Assert.False((await Items.GetAsync(Repo, task.Id, _cancellationToken))!.IncludeScreenshots);
+    }
+
+    [Fact]
     public async Task Refresh_OnTheEditor_ShowsTheIssueAndKeepsUnsavedAssignmentSettings()
     {
         await SelectRepositoryAsync();

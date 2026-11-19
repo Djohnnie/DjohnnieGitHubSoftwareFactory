@@ -205,6 +205,7 @@ internal static class ContractMapping
                 Model = value.Model,
                 BaseBranch = value.BaseBranch,
                 CustomInstructions = value.CustomInstructions,
+                IncludeScreenshots = value.IncludeScreenshots,
                 IssueNumber = value.IssueNumber,
                 IssueId = value.IssueId,
                 IssueUrl = value.IssueUrl,

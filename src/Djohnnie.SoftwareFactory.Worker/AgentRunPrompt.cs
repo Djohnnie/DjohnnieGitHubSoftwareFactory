@@ -28,7 +28,8 @@ public static partial class AgentRunPrompt
 
     /// <summary>The task for the agent: the issue as DGHSF knows it, with its technical details and parents.</summary>
     /// <param name="ancestors">The items above the item, closest first.</param>
-    public static string Build(WorkItem item, IReadOnlyList<WorkItem> ancestors, string branch, string baseBranch)
+    /// <param name="screenshots">Where the agent saves screenshots of the user interface, or <c>null</c> when it takes none.</param>
+    public static string Build(WorkItem item, IReadOnlyList<WorkItem> ancestors, string branch, string baseBranch, string? screenshots = null)
     {
         var prompt = new StringBuilder();
         prompt.Append(CultureInfo.InvariantCulture,
@@ -36,6 +37,7 @@ public static partial class AgentRunPrompt
         prompt.Append(CultureInfo.InvariantCulture,
             $"The repository is checked out in the current working directory on the branch `{branch}`, created from `{baseBranch}`.\n\n");
         AppendIssue(prompt, item, ancestors);
+        AppendScreenshots(prompt, screenshots, "the pull request");
         return prompt.ToString();
     }
 
@@ -44,7 +46,7 @@ public static partial class AgentRunPrompt
     /// branch, the earlier discussion as context and the issue the pull request implements.
     /// </summary>
     public static string BuildRevision(WorkItem item, IReadOnlyList<WorkItem> ancestors, int pullRequestNumber, string pullRequestTitle, string branch,
-        string baseBranch, PullRequestDiscussion discussion, GitMergeResult merge)
+        string baseBranch, PullRequestDiscussion discussion, GitMergeResult merge, string? screenshots = null)
     {
         var prompt = new StringBuilder();
         prompt.Append(CultureInfo.InvariantCulture,
@@ -89,7 +91,29 @@ public static partial class AgentRunPrompt
 
         prompt.Append("\n---\n\nThe issue that the pull request implements:\n\n");
         AppendIssue(prompt, item, ancestors);
+        AppendScreenshots(prompt, screenshots, "DGHSF's comment about this revision");
         return prompt.ToString();
+    }
+
+    /// <summary>Asks for screenshots of the user interface the agent changed, which the worker shows in <paramref name="where"/>.</summary>
+    private static void AppendScreenshots(StringBuilder prompt, string? directory, string where)
+    {
+        if (directory is null)
+        {
+            return;
+        }
+        prompt.Append("\n## Screenshots\n\n");
+        prompt.Append(CultureInfo.InvariantCulture,
+            $"If your change affects a user interface (web pages, components, a desktop or mobile app), show the reviewers what it looks like in {where}. ");
+        prompt.Append("When you're done and the tests pass, start the app in the background (with development or test settings and seed data: ");
+        prompt.Append("no secrets are available), open the screens you changed in a headless browser and take a screenshot of each. ");
+        prompt.Append("Chromium and Playwright are installed: use `playwright screenshot --wait-for-timeout=2000 <url> <file>`, or a Node.js script with ");
+        prompt.Append("`require('playwright')` to sign in, click or fill in a form first. Keep to the screens and states that matter (at most ");
+        prompt.Append(CultureInfo.InvariantCulture, $"{UiScreenshots.MaxScreenshots}), at viewport size unless the whole page matters. ");
+        prompt.Append(CultureInfo.InvariantCulture, $"Save them in `{directory}`, the one place outside the working directory you may write to, ");
+        prompt.Append(CultureInfo.InvariantCulture, $"call the `{UiScreenshots.ToolName}` tool for each, and stop the app afterwards.\n\n");
+        prompt.Append("If nothing visible changed, or the app can't be started here, take no screenshots and say why in one sentence of your summary. ");
+        prompt.Append("Don't change the app's code or settings only to take screenshots.\n");
     }
 
     private static void AppendIssue(StringBuilder prompt, WorkItem item, IReadOnlyList<WorkItem> ancestors)
@@ -175,7 +199,7 @@ public static partial class AgentRunPrompt
     /// (line comments get theirs in their thread), what was pushed and merged, and what the revision cost.
     /// </summary>
     public static string RevisionComment(Guid runId, string? summary, AgentRunUsage usage, string? warning, PullRequestDiscussion discussion,
-        FeedbackReplies replies, bool pushed, string branch, string baseBranch, GitMergeResult merge, string? onBehalfOf)
+        FeedbackReplies replies, bool pushed, string branch, string baseBranch, GitMergeResult merge, string? onBehalfOf, string? screenshots = null)
     {
         var body = new StringBuilder(Header(onBehalfOf));
         if (warning is not null)
@@ -184,6 +208,7 @@ public static partial class AgentRunPrompt
         }
         body.Append(string.IsNullOrWhiteSpace(summary) ? "_The agent didn't write a summary._" : summary.Trim());
         body.Append("\n\n");
+        body.Append(screenshots);
 
         var answered = discussion.Feedback.Where(f => f.Kind != PullRequestDiscussionKind.LineComment).ToList();
         if (answered.Count > 0)
@@ -228,7 +253,9 @@ public static partial class AgentRunPrompt
     }
 
     /// <summary>The agent's summary, the issue it closes and what the run cost.</summary>
-    public static string PullRequestBody(WorkItem item, Guid runId, string? summary, AgentRunUsage usage, string? warning, string? onBehalfOf)
+    /// <param name="screenshots">The Markdown of <see cref="Screenshots"/>, or <c>null</c>.</param>
+    public static string PullRequestBody(WorkItem item, Guid runId, string? summary, AgentRunUsage usage, string? warning, string? onBehalfOf,
+        string? screenshots = null)
     {
         var body = new StringBuilder(Header(onBehalfOf));
         if (warning is not null)
@@ -236,9 +263,36 @@ public static partial class AgentRunPrompt
             body.Append(CultureInfo.InvariantCulture, $"> [!WARNING]\n> {warning}\n\n");
         }
         body.Append(string.IsNullOrWhiteSpace(summary) ? "_The agent didn't write a summary._" : summary.Trim());
-        body.Append(CultureInfo.InvariantCulture, $"\n\nCloses #{item.IssueNumber}\n\n---\n\n");
+        body.Append("\n\n");
+        body.Append(screenshots);
+        body.Append(CultureInfo.InvariantCulture, $"Closes #{item.IssueNumber}\n\n---\n\n");
         body.Append(Footer("Implemented", usage, runId));
         return body.ToString();
+    }
+
+    /// <summary>
+    /// The screenshots section of a pull request or revision comment, ending with a blank line; <c>null</c> when there is
+    /// nothing to show or say.
+    /// </summary>
+    /// <param name="problem">Why (some of) the screenshots aren't shown, or <c>null</c>.</param>
+    public static string? Screenshots(IReadOnlyList<PostedScreenshot> screenshots, string? problem)
+    {
+        if (screenshots.Count == 0 && problem is null)
+        {
+            return null;
+        }
+
+        var section = new StringBuilder("#### Screenshots\n\n");
+        foreach (var screenshot in screenshots)
+        {
+            var caption = screenshot.Caption.Replace('[', '(').Replace(']', ')');
+            section.Append(CultureInfo.InvariantCulture, $"**{caption}**\n\n![{caption}]({screenshot.Url})\n\n");
+        }
+        if (problem is not null)
+        {
+            section.Append(CultureInfo.InvariantCulture, $"_{problem}_\n\n");
+        }
+        return section.ToString();
     }
 
     private static string Footer(string verb, AgentRunUsage usage, Guid runId)

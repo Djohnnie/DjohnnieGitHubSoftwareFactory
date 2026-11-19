@@ -4,6 +4,7 @@ using System.Text.Json;
 using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
@@ -317,6 +318,66 @@ public class AgentRunTests
         Assert.Contains("Closes #42", body);
         Assert.Contains("2.5 AI credits", body);
         Assert.False(Directory.Exists(worker.Folder));
+    }
+
+    [Fact]
+    public async Task Execute_WithScreenshots_TheAgentAttachesThemOutsideTheRepository_AndThePullRequestShowsThem()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var images = new FakeImageStorage();
+        await using var worker = await WorkerAsync(database, images: images);
+        var screenshots = Path.Combine(worker.Folder, "screenshots");
+        worker.Agent.OnRun = async cancellationToken =>
+        {
+            var tool = Assert.Single(worker.Agent.Request!.Tools!, t => t.Name == UiScreenshots.ToolName);
+            var inRepository = Path.Combine(worker.Folder, "repo", "page.png");
+            await File.WriteAllBytesAsync(inRepository, Png, cancellationToken);
+            var refused = await tool.InvokeAsync(new AIFunctionArguments { ["path"] = "page.png", ["caption"] = "The page" }, cancellationToken);
+            Assert.Contains("inside the repository", refused?.ToString());
+
+            var text = Path.Combine(screenshots, "notes.png");
+            await File.WriteAllTextAsync(text, "not an image", cancellationToken);
+            Assert.Contains("isn't a PNG", (await tool.InvokeAsync(new AIFunctionArguments { ["path"] = text, ["caption"] = "Notes" }, cancellationToken))?.ToString());
+
+            var page = Path.Combine(screenshots, "endpoint.png");
+            await File.WriteAllBytesAsync(page, Png, cancellationToken);
+            await tool.InvokeAsync(new AIFunctionArguments { ["path"] = page, ["caption"] = "The old [caption]" }, cancellationToken);
+            var replaced = await tool.InvokeAsync(new AIFunctionArguments { ["path"] = page, ["caption"] = "The new [endpoint] page" }, cancellationToken);
+            Assert.Contains("Replaced", replaced?.ToString());
+        };
+        worker.Agent.Outcome = new("Added the endpoint page.", Usage, null);
+
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+
+        var prompt = worker.Agent.Request!.Prompt;
+        Assert.Contains("## Screenshots", prompt);
+        Assert.Contains(screenshots, prompt);
+        var stored = Assert.Single(images.Stored);
+        Assert.Equal("image/png", stored.ContentType);
+        var body = Body(worker.GitHub.PullRequestBody);
+        Assert.Contains($"#### Screenshots\n\n**The new (endpoint) page**\n\n![The new (endpoint) page](https://images.test/{stored.Name})", body);
+        Assert.True(body.IndexOf("#### Screenshots", StringComparison.Ordinal) < body.IndexOf("Closes #42", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Execute_WithScreenshotsOff_OrWithoutImageStorage_TheAgentGetsNoScreenshotTool()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using (var off = await WorkerAsync(database, includeScreenshots: false, images: new FakeImageStorage()))
+        {
+            off.Agent.Outcome = new("Added the endpoint.", Usage, null);
+            Assert.Equal(AgentRunStatus.Succeeded, await off.ExecuteAsync(_cancellationToken));
+            Assert.Null(off.Agent.Request!.Tools);
+            Assert.DoesNotContain("## Screenshots", off.Agent.Request.Prompt);
+            Assert.DoesNotContain("Screenshots", Body(off.GitHub.PullRequestBody));
+        }
+
+        await using var unconfigured = await WorkerAsync(database);
+        unconfigured.Agent.Outcome = new("Added the endpoint.", Usage, null);
+        Assert.Equal(AgentRunStatus.Succeeded, await unconfigured.ExecuteAsync(_cancellationToken));
+        Assert.Null(unconfigured.Agent.Request!.Tools);
+        Assert.DoesNotContain("## Screenshots", unconfigured.Agent.Request.Prompt);
+        Assert.Contains("no image storage (ImageUploads) configured", Body(unconfigured.GitHub.PullRequestBody));
     }
 
     [Fact]
@@ -637,14 +698,25 @@ public class AgentRunTests
         return JsonDocument.Parse(json!).RootElement.GetProperty("body").GetString()!;
     }
 
-    /// <summary>A started run of an in-progress task with issue #42, and an executor with fake git, agent and GitHub.</summary>
-    private async Task<WorkerFixture> WorkerAsync(SqlServerDatabase database, TimeSpan? lease = null)
+    /// <summary>The signature of a PNG file and a few bytes: enough to be recognized as one.</summary>
+    private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
+
+    /// <summary>
+    /// A started run of an in-progress task with issue #42, and an executor with fake git, agent and GitHub; with
+    /// <paramref name="images"/>, image uploads are configured and go there.
+    /// </summary>
+    private async Task<WorkerFixture> WorkerAsync(SqlServerDatabase database, TimeSpan? lease = null, bool includeScreenshots = true, FakeImageStorage? images = null)
     {
         var gitHub = new FakeGitHub();
         var git = new FakeGit();
         var agent = new FakeAgent();
         var folder = Path.Combine(Path.GetTempPath(), "dghsf-agent-worker-tests", Guid.NewGuid().ToString("N"));
-        var services = new ServiceCollection().AddLogging().AddApplication()
+        var collection = new ServiceCollection().AddLogging().AddApplication();
+        if (images is not null)
+        {
+            collection.AddSingleton<IImageStorage>(images).Configure<ImageUploadOptions>(o => o.ConnectionString = "UseDevelopmentStorage=true");
+        }
+        var services = collection
             .AddSingleton(database.Factory)
             .AddSingleton(new GitHubApiClient(new HttpClient(gitHub) { BaseAddress = new Uri("https://api.github.com/") }, new ConfiguredGitHubTokenProvider("token")))
             .Configure<AgentRunOptions>(o => o.Lease = lease ?? Lease)
@@ -661,7 +733,7 @@ public class AgentRunTests
         var item = await services.GetRequiredService<IWorkItemStore>().SaveAsync(new WorkItem
         {
             RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Add the endpoint", Description = "An endpoint.",
-            Executor = AgentExecutor.DghsfWorker, Model = "claude-sonnet-4.5"
+            Executor = AgentExecutor.DghsfWorker, Model = "claude-sonnet-4.5", IncludeScreenshots = includeScreenshots
         }, _cancellationToken);
         await using (var db = await database.Factory.CreateDbContextAsync(_cancellationToken))
         {
@@ -756,6 +828,17 @@ public class AgentRunTests
         {
             Commands.Add($"push {branch}");
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeImageStorage : IImageStorage
+    {
+        public List<(string Name, byte[] Content, string ContentType)> Stored { get; } = [];
+
+        public Task<string> StoreAsync(string name, byte[] content, string contentType, CancellationToken cancellationToken)
+        {
+            Stored.Add((name, content, contentType));
+            return Task.FromResult($"https://images.test/{name}");
         }
     }
 

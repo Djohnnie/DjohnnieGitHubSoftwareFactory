@@ -418,6 +418,14 @@ else if (_item is not null)
                             <DictationTextField @bind-Value="_item.CustomInstructions" Label="Custom instructions" ReadOnly="!_item.CanEditAssignment"
                                           Lines="3" MaxLength="10000"
                                           HelperText="Extra guidance for Copilot on top of the issue." />
+                            @if (IsWorker)
+                            {
+                                <MudSwitch T="bool" @bind-Value="_item.IncludeScreenshots" Label="Include UI screenshots" Color="Color.Primary"
+                                           ReadOnly="!_item.CanEditAssignment" aria-label="Include UI screenshots" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    When the change has a user interface, the agent runs the app and adds screenshots of what it changed to the pull request.
+                                </MudText>
+                            }
                         </MudPaper>
                     }
 
@@ -1331,6 +1339,7 @@ else if (_item is not null)
                 _item.Model = form.Model;
                 _item.BaseBranch = form.BaseBranch;
                 _item.CustomInstructions = form.CustomInstructions;
+                _item.IncludeScreenshots = form.IncludeScreenshots;
             }
             WorkItemActions.Report(Snackbar, result);
             ScheduleModelSuggestion();

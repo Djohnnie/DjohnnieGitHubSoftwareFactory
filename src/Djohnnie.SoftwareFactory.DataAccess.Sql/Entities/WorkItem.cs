@@ -48,6 +48,9 @@ public class WorkItem : Entity
     [MaxLength(10_000)]
     public string? CustomInstructions { get; set; }
 
+    /// <summary>Whether the DGHSF agent worker adds screenshots of the user interface it changed to the pull request.</summary>
+    public bool IncludeScreenshots { get; set; } = true;
+
     public int? IssueNumber { get; set; }
 
     /// <summary>GitHub's issue id (not the number); the sub-issues API needs it.</summary>

@@ -81,6 +81,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.Model = assignable ? NullIfEmpty(item.Model) : null;
         entity.BaseBranch = assignable ? NullIfEmpty(item.BaseBranch) : null;
         entity.CustomInstructions = assignable ? NullIfEmpty(item.CustomInstructions) : null;
+        entity.IncludeScreenshots = !assignable || item.IncludeScreenshots;
         entity.UpdatedAt = now;
         if (item.Id == Guid.Empty)
         {

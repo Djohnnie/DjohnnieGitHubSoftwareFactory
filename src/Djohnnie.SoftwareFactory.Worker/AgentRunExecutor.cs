@@ -1,6 +1,7 @@
 using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.Agents;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Djohnnie.SoftwareFactory.Application.Features.Uploads;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
@@ -31,6 +32,7 @@ public sealed class AgentRunExecutor(
     IGitWorkspace git,
     ICodingAgent agent,
     WorkItemService workItemService,
+    ImageUploadService imageUploads,
     TimeProvider timeProvider,
     IOptions<AgentRunOptions> runOptions,
     IOptions<AgentWorkerOptions> workerOptions,
@@ -143,18 +145,20 @@ public sealed class AgentRunExecutor(
         logger.LogInformation("Run {Run}: cloning {Repository} ({Base}) for issue #{Issue}.", run.Id, run.RepositoryFullName, baseBranch, item.IssueNumber);
         await git.CloneAsync(run.RepositoryFullName, baseBranch, branch, repository, settings.GitHubToken, cancellationToken);
         var profile = ReadCustomAgent(repository, item.CustomAgent);
+        var (screenshots, screenshotsOff) = CreateScreenshots(item, folder, repository);
         await RefreshQuietlyAsync(item);
 
         progress.AgentStarted = true;
         var outcome = await agent.RunAsync(new CodingAgentRequest(
             repository,
             Path.Combine(folder, "copilot"),
-            AgentRunPrompt.Build(item, ancestors, branch, baseBranch),
+            AgentRunPrompt.Build(item, ancestors, branch, baseBranch, screenshots?.Directory),
             AgentRunPrompt.Instructions,
             item.Model,
             profile,
             settings.MaxAiCreditsPerRun,
-            settings.RunTimeout), cancellationToken);
+            settings.RunTimeout,
+            screenshots is null ? null : [screenshots.CreateTool()]), cancellationToken);
         var usage = progress.Usage = outcome.Usage;
         LogFinished(run, outcome);
 
@@ -167,8 +171,9 @@ public sealed class AgentRunExecutor(
         await git.CommitAllAsync(repository, AgentRunPrompt.CommitMessage(item, run.Id), settings.CommitAuthorName, settings.CommitAuthorEmail, cancellationToken);
         await git.PushAsync(repository, branch, settings.GitHubToken, cancellationToken);
         var onBehalfOf = await GetLoginQuietlyAsync(run);
+        var screenshotsSection = await PostScreenshotsAsync(run, screenshots, screenshotsOff);
         var pullRequest = await gitHub.CreatePullRequestAsync(run.RepositoryFullName, item.Title.Trim(), branch, baseBranch,
-            AgentRunPrompt.PullRequestBody(item, run.Id, outcome.Summary, usage, outcome.StoppedEarly, onBehalfOf),
+            AgentRunPrompt.PullRequestBody(item, run.Id, outcome.Summary, usage, outcome.StoppedEarly, onBehalfOf, screenshotsSection),
             draft: settings.DraftPullRequests || outcome.StoppedEarly is not null, CancellationToken.None);
         logger.LogInformation("Run {Run}: opened pull request #{PullRequest}.", run.Id, pullRequest.Number);
         return new AgentRunResult(branch, pullRequest.Number, pullRequest.HtmlUrl, outcome.Summary, usage, outcome.StoppedEarly);
@@ -205,6 +210,7 @@ public sealed class AgentRunExecutor(
         var head = await git.CloneBranchAsync(run.RepositoryFullName, branch, baseBranch, repository, settings.GitHubToken, cancellationToken);
         var merge = await git.MergeBaseAsync(repository, baseBranch, settings.CommitAuthorName, settings.CommitAuthorEmail, cancellationToken);
         var profile = ReadCustomAgent(repository, item.CustomAgent);
+        var (screenshots, screenshotsOff) = CreateScreenshots(item, folder, repository);
         await RefreshQuietlyAsync(item);
 
         var replies = new FeedbackReplies(discussion.Feedback);
@@ -212,13 +218,13 @@ public sealed class AgentRunExecutor(
         var outcome = await agent.RunAsync(new CodingAgentRequest(
             repository,
             Path.Combine(folder, "copilot"),
-            AgentRunPrompt.BuildRevision(item, ancestors, number, pullRequest.Title, branch, baseBranch, discussion, merge),
+            AgentRunPrompt.BuildRevision(item, ancestors, number, pullRequest.Title, branch, baseBranch, discussion, merge, screenshots?.Directory),
             AgentRunPrompt.Instructions,
             item.Model,
             profile,
             settings.MaxAiCreditsPerRun,
             settings.RunTimeout,
-            [replies.CreateTool()]), cancellationToken);
+            screenshots is null ? [replies.CreateTool()] : [replies.CreateTool(), screenshots.CreateTool()]), cancellationToken);
         var usage = progress.Usage = outcome.Usage;
         LogFinished(run, outcome);
 
@@ -237,7 +243,8 @@ public sealed class AgentRunExecutor(
             logger.LogInformation("Run {Run}: pushed the revision of pull request #{PullRequest}.", run.Id, number);
         }
 
-        var problems = await AnswerAsync(run, number, discussion, replies, outcome, pushed, branch, baseBranch, merge);
+        var screenshotsSection = await PostScreenshotsAsync(run, screenshots, screenshotsOff);
+        var problems = await AnswerAsync(run, number, discussion, replies, outcome, pushed, branch, baseBranch, merge, screenshotsSection);
         var warning = string.Join(" ", new[] { outcome.StoppedEarly }.Concat(problems).OfType<string>());
         return new AgentRunResult(branch, number, pullRequest.HtmlUrl, outcome.Summary, usage, warning.Length == 0 ? null : warning, until);
     }
@@ -248,7 +255,7 @@ public sealed class AgentRunExecutor(
     /// </summary>
     /// <returns>What couldn't be posted.</returns>
     private async Task<List<string>> AnswerAsync(AgentRun run, int number, PullRequestDiscussion discussion, FeedbackReplies replies, CodingAgentOutcome outcome,
-        bool pushed, string branch, string baseBranch, GitMergeResult merge)
+        bool pushed, string branch, string baseBranch, GitMergeResult merge, string? screenshots)
     {
         var problems = new List<string>();
         var onBehalfOf = await GetLoginQuietlyAsync(run);
@@ -272,7 +279,8 @@ public sealed class AgentRunExecutor(
         try
         {
             await gitHub.CreateIssueCommentAsync(run.RepositoryFullName, number,
-                AgentRunPrompt.RevisionComment(run.Id, outcome.Summary, outcome.Usage, outcome.StoppedEarly, discussion, replies, pushed, branch, baseBranch, merge, onBehalfOf),
+                AgentRunPrompt.RevisionComment(run.Id, outcome.Summary, outcome.Usage, outcome.StoppedEarly, discussion, replies, pushed, branch, baseBranch, merge, onBehalfOf,
+                    screenshots),
                 CancellationToken.None);
         }
         catch (Exception ex) when (ex is GitHubApiException or HttpRequestException)
@@ -281,6 +289,57 @@ public sealed class AgentRunExecutor(
             problems.Add($"Could not comment on pull request #{number}: {ex.Message}");
         }
         return problems;
+    }
+
+    /// <summary>
+    /// The screenshot tool of a run of an item that wants screenshots, with its folder next to (not in) the clone; <c>null</c>
+    /// when the item doesn't want them, or when there is no image storage to put them in (then with why).
+    /// </summary>
+    private (UiScreenshots? Screenshots, string? Off) CreateScreenshots(WorkItem item, string folder, string repository)
+    {
+        if (!item.IncludeScreenshots)
+        {
+            return (null, null);
+        }
+        if (!imageUploads.IsEnabled)
+        {
+            logger.LogWarning("Screenshots are on for work item {Id}, but {Section} isn't configured for the worker.", item.Id, ImageUploadOptions.SectionName);
+            return (null, $"No screenshots: the agent worker has no image storage ({ImageUploadOptions.SectionName}) configured to show them in.");
+        }
+
+        var directory = Path.Combine(folder, "screenshots");
+        Directory.CreateDirectory(directory);
+        return (new UiScreenshots(directory, repository, imageUploads.MaxImageSize), null);
+    }
+
+    /// <summary>
+    /// Uploads the screenshots the agent attached and returns their section for the pull request or revision comment. The
+    /// changes are pushed by then, so a screenshot that can't be uploaded is only mentioned.
+    /// </summary>
+    private async Task<string?> PostScreenshotsAsync(AgentRun run, UiScreenshots? screenshots, string? off)
+    {
+        if (screenshots is null)
+        {
+            return AgentRunPrompt.Screenshots([], off);
+        }
+
+        var posted = new List<PostedScreenshot>();
+        var failed = 0;
+        foreach (var screenshot in screenshots.Screenshots)
+        {
+            try
+            {
+                var image = await imageUploads.UploadImageAsync(Path.GetFileName(screenshot.Source), screenshot.Content, CancellationToken.None);
+                posted.Add(new PostedScreenshot(screenshot.Caption, image.Url));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Run {Run}: could not upload the screenshot {File}.", run.Id, screenshot.Source);
+                failed++;
+            }
+        }
+        var problem = failed == 0 ? null : failed == 1 ? "1 screenshot could not be uploaded." : $"{failed} screenshots could not be uploaded.";
+        return AgentRunPrompt.Screenshots(posted, problem);
     }
 
     /// <summary>

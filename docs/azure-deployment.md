@@ -223,6 +223,7 @@ When you regenerate an admin password, update `ACR_PASSWORD` and the job's regis
 | `AgentWorker__RunTimeout` | Optional; default `01:00:00` |
 | `AgentWorker__DraftPullRequests` | Optional; `true` to open every pull request as a draft |
 | `AgentWorker__CommitAuthorName`, `AgentWorker__CommitAuthorEmail` | Optional; the author of the agent's commit |
+| `ImageUploads__ConnectionString` (and the other `ImageUploads__` settings) | Optional; the same image storage as the Web App. With it, the agent adds screenshots of the user interface it changed to its pull requests, for work items with **Include UI screenshots** on (the default). Without it, those pull requests say that there is no image storage. See [Image uploads](#image-uploads) |
 | `AgentRuns__Lease`, `AgentRuns__MaxAttempts` | Optional; the same values as the Tasks function app |
 | `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
 
@@ -244,6 +245,8 @@ az storage account show-connection-string -n <account> -g <resource-group> -o ts
 ```
 
 Use `--public-access blob`, not `container`, so the container cannot be listed. Blob names are random (`yyyy/MM/<guid>-<name>.png`) and never contain the repository name, but anyone with a link can view the image, also for private repositories. Only PNG, JPEG, GIF and WebP are accepted (detected from the content; SVG is refused). Without configuration, the editors refuse images instead of embedding them as base64.
+
+The agent worker uploads the screenshots it adds to pull requests to the same container, so they are just as public: turn **Include UI screenshots** off on work items of private repositories whose user interface must not be visible to anyone with the link.
 
 ## Knowledge base
 
