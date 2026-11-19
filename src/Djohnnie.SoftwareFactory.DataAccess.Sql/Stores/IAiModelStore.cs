@@ -1,4 +1,5 @@
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
@@ -7,6 +8,11 @@ public interface IAiModelStore
     Task<List<AiModel>> GetAllAsync(CancellationToken cancellationToken = default);
 
     Task<List<AiModel>> GetEnabledAsync(CancellationToken cancellationToken = default);
+
+    Task<AiModel?> GetAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>The agent worker sessions that were counted on a model, newest first, each with its work item.</summary>
+    Task<PagedResult<AiModelUsage>> GetUsagePageAsync(AiModelUsageQuery query, CancellationToken cancellationToken = default);
 
     Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default);
 

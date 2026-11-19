@@ -89,6 +89,7 @@ public sealed record AgentRun
 public sealed record AgentRunOverview(AgentRun Run, WorkItems.WorkItemReference? WorkItem);
 
 /// <summary>What one session of the agent cost, as the Copilot SDK reported it at the end.</summary>
+/// <param name="PerModel">The same usage per model that answered, which is linked to the GitHub Copilot model catalog.</param>
 public sealed record AgentRunUsage(
     long NanoAiu,
     bool Complete,
@@ -97,10 +98,27 @@ public sealed record AgentRunUsage(
     long OutputTokens,
     long CacheReadTokens,
     long CacheWriteTokens,
-    string? Models)
+    string? Models,
+    IReadOnlyList<AgentRunModelUsage>? PerModel = null)
 {
     public static AgentRunUsage None { get; } = new(0, true, null, 0, 0, 0, 0, null);
 }
+
+/// <summary>What one model cost in one session of the agent, as the Copilot SDK reported it.</summary>
+/// <param name="Model">The model id as the SDK reported it, e.g. <c>claude-sonnet-4.5</c>.</param>
+/// <param name="Complete">Whether GitHub reported the cost of every call to this model; when not, <paramref name="NanoAiu"/> is a lower bound.</param>
+/// <param name="ReasoningTokens">The part of <paramref name="OutputTokens"/> used for reasoning, for information.</param>
+public sealed record AgentRunModelUsage(
+    string Model,
+    long NanoAiu,
+    bool Complete,
+    int Requests,
+    decimal PremiumRequests,
+    long InputTokens,
+    long OutputTokens,
+    long CacheReadTokens,
+    long CacheWriteTokens,
+    long ReasoningTokens);
 
 /// <summary>What a run that finished produced.</summary>
 /// <param name="Warning">Why the agent stopped before it finished (e.g. the credit limit); its work is then a draft pull request.</param>

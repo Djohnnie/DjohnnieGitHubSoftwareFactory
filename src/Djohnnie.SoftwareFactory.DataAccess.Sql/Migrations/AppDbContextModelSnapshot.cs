@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118213438_AddAgentRuns";
+    public override string LastMigrationId => "20261118235551_AddAgentRunModelUsages";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -174,6 +174,78 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("AgentRuns");
             });
 
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunModelUsage", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<Guid>("AgentRunId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<Guid?>("AiModelId")
+                    .HasColumnType("uniqueidentifier");
+
+                b.Property<int>("Attempt")
+                    .HasColumnType("int");
+
+                b.Property<long>("CacheReadTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("CacheWriteTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<bool>("Complete")
+                    .HasColumnType("bit");
+
+                b.Property<long>("InputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<string>("Model")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
+
+                b.Property<long>("NanoAiu")
+                    .HasColumnType("bigint");
+
+                b.Property<DateTimeOffset>("OccurredAt")
+                    .HasColumnType("datetimeoffset");
+
+                b.Property<long>("OutputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<decimal>("PremiumRequests")
+                    .HasPrecision(18, 4)
+                    .HasColumnType("decimal(18,4)");
+
+                b.Property<long>("ReasoningTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<int>("Requests")
+                    .HasColumnType("int");
+
+                var sysId = b.Property<int>("SysId")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(sysId);
+
+                var key = b.HasKey("Id");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key, false);
+
+                var key0 = b.HasAlternateKey("SysId");
+
+                SqlServerKeyBuilderExtensions.IsClustered(key0);
+
+                b.HasIndex("AgentRunId");
+
+                b.HasIndex("AiModelId");
+
+                b.ToTable("AgentRunModelUsages");
+            });
+
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentTemplate", b =>
             {
                 b.Property<Guid>("Id")
@@ -296,6 +368,30 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<DateTimeOffset>("UpdatedAt")
                     .HasColumnType("datetimeoffset");
+
+                b.Property<long>("UsageCacheReadTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("UsageCacheWriteTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("UsageInputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("UsageNanoAiu")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("UsageOutputTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("UsageReasoningTokens")
+                    .HasColumnType("bigint");
+
+                b.Property<int>("UsageRequests")
+                    .HasColumnType("int");
+
+                b.Property<int>("UsageSessions")
+                    .HasColumnType("int");
 
                 var key = b.HasKey("Id");
 
@@ -1401,6 +1497,20 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .IsRequired();
 
                 b.Navigation("Repository");
+            });
+
+        modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRunModelUsage", b =>
+            {
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AgentRun", null)
+                    .WithMany()
+                    .HasForeignKey("AgentRunId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.HasOne("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.AiModel", null)
+                    .WithMany()
+                    .HasForeignKey("AiModelId")
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
         modelBuilder.Entity("Djohnnie.SoftwareFactory.DataAccess.Sql.Entities.ChatConversation", b =>

@@ -1,11 +1,19 @@
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 
 public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvider timeProvider) : IAiModelStore
 {
+    private static readonly string[] UsageTotals =
+    [
+        nameof(Entities.AiModel.UsageSessions), nameof(Entities.AiModel.UsageNanoAiu), nameof(Entities.AiModel.UsageRequests),
+        nameof(Entities.AiModel.UsageInputTokens), nameof(Entities.AiModel.UsageOutputTokens), nameof(Entities.AiModel.UsageCacheReadTokens),
+        nameof(Entities.AiModel.UsageCacheWriteTokens), nameof(Entities.AiModel.UsageReasoningTokens)
+    ];
+
     public async Task<List<AiModel>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -18,6 +26,34 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var models = await db.AiModels.AsNoTracking().Where(m => m.IsEnabled).ToListAsync(cancellationToken);
         return Sort(models.Select(m => m.ToContract()));
+    }
+
+    public async Task<AiModel?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return (await db.AiModels.AsNoTracking().SingleOrDefaultAsync(m => m.Id == id, cancellationToken))?.ToContract();
+    }
+
+    public async Task<PagedResult<AiModelUsage>> GetUsagePageAsync(AiModelUsageQuery query, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var usages = db.AgentRunModelUsages.AsNoTracking().Where(u => u.AiModelId == query.ModelId);
+        var total = await usages.CountAsync(cancellationToken);
+        var page = await usages
+            .Join(db.AgentRuns.AsNoTracking(), u => u.AgentRunId, r => r.Id, (u, r) => new { Usage = u, Run = r })
+            .OrderByDescending(x => x.Usage.SysId)
+            .Skip(query.Page * query.PageSize)
+            .Take(query.PageSize)
+            .ToListAsync(cancellationToken);
+
+        // Runs refer to their work item without a foreign key: a deleted item leaves its runs.
+        var ids = page.Select(x => x.Run.WorkItemId).Distinct().ToList();
+        var items = (await db.WorkItems.AsNoTracking()
+                .Where(e => ids.Contains(e.Id))
+                .Select(e => new { Item = e, e.Repository.FullName })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => (x.Item.Id, x.FullName), x => x.Item.ToReference());
+        return new(page.Select(x => x.Usage.ToContract(x.Run, items.GetValueOrDefault((x.Run.WorkItemId, x.Run.RepositoryFullName)))).ToList(), total);
     }
 
     public async Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default)
@@ -41,8 +77,17 @@ public class AiModelStore(IDbContextFactory<AppDbContext> dbFactory, TimeProvide
         else
         {
             db.AiModels.Update(entity);
+            // The running totals belong to the agent worker's sessions, which may add to them meanwhile.
+            foreach (var total in UsageTotals)
+            {
+                db.Entry(entity).Property(total).IsModified = false;
+            }
         }
         await db.SaveChangesAsync(cancellationToken);
+        if (model.Id != Guid.Empty)
+        {
+            return (await db.AiModels.AsNoTracking().SingleAsync(m => m.Id == entity.Id, cancellationToken)).ToContract();
+        }
         return entity.ToContract();
     }
 

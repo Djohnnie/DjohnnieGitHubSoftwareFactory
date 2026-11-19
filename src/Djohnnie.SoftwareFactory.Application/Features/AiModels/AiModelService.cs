@@ -1,4 +1,5 @@
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
+using Djohnnie.SoftwareFactory.Contracts.Common;
 using MediatR;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.AiModels;
@@ -13,6 +14,17 @@ public sealed class AiModelService(ISender mediator)
     public async Task<List<AiModel>> GetEnabledAsync(CancellationToken cancellationToken = default)
     {
         return (await mediator.Send(new GetEnabledModelsQuery(new()), cancellationToken)).Dto.Items.ToList();
+    }
+
+    public async Task<AiModel?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetModelQuery(new(id)), cancellationToken)).Dto;
+    }
+
+    /// <summary>A page of the DGHSF agent worker sessions that were counted on a model, newest first.</summary>
+    public async Task<PagedResult<AiModelUsage>> GetUsagePageAsync(AiModelUsageQuery query, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new GetModelUsageQuery(query), cancellationToken)).Dto;
     }
 
     public async Task<AiModel> SaveAsync(AiModel model, CancellationToken cancellationToken = default)

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Djohnnie.SoftwareFactory.DataAccess.Sql.Entities;
 
 /// <summary>
-/// An AI model that can be used by custom agents. Prices are in euro per 1 million tokens.
+/// An AI model that can be used by custom agents. Prices are in GitHub AI credits per 1 million tokens.
 /// </summary>
 public class AiModel : Entity
 {
@@ -45,4 +45,14 @@ public class AiModel : Entity
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    // Running totals of the agent worker sessions that used this model (AgentRunModelUsages rows linked to it). Only
+    // AgentRunStore adds to them, with an atomic update; saving or importing the model leaves them alone.
+    public int UsageSessions { get; set; }
+    public long UsageNanoAiu { get; set; }
+    public int UsageRequests { get; set; }
+    public long UsageInputTokens { get; set; }
+    public long UsageOutputTokens { get; set; }
+    public long UsageCacheReadTokens { get; set; }
+    public long UsageCacheWriteTokens { get; set; }
+    public long UsageReasoningTokens { get; set; }
 }

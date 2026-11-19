@@ -217,7 +217,37 @@ internal static class ContractMapping
                 IsEnabled = value.IsEnabled,
                 IsFavorite = value.IsFavorite,
                 SourceUrl = value.SourceUrl,
-                UpdatedAt = value.UpdatedAt
+                UpdatedAt = value.UpdatedAt,
+                Usage = new(value.UsageSessions, value.UsageNanoAiu, value.UsageRequests, value.UsageInputTokens, value.UsageOutputTokens,
+                    value.UsageCacheReadTokens, value.UsageCacheWriteTokens, value.UsageReasoningTokens)
+            };
+        }
+    }
+
+    extension(Entities.AgentRunModelUsage value)
+    {
+        public Djohnnie.SoftwareFactory.Contracts.AiModels.AiModelUsage ToContract(Entities.AgentRun run, Djohnnie.SoftwareFactory.Contracts.WorkItems.WorkItemReference? workItem)
+        {
+            return new()
+            {
+                Id = value.Id,
+                AgentRunId = value.AgentRunId,
+                AiModelId = value.AiModelId,
+                Attempt = value.Attempt,
+                RepositoryFullName = run.RepositoryFullName,
+                WorkItemId = run.WorkItemId,
+                WorkItem = workItem,
+                Model = value.Model,
+                NanoAiu = value.NanoAiu,
+                Complete = value.Complete,
+                Requests = value.Requests,
+                PremiumRequests = value.PremiumRequests,
+                InputTokens = value.InputTokens,
+                OutputTokens = value.OutputTokens,
+                CacheReadTokens = value.CacheReadTokens,
+                CacheWriteTokens = value.CacheWriteTokens,
+                ReasoningTokens = value.ReasoningTokens,
+                OccurredAt = value.OccurredAt
             };
         }
     }

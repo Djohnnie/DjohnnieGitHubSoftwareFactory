@@ -1,0 +1,18 @@
+@* Colored usage figures in two columns, or next to each other; one color per kind of figure. *@
+
+<div class="usage-grid @(SingleRow ? "usage-grid-row" : string.Empty)">
+    @foreach (var tile in Tiles)
+    {
+        <div class="usage-stat @tile.ColorClass @(tile.Wide ? "usage-wide" : string.Empty)">
+            <span class="usage-label">@tile.Label</span>
+            <span class="usage-value">@tile.Value</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<UsageTile> Tiles { get; set; } = [];
+
+    /// <summary>Shows the tiles next to each other instead of in two columns.</summary>
+    [Parameter] public bool SingleRow { get; set; }
+}

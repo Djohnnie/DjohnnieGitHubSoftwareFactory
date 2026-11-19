@@ -7,6 +7,7 @@ using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
+using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
@@ -74,6 +75,49 @@ public class AgentRunTests
         Assert.Equal((AgentRunStatus.Failed, "The agent finished without changing any files."), (failed.Status, failed.Error));
         Assert.Equal(2.5m, failed.AiCredits);
         Assert.Null(await store.FailAsync(run.Id, "Again.", null, retry: false, _cancellationToken));
+    }
+
+    [Fact]
+    public async Task SessionUsage_IsStoredPerModel_CountedOnTheCatalogsDefaultTier_AndKeptWhenTheModelIsSavedOrDeleted()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        var models = new AiModelStore(database.Factory, TimeProvider.System);
+        var longContext = await models.SaveAsync(new AiModel { Name = "Claude Sonnet 4.5", ModelId = "claude-sonnet-4.5", Tier = "Long context" }, _cancellationToken);
+        var sonnet = await models.SaveAsync(new AiModel { Name = "Claude Sonnet 4.5", ModelId = "claude-sonnet-4.5" }, _cancellationToken);
+        var store = new AgentRunStore(database.Factory, TimeProvider.System);
+        var sonnetUsage = new AgentRunModelUsage("claude-sonnet-4.5", 2_000_000_000, true, 3, 1m, 1000, 200, 700, 100, 50);
+        var unknownUsage = new AgentRunModelUsage("gpt-unknown", 500_000_000, false, 1, 0.5m, 200, 100, 100, 0, 0);
+        var run = await StartedAsync(store, maxAttempts: 2);
+
+        // Two sessions: an attempt that failed after the agent ran, and the attempt that succeeded.
+        Assert.Equal(AgentRunStatus.Pending, await store.FailAsync(run.Id, "Push failed.", Usage with { PerModel = [sonnetUsage, unknownUsage] }, retry: true, _cancellationToken));
+        await store.ClaimDueAsync(10, _cancellationToken);
+        await store.TryStartAsync(run.Id, Lease, _cancellationToken);
+        var result = new AgentRunResult("dghsf/42-task-1a2b3c4d", 7, "https://github.com/owner/repo/pull/7", null, Usage with { PerModel = [sonnetUsage] });
+        Assert.True(await store.CompleteAsync(run.Id, result, _cancellationToken));
+        Assert.False(await store.CompleteAsync(run.Id, result, _cancellationToken));
+
+        var counted = (await models.GetAsync(sonnet.Id, _cancellationToken))!;
+        Assert.Equal(new AiModelUsageTotals(2, 4_000_000_000, 6, 2000, 400, 1400, 200, 100), counted.Usage);
+        Assert.Equal(4m, counted.Usage.AiCredits);
+        Assert.Equal(AiModelUsageTotals.None, (await models.GetAsync(longContext.Id, _cancellationToken))!.Usage);
+
+        // Saving a copy loaded before the sessions doesn't reset the totals.
+        var saved = await models.SaveAsync(sonnet with { InputPrice = 300m }, _cancellationToken);
+        Assert.Equal((300m, 2), (saved.InputPrice, saved.Usage.Sessions));
+
+        var page = await models.GetUsagePageAsync(new AiModelUsageQuery(sonnet.Id, 0, 10), _cancellationToken);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal([2, 1], page.Items.Select(u => u.Attempt));
+        Assert.All(page.Items, u => Assert.Equal((run.Id, Repo, run.WorkItemId, 2m), (u.AgentRunId, u.RepositoryFullName, u.WorkItemId, u.AiCredits)));
+        Assert.All(page.Items, u => Assert.Null(u.WorkItem));
+
+        await models.DeleteAsync(sonnet.Id, _cancellationToken);
+        await using var db = await database.Factory.CreateDbContextAsync(_cancellationToken);
+        var rows = await db.AgentRunModelUsages.Where(u => u.AgentRunId == run.Id).ToListAsync(_cancellationToken);
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, u => Assert.Null(u.AiModelId));
+        Assert.False(rows.Single(u => u.Model == "gpt-unknown").Complete);
     }
 
     [Fact]

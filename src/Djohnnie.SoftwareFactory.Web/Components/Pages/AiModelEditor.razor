@@ -1,0 +1,280 @@
+@page "/models/new"
+@page "/models/{Id:guid}"
+@inject AiModelService ModelService
+@inject NavigationManager Navigation
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New model" : _stored?.Name ?? "GitHub Copilot model")</PageTitle>
+
+<PageBreadcrumbs Parents="@([new("GitHub Copilot Models", "/models")])" Current="@(IsNew ? "New" : _stored?.Name ?? "…")" BackDisabled="_saving" />
+
+@if (_error is not null)
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_model is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.h4">@(IsNew ? "New model" : _stored!.Name)</MudText>
+        @if (!IsNew)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TierLabel(_stored!)</MudChip>
+            @if (!_stored!.IsEnabled)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">Disabled</MudChip>
+            }
+        }
+    </MudStack>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        A model custom agents can use, with its price in AI credits per 1M tokens (1 AI credit = $0.01). Shared by all repositories.
+    </MudText>
+
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
+        @if (!IsNew)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ResetAsync" Disabled="_saving"
+                       StartIcon="@Icons.Material.Filled.Undo" title="Discard your changes and load the saved version">Reset</MudButton>
+        }
+    </MudStack>
+    @if (_saving)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudGrid>
+        <MudItem xs="12" md="@(IsNew ? 12 : 8)">
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">Model</MudText>
+                <MudForm @ref="_form" Model="_model">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Name" Label="Name" Required="true" MaxLength="100"
+                                          Immediate="true" TextChanged="NameChanged" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.ModelId" Label="Model id" Required="true" MaxLength="100" Class="mono"
+                                          HelperText="Value written to the agent's model key; agent worker sessions are counted on the model with this id." />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Provider" Label="Provider" MaxLength="100" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.ReleaseStatus" Label="Release status" MaxLength="50" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudSelect Variant="Variant.Outlined" T="string" @bind-Value="_model.Category" Label="Category" Clearable="true">
+                                <MudSelectItem T="string" Value="@("Powerful")">Powerful</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Versatile")">Versatile</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Lightweight")">Lightweight</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Tier" Label="Tier" Required="true" MaxLength="50"
+                                          HelperText="'Default' or e.g. 'Long context'." />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="_model.Threshold" Label="Threshold (input tokens)" MaxLength="50" Placeholder="e.g. > 200K" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mt-2">Price in AI credits per 1M tokens (1 AI credit = $0.01)</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudNumericField @bind-Value="_model.InputPrice" Label="Input" Min="0m" Format="0.##" Adornment="Adornment.End" AdornmentText="credits" HideSpinButtons="true" />
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudNumericField @bind-Value="_model.CachedInputPrice" Label="Cached input" Min="0m" Format="0.##" Adornment="Adornment.End" AdornmentText="credits" HideSpinButtons="true" />
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudNumericField @bind-Value="_model.CacheWritePrice" Label="Cache write" Min="0m" Format="0.##" Adornment="Adornment.End" AdornmentText="credits" HideSpinButtons="true" />
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudNumericField @bind-Value="_model.OutputPrice" Label="Output" Min="0m" Format="0.##" Adornment="Adornment.End" AdornmentText="credits" HideSpinButtons="true" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudSwitch @bind-Value="_model.IsEnabled" Color="Color.Primary" Label="Available in the agent editor" />
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        </MudItem>
+        @if (!IsNew)
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4 sticky-side" Outlined="true" Elevation="0" aria-label="Usage">
+                    <MudText Typo="Typo.h6">Usage</MudText>
+                    <MudText Typo="Typo.h5">@AiModel.FormatCredits(_stored!.Usage.AiCredits)</MudText>
+                    <UsageTileGrid Tiles="UsageTiles" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                        What DGHSF agent worker sessions spent on this model, as GitHub reported it. A model with several tiers counts
+                        sessions on its default tier; reasoning is already in the output tokens.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+            @if (_stored!.Usage.Sessions > 0)
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-2">Agent sessions <span class="tab-count">@_stored.Usage.Sessions.ToString("N0")</span></MudText>
+                    <AiModelSessionsTable ModelId="_stored.Id" />
+                </MudItem>
+            }
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private MudForm? _form;
+    private AiModel? _model;
+    private AiModel? _stored;
+    private string _derivedModelId = string.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private bool _loaded;
+    private Guid? _loadedId;
+
+    private bool IsNew => Id is null;
+
+    private List<UsageTile> UsageTiles
+    {
+        get
+        {
+            var usage = _stored!.Usage;
+            return
+            [
+                new("Sessions", usage.Sessions.ToString("N0"), "usage-requests", Wide: true),
+                new("Requests", usage.Requests.ToString("N0"), "usage-credits"),
+                new("Of which reasoning", usage.ReasoningTokens.ToString("N0"), "usage-reasoning"),
+                new("Input tokens", usage.InputTokens.ToString("N0"), "usage-input"),
+                new("Output tokens", usage.OutputTokens.ToString("N0"), "usage-output"),
+                new("Cache read", usage.CacheReadTokens.ToString("N0"), "usage-cached"),
+                new("Cache write", usage.CacheWriteTokens.ToString("N0"), "usage-cache-write")
+            ];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded && _loadedId == Id)
+        {
+            return;
+        }
+        _loaded = true;
+        _loadedId = Id;
+        _loading = true;
+        _error = null;
+        _model = null;
+        try
+        {
+            _stored = Id is { } id ? await ModelService.GetAsync(id) : new AiModel();
+            if (_stored is null)
+            {
+                _error = "This model does not exist.";
+                return;
+            }
+            Edit(_stored);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the model: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Edit(AiModel stored)
+    {
+        _model = stored.Copy();
+        _derivedModelId = ModelPricingScraper.ToModelId(_model.Name);
+    }
+
+    // The id follows the name until the user changes it.
+    private void NameChanged(string name)
+    {
+        var derived = ModelPricingScraper.ToModelId(name ?? string.Empty);
+        if (string.IsNullOrEmpty(_model!.ModelId) || _model.ModelId == _derivedModelId)
+        {
+            _model.ModelId = derived;
+        }
+        _derivedModelId = derived;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form!.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var saved = await ModelService.SaveAsync(_model!);
+            Snackbar.Add($"Saved '{saved.Name}'.", Severity.Success);
+            _stored = saved;
+            Edit(saved);
+            if (IsNew)
+            {
+                // The page keeps what it shows; only the address changes to the saved model.
+                _loadedId = saved.Id;
+                Navigation.NavigateTo($"/models/{saved.Id}", replace: true);
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Loads the stored model and its usage again and discards unsaved changes.</summary>
+    private async Task ResetAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Reset changes", $"Discard your changes to '{_stored!.Name}' and load the saved version again?",
+                yesText: "Reset", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (await ModelService.GetAsync(_stored.Id) is { } stored)
+            {
+                _stored = stored;
+                Edit(stored);
+            }
+            else
+            {
+                _error = "This model was deleted.";
+            }
+        }
+        catch (Exception ex) when (ex is Djohnnie.SoftwareFactory.Contracts.DomainRuleException or Djohnnie.SoftwareFactory.Contracts.ValidationFailedException or Djohnnie.SoftwareFactory.Contracts.PersistenceException)
+        {
+            Snackbar.Add($"Could not reset: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string TierLabel(AiModel model)
+    {
+        return string.IsNullOrEmpty(model.Threshold) ? model.Tier : $"{model.Tier} ({model.Threshold})";
+    }
+}

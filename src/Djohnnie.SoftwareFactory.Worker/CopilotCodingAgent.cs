@@ -174,6 +174,26 @@ public sealed class CopilotCodingAgent(ILogger<CopilotCodingAgent> logger, Micro
 #pragma warning restore GHCP001
             var models = metrics.ModelMetrics ?? new Dictionary<string, UsageMetricsModelMetric>();
             var complete = metrics.TotalNanoAiu is not null && (metrics.AiCreditsStatus is null || metrics.AiCreditsStatus == AiCreditsStatus.Complete);
+            var perModel = models
+                .OrderBy(m => m.Key, StringComparer.Ordinal)
+                .Select(m => new AgentRunModelUsage(
+                    Model: m.Key,
+                    NanoAiu: (long)Math.Round((double)(m.Value.TotalNanoAiu ?? 0)),
+                    Complete: m.Value.TotalNanoAiu is not null && (m.Value.AiCreditsStatus is null || m.Value.AiCreditsStatus == AiCreditsStatus.Complete),
+                    Requests: (int)(m.Value.Requests?.Count ?? 0),
+                    PremiumRequests: (decimal)(m.Value.Requests?.Cost ?? 0),
+                    InputTokens: (long)(m.Value.Usage?.InputTokens ?? 0),
+                    OutputTokens: (long)(m.Value.Usage?.OutputTokens ?? 0),
+                    CacheReadTokens: (long)(m.Value.Usage?.CacheReadTokens ?? 0),
+                    CacheWriteTokens: (long)(m.Value.Usage?.CacheWriteTokens ?? 0),
+                    ReasoningTokens: (long)(m.Value.Usage?.ReasoningTokens ?? 0)))
+                .ToList();
+            if (perModel.Count == 0 && metrics.TotalNanoAiu is > 0 && !string.IsNullOrWhiteSpace(metrics.CurrentModel))
+            {
+                // No breakdown: the whole session is counted on the model it ended on.
+                perModel.Add(new AgentRunModelUsage(metrics.CurrentModel, (long)Math.Round(metrics.TotalNanoAiu.Value), complete, 0,
+                    (decimal)metrics.TotalPremiumRequestCost, 0, 0, 0, 0, 0));
+            }
             return new AgentRunUsage(
                 NanoAiu: (long)Math.Round(metrics.TotalNanoAiu ?? 0),
                 Complete: complete,
@@ -182,7 +202,8 @@ public sealed class CopilotCodingAgent(ILogger<CopilotCodingAgent> logger, Micro
                 OutputTokens: models.Values.Sum(m => m.Usage?.OutputTokens ?? 0),
                 CacheReadTokens: models.Values.Sum(m => m.Usage?.CacheReadTokens ?? 0),
                 CacheWriteTokens: models.Values.Sum(m => m.Usage?.CacheWriteTokens ?? 0),
-                Models: models.Count == 0 ? metrics.CurrentModel : string.Join(", ", models.Keys.Order(StringComparer.Ordinal)));
+                Models: models.Count == 0 ? metrics.CurrentModel : string.Join(", ", models.Keys.Order(StringComparer.Ordinal)),
+                PerModel: perModel);
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException)
         {

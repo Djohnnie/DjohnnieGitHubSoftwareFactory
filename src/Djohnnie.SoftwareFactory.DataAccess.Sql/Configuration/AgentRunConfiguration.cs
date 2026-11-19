@@ -17,6 +17,13 @@ internal static class AgentRunConfiguration
                 entry.HasIndex(e => e.Status);
                 entry.HasIndex(e => e.WorkItemId);
             });
+            modelBuilder.Entity<AgentRunModelUsage>(usage =>
+            {
+                usage.HasOne<AgentRun>().WithMany().HasForeignKey(u => u.AgentRunId).OnDelete(DeleteBehavior.Cascade);
+                // Deleting a catalog model keeps what its sessions cost, without the link.
+                usage.HasOne<AiModel>().WithMany().HasForeignKey(u => u.AiModelId).OnDelete(DeleteBehavior.SetNull);
+                usage.Property(u => u.PremiumRequests).HasPrecision(18, 4);
+            });
             return modelBuilder;
         }
     }

@@ -130,7 +130,8 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var summary = Truncate(result.Summary, AgentRun.MaxSummaryLength);
         var models = Truncate(usage.Models, 500);
         var warning = Truncate(result.Warning, AgentRun.MaxErrorLength);
-        return await db.AgentRuns
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var updated = await db.AgentRuns
             .Where(r => r.Id == id && r.Status == AgentRunStatus.Running)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.Status, AgentRunStatus.Succeeded)
@@ -148,7 +149,15 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
                 .SetProperty(r => r.CacheWriteTokens, r => r.CacheWriteTokens + usage.CacheWriteTokens)
                 .SetProperty(r => r.Models, models)
                 .SetProperty(r => r.LeaseUntil, (DateTimeOffset?)null)
-                .SetProperty(r => r.CompletedAt, now), cancellationToken) == 1;
+                .SetProperty(r => r.CompletedAt, now), cancellationToken);
+        if (updated == 0)
+        {
+            return false;
+        }
+
+        await RecordModelUsageAsync(db, id, usage, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task<AgentRunStatus?> FailAsync(Guid id, string error, AgentRunUsage? usage, bool retry, CancellationToken cancellationToken = default)
@@ -171,6 +180,7 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var spent = usage ?? AgentRunUsage.None;
         var hasUsage = usage is not null;
         var models = Truncate(usage?.Models, 500);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var updated = await db.AgentRuns
             .Where(r => r.Id == id && r.Status == AgentRunStatus.Running)
             .ExecuteUpdateAsync(s => s
@@ -186,7 +196,14 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
                 .SetProperty(r => r.Models, r => models ?? r.Models)
                 .SetProperty(r => r.LeaseUntil, (DateTimeOffset?)null)
                 .SetProperty(r => r.CompletedAt, completedAt), cancellationToken);
-        return updated == 1 ? status : null;
+        if (updated == 0)
+        {
+            return null;
+        }
+
+        await RecordModelUsageAsync(db, id, spent, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return status;
     }
 
     public async Task<bool> CancelAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
@@ -246,6 +263,73 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .OrderByDescending(r => r.SysId)
             .FirstOrDefaultAsync(cancellationToken);
         return run?.ToContract();
+    }
+
+    /// <summary>
+    /// Adds a row per model that answered in one session (the run's current attempt) and adds it to the running totals of
+    /// the catalog model with that model id: its default tier when there are several, because a session's usage isn't split
+    /// per tier. A model that isn't in the catalog is stored without a link. Runs in the caller's transaction.
+    /// </summary>
+    private static async Task RecordModelUsageAsync(AppDbContext db, Guid runId, AgentRunUsage usage, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var perModel = (usage.PerModel ?? []).Where(m => !string.IsNullOrWhiteSpace(m.Model)).ToList();
+        if (perModel.Count == 0)
+        {
+            return;
+        }
+
+        var attempt = await db.AgentRuns.Where(r => r.Id == runId).Select(r => r.Attempts).SingleAsync(cancellationToken);
+        var names = perModel.Select(m => m.Model.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var catalog = await db.AiModels.AsNoTracking()
+            .Where(m => names.Contains(m.ModelId))
+            .Select(m => new { m.Id, m.ModelId, m.Tier, m.SysId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var model in perModel)
+        {
+            var name = model.Model.Trim();
+            var linked = catalog
+                .Where(c => string.Equals(c.ModelId, name, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => string.Equals(c.Tier, Entities.AiModel.DefaultTier, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(c => c.SysId)
+                .Select(c => (Guid?)c.Id)
+                .FirstOrDefault();
+            db.AgentRunModelUsages.Add(new Entities.AgentRunModelUsage
+            {
+                Id = Guid.NewGuid(),
+                AgentRunId = runId,
+                AiModelId = linked,
+                Attempt = attempt,
+                Model = Truncate(name, 100)!,
+                NanoAiu = model.NanoAiu,
+                Complete = model.Complete,
+                Requests = model.Requests,
+                PremiumRequests = model.PremiumRequests,
+                InputTokens = model.InputTokens,
+                OutputTokens = model.OutputTokens,
+                CacheReadTokens = model.CacheReadTokens,
+                CacheWriteTokens = model.CacheWriteTokens,
+                ReasoningTokens = model.ReasoningTokens,
+                OccurredAt = now
+            });
+
+            if (linked is { } modelId)
+            {
+                // An atomic increment, so sessions that end at the same time all count.
+                await db.AiModels
+                    .Where(m => m.Id == modelId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(m => m.UsageSessions, m => m.UsageSessions + 1)
+                        .SetProperty(m => m.UsageNanoAiu, m => m.UsageNanoAiu + model.NanoAiu)
+                        .SetProperty(m => m.UsageRequests, m => m.UsageRequests + model.Requests)
+                        .SetProperty(m => m.UsageInputTokens, m => m.UsageInputTokens + model.InputTokens)
+                        .SetProperty(m => m.UsageOutputTokens, m => m.UsageOutputTokens + model.OutputTokens)
+                        .SetProperty(m => m.UsageCacheReadTokens, m => m.UsageCacheReadTokens + model.CacheReadTokens)
+                        .SetProperty(m => m.UsageCacheWriteTokens, m => m.UsageCacheWriteTokens + model.CacheWriteTokens)
+                        .SetProperty(m => m.UsageReasoningTokens, m => m.UsageReasoningTokens + model.ReasoningTokens), cancellationToken);
+            }
+        }
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static string? Truncate(string? value, int maxLength)

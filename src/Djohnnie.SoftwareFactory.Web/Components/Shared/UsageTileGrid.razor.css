@@ -5,7 +5,7 @@
     margin-top: 12px;
 }
 
-.usage-grid:not(.usage-grid-row) .usage-requests {
+.usage-grid:not(.usage-grid-row) .usage-wide {
     grid-column: 1 / -1;
 }
 
@@ -42,6 +42,14 @@
 
 .usage-reasoning {
     --usage-color: #c92f67;
+}
+
+.usage-credits {
+    --usage-color: #1f7a3d;
+}
+
+.usage-cache-write {
+    --usage-color: #8a6a00;
 }
 
 .usage-stat {

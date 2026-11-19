@@ -51,6 +51,12 @@ public sealed record AiModel
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>
+    /// The running totals of what DGHSF agent worker sessions spent on this model. Kept by the store when a run ends; saving
+    /// the model never changes them.
+    /// </summary>
+    public AiModelUsageTotals Usage { get; set; } = AiModelUsageTotals.None;
+
     public bool IsDefaultTier => string.Equals(Tier, DefaultTier, StringComparison.OrdinalIgnoreCase);
 
     public string CostSummary => FormatCost(InputPrice, OutputPrice);
