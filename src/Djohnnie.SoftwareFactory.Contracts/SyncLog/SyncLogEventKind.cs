@@ -21,7 +21,10 @@ public enum SyncLogEventKind
     /// <summary>A work item could not be synced; the others were.</summary>
     WorkItemFailed = 4,
 
-    /// <summary>The work items of a repository could not be listed, so none of them were synced.</summary>
+    /// <summary>
+    /// The work items of a repository could not be listed, so none of them were synced, or the sync could not check whether
+    /// the repository still exists on GitHub.
+    /// </summary>
     RepositoryFailed = 5,
 
     /// <summary>A work item was synced, but Copilot's progress could not be read from its pull request or agent run.</summary>
@@ -31,5 +34,14 @@ public enum SyncLogEventKind
     RunStopped = 7,
 
     /// <summary>The run failed before it could sync anything, or was cancelled.</summary>
-    RunFailed = 8
+    RunFailed = 8,
+
+    /// <summary>
+    /// GitHub no longer knows a repository, so it was archived: left out of the favorites and the recently accessed
+    /// repositories and of the next syncs, while what DGHSF stored can still be opened.
+    /// </summary>
+    RepositoryArchived = 9,
+
+    /// <summary>An archived repository exists on GitHub again, so it is synced again.</summary>
+    RepositoryRestored = 10
 }

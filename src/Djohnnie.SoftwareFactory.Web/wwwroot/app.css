@@ -48,6 +48,11 @@ h1:focus {
     outline-offset: 2px;
 }
 
+/* A navigation link to a page that needs GitHub, for a repository removed from GitHub; the wrapper carries the tooltip. */
+.app-navigation-disabled {
+    display: inline-flex;
+}
+
 /* An external navigation link: a small "open in new" badge in the corner of its icon. */
 .external-link {
     position: relative;

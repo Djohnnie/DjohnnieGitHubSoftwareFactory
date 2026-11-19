@@ -45,7 +45,7 @@
         @* Copilot's branch, to check the pull request out locally. *@
         <span class="pr-branch">
             <MudIcon Icon="@Icons.Material.Filled.AltRoute" Size="Size.Small" />
-            <MudLink Href="@BranchUrl(branch)" Target="_blank" Class="pr-branch-name" title="Open the branch on GitHub">@branch</MudLink>
+            <GitHubLink Href="@BranchUrl(branch)" Class="pr-branch-name" Title="Open the branch on GitHub">@branch</GitHubLink>
             <MudTooltip Text="Copy branch name">
                 <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Class="pr-branch-copy" aria-label="Copy branch name"
                                OnClick="() => CopyBranchAsync(branch)" />
@@ -64,20 +64,21 @@
         }
         @if (_item.IsDraft)
         {
-            <MudTooltip Text="@(AcceptBlockedByParent ?? string.Empty)" Disabled="AcceptBlockedByParent is null">
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="@(_busy || AcceptBlockedByParent is not null)"
+            var acceptBlocked = Removed ? GitHubLink.RemovedTitle : AcceptBlockedByParent;
+            <MudTooltip Text="@(acceptBlocked ?? string.Empty)" Disabled="acceptBlocked is null">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="@(_busy || acceptBlocked is not null)"
                            StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
             </MudTooltip>
         }
         else if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
         {
-            <MudButton Variant="Variant.Text" Color="Color.Warning" OnClick="AssignAsync" Disabled="_busy"
-                       StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Warning" OnClick="AssignAsync" Disabled="@(_busy || Removed)"
+                       title="@(Removed ? GitHubLink.RemovedTitle : null)" StartIcon="@Icons.Material.Filled.SmartToy">Assign agent</MudButton>
         }
         @if (_item.HasIssue)
         {
-            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RefreshAsync" Disabled="_busy"
-                       StartIcon="@Icons.Material.Filled.Sync">@WorkItemActions.RefreshText</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RefreshAsync" Disabled="@(_busy || Removed)"
+                       title="@(Removed ? GitHubLink.RemovedTitle : null)" StartIcon="@Icons.Material.Filled.Sync">@WorkItemActions.RefreshText</MudButton>
         }
         @if (!IsNew && (_item.IsDraft || _item.CanEditAssignment))
         {
@@ -231,7 +232,7 @@ else if (_item is not null)
                                                 <td style="width:1%; white-space:nowrap">
                                                     @if (child.IssueNumber is { } childNumber)
                                                     {
-                                                        <MudLink Href="@child.IssueUrl" Target="_blank">#@childNumber</MudLink>
+                                                        <GitHubLink Href="@child.IssueUrl">#@childNumber</GitHubLink>
                                                     }
                                                 </td>
                                             </tr>
@@ -266,7 +267,7 @@ else if (_item is not null)
                         @if (_item.IssueNumber is { } number)
                         {
                             <MudText Typo="Typo.body2" Class="mt-2">
-                                GitHub issue <MudLink Href="@_item.IssueUrl" Target="_blank">#@number</MudLink>
+                                GitHub issue <GitHubLink Href="@_item.IssueUrl">#@number</GitHubLink>
                             </MudText>
                         }
                         @if (_item.AcceptedAt is { } accepted)
@@ -285,7 +286,7 @@ else if (_item is not null)
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@CopilotProgressChip.DescriptionOf(_item.Progress)</MudText>
                             @if (_item.AgentRunUrl is not null)
                             {
-                                <MudLink Href="@_item.AgentRunUrl" Target="_blank" Typo="Typo.caption">Copilot session log</MudLink>
+                                <GitHubLink Href="@_item.AgentRunUrl" Typo="Typo.caption">Copilot session log</GitHubLink>
                             }
                         }
                         @if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
@@ -354,7 +355,7 @@ else if (_item is not null)
                                     <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)">@parent.Title</MudLink>
                                     @if (parent.IssueNumber is { } parentNumber)
                                     {
-                                        <span> (<MudLink Href="@parent.IssueUrl" Target="_blank">#@parentNumber</MudLink>)</span>
+                                        <span> (<GitHubLink Href="@parent.IssueUrl">#@parentNumber</GitHubLink>)</span>
                                     }
                                 </MudText>
                             }
@@ -420,7 +421,7 @@ else if (_item is not null)
                         </MudPaper>
                     }
 
-                    @if (IsWorker && _item.HasIssue)
+                    @if (IsWorker && _item.HasIssue && !Removed)
                     {
                         <AgentRunsPanel @ref="_agentRuns" RepositoryFullName="@RepositoryName" WorkItemId="_item.Id"
                                         CanStart="@(_item.Status == WorkItemStatus.InProgress)" Changed="RefreshAsync" />
@@ -432,7 +433,7 @@ else if (_item is not null)
 
     @* With a pull request the page gets tabs; the pull request is only loaded from GitHub when one of its tabs is opened.
        The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
-    @if (_item.PullRequestNumber is { } pullRequestNumber)
+    @if (_item.PullRequestNumber is { } pullRequestNumber && !Removed)
     {
         @* Only the tab bar is outlined (no ApplyEffectsToContainer): the cards in the panels are outlined already. *@
         <MudTabs ActivePanelIndex="_tab" ActivePanelIndexChanged="ChangeTab" KeepPanelsAlive="true" Elevation="0" Outlined="true" Rounded="true">
@@ -536,6 +537,18 @@ else if (_item is not null)
     private string ChatPlaceholder =>_type == WorkItemType.Bug ? "Describe what goes wrong" : "Describe what you want to build";
     private WorkItemTemplate? SelectedTemplate => _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
     private string RepositoryName => Repository.Current!.FullName;
+
+    /// <summary>
+    /// The repository was removed from GitHub: accepting, assigning, refreshing, the pull request and agent runs need GitHub,
+    /// and its links would lead nowhere.
+    /// </summary>
+    private bool Removed
+    {
+        get
+        {
+            return Repository.IsRemovedFromGitHub;
+        }
+    }
     private string ParentNames => string.Join(" or ", _type.ParentTypes.Select(WorkItemActions.Name));
 
     /// <summary>The chosen parent: from the candidates while editing, otherwise as stored.</summary>
@@ -912,7 +925,8 @@ else if (_item is not null)
             () => _item!,
             () => SelectedTemplate,
             models,
-            async cancellationToken => _customAgents ??= await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
+            // A repository removed from GitHub has no custom agents to read anymore.
+            async cancellationToken => _customAgents ??= Removed ? [] : await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
             change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }),
             (parentId, cancellationToken) => WorkItemService.GetAncestorsAsync(RepositoryName, parentId, cancellationToken),
             Knowledge.IsSearchEnabled ? SearchKnowledgeBaseAsync : null);

@@ -126,6 +126,15 @@
     {
         _loading = true;
         _error = null;
+        if (Repository.IsRemovedFromGitHub)
+        {
+            // Which skills are enabled lives on GitHub, which no longer knows the repository; the managed skills can still be edited.
+            _unmanaged = [];
+            await LoadSkillsOnlyAsync();
+            _loading = false;
+            return;
+        }
+
         try
         {
             var skills = await SkillData.GetRepositorySkillsAsync(RepositoryName);

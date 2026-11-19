@@ -56,8 +56,9 @@
         <MudTd DataLabel="Model">@(string.IsNullOrEmpty(context.Agent?.Model) ? "default" : context.Agent.Model)</MudTd>
         <MudTd DataLabel="Updated">@context.Template.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
-            <MudTooltip Text="@(Repository.Current is { } repo ? $"Create an agent in {repo.FullName} from this template" : "Select a repository and create an agent from this template")">
-                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary" Disabled="context.ParseError is not null"
+            <MudTooltip Text="@CreateAgentText">
+                <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary"
+                               Disabled="@(context.ParseError is not null || Repository.IsRemovedFromGitHub)"
                                Href="@($"/agents/new?template={context.Template.Id}")" aria-label="Create agent" />
             </MudTooltip>
             <MudTooltip Text="Commit to several repositories">
@@ -79,6 +80,20 @@
 </MudTable>
 
 @code {
+    /// <summary>The agent is committed to the current repository, which a repository removed from GitHub can't take anymore.</summary>
+    private string CreateAgentText
+    {
+        get
+        {
+            return Repository.Current switch
+            {
+                null => "Select a repository and create an agent from this template",
+                { } repo when Repository.IsRemovedFromGitHub => $"{repo.FullName} was removed from GitHub, so no agent can be created in it",
+                { } repo => $"Create an agent in {repo.FullName} from this template"
+            };
+        }
+    }
+
     private sealed record TemplateRow(AgentTemplate Template, AgentDefinition? Agent, string? ParseError);
 
     private List<TemplateRow> _templates = [];

@@ -5,6 +5,7 @@ using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.Repositories;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
@@ -110,6 +111,80 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
         });
         var favorite = Assert.Single(await repositories.GetFavoritesAsync(Xunit.TestContext.Current.CancellationToken));
         Assert.Equal(Repository.FullName, favorite.FullName);
+    }
+
+    [Fact]
+    public async Task RepositoriesRemovedFromGitHub_AreListedApart_AndCanBeOpened()
+    {
+        var repositories = Services.GetRequiredService<RepositoryService>();
+        var cancellationToken = Xunit.TestContext.Current.CancellationToken;
+        await repositories.RecordAccessAsync("owner/gone", cancellationToken);
+        await repositories.SetFavoriteAsync("owner/gone", true, cancellationToken);
+        await repositories.SetArchivedAsync("owner/gone", true, cancellationToken);
+        RepositorySummary? opened = null;
+        var cut = Render<RepositoryPicker>(parameters => parameters
+            .Add(component => component.OnArchivedSelected, repository => opened = repository));
+        _gitHub.ListResponse.SetResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { Repository }) });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("owner/recent", cut.Markup);
+            Assert.Contains("owner/gone", cut.Find("[aria-label='Repositories removed from GitHub']").TextContent);
+        });
+        Assert.DoesNotContain("Favorites", cut.Markup);
+        Assert.DoesNotContain("Recently accessed", cut.Markup);
+        Assert.Contains("no longer exist on GitHub", cut.Markup);
+
+        await cut.InvokeAsync(() => cut.Find("[aria-label='Repositories removed from GitHub'] tbody tr").Click());
+
+        cut.WaitForAssertion(() => Assert.Equal("owner/gone", opened?.FullName));
+        Assert.True(opened!.IsArchived);
+    }
+
+    [Fact]
+    public async Task RepositoryRemovedFromGitHub_IsHiddenFromTheRemovedList_WhenGitHubListsItAgain()
+    {
+        var repositories = Services.GetRequiredService<RepositoryService>();
+        await repositories.RecordAccessAsync(Repository.FullName, Xunit.TestContext.Current.CancellationToken);
+        await repositories.SetArchivedAsync(Repository.FullName, true, Xunit.TestContext.Current.CancellationToken);
+        var cut = Render<RepositoryPicker>();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[aria-label='Repositories removed from GitHub']")));
+
+        _gitHub.ListResponse.SetResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { Repository }) });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("owner/recent", cut.Markup);
+            Assert.Empty(cut.FindAll("[aria-label='Repositories removed from GitHub']"));
+        });
+    }
+
+    [Fact]
+    public async Task OpeningARepositoryRemovedFromGitHub_DisablesItsGitHubLinks_UntilGitHubReturnsIt()
+    {
+        var repositories = Services.GetRequiredService<RepositoryService>();
+        var cancellationToken = Xunit.TestContext.Current.CancellationToken;
+        await repositories.RecordAccessAsync(Repository.FullName, cancellationToken);
+        await repositories.SetArchivedAsync(Repository.FullName, true, cancellationToken);
+        var context = Services.GetRequiredService<RepositoryContext>();
+
+        await context.SelectArchivedAsync((await repositories.FindAsync(Repository.FullName, cancellationToken))!);
+
+        Assert.True(context.IsRemovedFromGitHub);
+        Assert.NotNull(context.RemovedFromGitHubAt);
+        Assert.Equal((Repository.FullName, "owner", ""), (context.Current!.FullName, context.Current.Owner.Login, context.Current.HtmlUrl));
+        var link = Render<GitHubLink>(parameters => parameters
+            .Add(component => component.Href, "https://github.com/owner/recent/issues/1")
+            .AddChildContent("#1"));
+        Assert.Empty(link.FindAll("a"));
+        Assert.Equal(GitHubLink.RemovedTitle, link.Find("span").GetAttribute("title"));
+
+        await context.SelectAsync(Repository);
+
+        Assert.False(context.IsRemovedFromGitHub);
+        Assert.False((await repositories.FindAsync(Repository.FullName, cancellationToken))!.IsArchived);
+        link.Render();
+        Assert.Equal("https://github.com/owner/recent/issues/1", link.Find("a").GetAttribute("href"));
     }
 
     [Fact]

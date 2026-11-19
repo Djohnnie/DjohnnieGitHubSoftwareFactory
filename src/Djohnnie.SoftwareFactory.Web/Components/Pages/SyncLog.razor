@@ -2,7 +2,10 @@
 @attribute [RepositoryIndependent]
 @using Djohnnie.SoftwareFactory.Application.Features.SyncLog
 @using Djohnnie.SoftwareFactory.Contracts.SyncLog
+@using Djohnnie.SoftwareFactory.Application.Features.Repositories
 @inject SyncLogService SyncLogService
+@inject RepositoryService Repositories
+@inject ILogger<SyncLog> Logger
 
 <PageTitle>Sync log</PageTitle>
 
@@ -66,7 +69,15 @@
         <MudTd DataLabel="Issue">
             @if (context.IssueUrl is { } url)
             {
-                <MudLink Href="@url" Target="_blank" rel="noopener" Typo="Typo.body2">#@context.IssueNumber</MudLink>
+                @* The issue of a repository removed from GitHub is gone too. *@
+                @if (IsArchived(context.RepositoryFullName))
+                {
+                    <MudText Typo="Typo.body2" HtmlTag="span" title="@GitHubLink.RemovedTitle">#@context.IssueNumber</MudText>
+                }
+                else
+                {
+                    <MudLink Href="@url" Target="_blank" rel="noopener" Typo="Typo.body2">#@context.IssueNumber</MudLink>
+                }
             }
         </MudTd>
         <MudTd DataLabel="Event" Class="sync-log-message">
@@ -104,6 +115,9 @@
     private string? _repository;
     private string? _error;
 
+    /// <summary>The repositories removed from GitHub, whose issue links would lead nowhere.</summary>
+    private HashSet<string> _archived = new(StringComparer.OrdinalIgnoreCase);
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -114,6 +128,21 @@
         {
             _error = $"Could not load the repositories to filter on: {ex.Message}";
         }
+
+        try
+        {
+            _archived = new((await Repositories.GetArchivedAsync()).Select(repository => repository.FullName), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            // The issue links then all stay links.
+            Logger.LogWarning(ex, "Could not load the repositories removed from GitHub.");
+        }
+    }
+
+    private bool IsArchived(string? repositoryFullName)
+    {
+        return repositoryFullName is not null && _archived.Contains(repositoryFullName);
     }
 
     private async Task<TableData<SyncLogEvent>> LoadAsync(TableState state, CancellationToken cancellationToken)

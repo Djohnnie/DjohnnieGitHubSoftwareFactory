@@ -54,7 +54,7 @@
                         }
                         @if (run.PullRequestNumber is { } number)
                         {
-                            <MudLink Href="@run.PullRequestUrl" Target="_blank" Typo="Typo.caption">#@number</MudLink>
+                            <GitHubLink Href="@run.PullRequestUrl" Typo="Typo.caption">#@number</GitHubLink>
                         }
                     </MudStack>
                     @if (run.AiCredits is { } credits)

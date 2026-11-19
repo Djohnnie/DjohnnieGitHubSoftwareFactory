@@ -1,4 +1,5 @@
 using System.Net;
+using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Application.Features.SyncLog;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
@@ -185,7 +186,7 @@ public partial class WorkItemServiceTests
     {
         var epic = await AcceptAsync(WorkItemType.Epic, "Epic");
         _gitHub.IssuesOnGitHub[42] = new("Renamed", $"About Epic.\n\n{WorkItemWorkflow.Marker(epic)}", "open");
-        var sync = new WorkItemSyncService(_services.GetRequiredService<RepositoryService>(), _service, new BrokenSyncLog(), TimeProvider.System,
+        var sync = new WorkItemSyncService(_services.GetRequiredService<RepositoryService>(), _service, _services.GetRequiredService<GitHubService>(), new BrokenSyncLog(), TimeProvider.System,
             Options.Create(new WorkItemSyncOptions { RetryDelays = [] }), NullLogger<WorkItemSyncService>.Instance);
 
         var result = await sync.SyncAcceptedAsync(_cancellationToken);

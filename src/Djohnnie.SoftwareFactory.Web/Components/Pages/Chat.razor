@@ -255,6 +255,12 @@ else if (_agent is { IsEnabled: false })
 
     private async Task<AssistantTools> CreateToolsAsync()
     {
+        if (Repository.IsRemovedFromGitHub)
+        {
+            // GitHub no longer knows the repository, so the agent only gets what DGHSF stored about it.
+            return Chats.CreateTools(Repo, null);
+        }
+
         try
         {
             _gitHubTools = await GitHubMcp.ConnectAsync(Repo, _disposed.Token);

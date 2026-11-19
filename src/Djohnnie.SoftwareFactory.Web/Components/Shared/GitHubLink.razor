@@ -1,0 +1,45 @@
+@inject RepositoryContext Repository
+
+@* A link to GitHub that becomes plain text when the current repository was removed from GitHub (or there is no URL), so it can't lead to a 404. *@
+@if (IsDisabled)
+{
+    <span class="@Class" title="@DisabledTitle">@ChildContent</span>
+}
+else
+{
+    <MudLink Href="@Href" Target="_blank" rel="noopener" Typo="Typo" Class="@Class" title="@Title">@ChildContent</MudLink>
+}
+
+@code {
+    public const string RemovedTitle = "Removed from GitHub";
+
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public Typo Typo { get; set; } = Typo.body1;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsRemoved
+    {
+        get
+        {
+            return Repository.IsRemovedFromGitHub;
+        }
+    }
+
+    private bool IsDisabled
+    {
+        get
+        {
+            return IsRemoved || string.IsNullOrEmpty(Href);
+        }
+    }
+
+    private string? DisabledTitle
+    {
+        get
+        {
+            return IsRemoved ? RemovedTitle : Title;
+        }
+    }
+}

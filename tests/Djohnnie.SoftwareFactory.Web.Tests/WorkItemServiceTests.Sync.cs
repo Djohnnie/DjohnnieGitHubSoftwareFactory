@@ -89,7 +89,7 @@ public partial class WorkItemServiceTests
         var error = await Assert.ThrowsAsync<GitHubApiException>(() => Sync.SyncAcceptedAsync(_cancellationToken));
 
         Assert.Equal(status, error.StatusCode);
-        Assert.Single(_gitHub.Requests);
+        Assert.Single(_gitHub.Requests, r => r.Path.StartsWith("/repos/owner/repo/issues/", StringComparison.Ordinal));
         var stopped = Assert.Single(await SyncLogAsync());
         Assert.Equal((SyncLogEventKind.RunStopped, SyncLogLevel.Error, 42), (stopped.Kind, stopped.Level, stopped.IssueNumber));
         Assert.Contains("after 0 of 2 work items, so 2 were skipped", stopped.Message);

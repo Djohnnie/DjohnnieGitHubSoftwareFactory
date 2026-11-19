@@ -23,6 +23,16 @@ public sealed class Repository : Entity
 
     public bool IsFavorite { get; set; }
 
+    /// <summary>
+    /// Set by the sync when GitHub no longer knows the repository (it was deleted, or the sync token lost access to it).
+    /// Not GitHub's own "archived" state. Everything DGHSF stored stays and can still be opened; it is only left out of
+    /// the favorites and the recently accessed repositories.
+    /// </summary>
+    public bool IsArchived { get; set; }
+
+    /// <summary>When the sync found the repository missing on GitHub; <c>null</c> unless <see cref="IsArchived"/>.</summary>
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public List<WorkItem> WorkItems { get; set; } = [];
     public List<Agent> Agents { get; set; } = [];
 

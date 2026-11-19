@@ -187,6 +187,24 @@ public class ActionsPageTests : BunitContext
         Assert.Equal(["/", "/chat", "/mindmaps", "/work-item-map", "/knowledge-base", "/actions"], links.Take(6));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Navigation_ForARepositoryRemovedFromGitHub_DisablesThePagesThatOnlyWorkWithGitHub(bool vertical)
+    {
+        var cut = Render<AppNavigation>(p => p.Add(n => n.HasRepository, true).Add(n => n.GitHubAvailable, false).Add(n => n.Vertical, vertical));
+
+        var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
+
+        Assert.DoesNotContain("/actions", links);
+        Assert.DoesNotContain("/copilot-code-review", links);
+        Assert.DoesNotContain("/copilot-instructions", links);
+        Assert.DoesNotContain("/agents", links);
+        Assert.Contains("/mindmaps", links);
+        Assert.Contains("/skills", links);
+        Assert.Equal(4, cut.FindAll("button[disabled]").Count);
+    }
+
     [Fact]
     public void Navigation_HidesTheActionsPageWithoutARepository()
     {

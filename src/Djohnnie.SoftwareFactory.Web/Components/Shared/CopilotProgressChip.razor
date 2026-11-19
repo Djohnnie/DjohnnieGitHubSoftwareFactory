@@ -1,13 +1,15 @@
+@inject RepositoryContext Repository
+
 @if (Item.Progress != CopilotProgress.None)
 {
     <span style="white-space:nowrap">
         <MudTooltip Text="@DescriptionOf(Item.Progress)">
             <MudChip T="string" Size="Size.Small" Color="@ColorOf(Item.Progress)" Variant="Variant.Outlined" Icon="@IconOf(Item.Progress)"
-                     Href="@(Item.AgentRunUrl ?? Item.PullRequestUrl)" Target="_blank">@LabelOf(Item.Progress)</MudChip>
+                     Href="@(Repository.IsRemovedFromGitHub ? null : Item.AgentRunUrl ?? Item.PullRequestUrl)" Target="_blank">@LabelOf(Item.Progress)</MudChip>
         </MudTooltip>
         @if (Item.PullRequestNumber is { } number)
         {
-            <MudLink Href="@Item.PullRequestUrl" Target="_blank" title="Pull request">PR #@number</MudLink>
+            <GitHubLink Href="@Item.PullRequestUrl" Title="Pull request">PR #@number</GitHubLink>
         }
         @if (Item.PullRequestChecks != PullRequestChecks.None)
         {

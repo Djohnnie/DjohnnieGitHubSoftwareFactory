@@ -8,7 +8,16 @@
     <PageBreadcrumbs />
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-6">
-        <MudAvatar Size="Size.Large"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+        <MudAvatar Size="Size.Large">
+            @if (Repository.IsRemovedFromGitHub || repo.Owner.AvatarUrl is null)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" />
+            }
+            else
+            {
+                <MudImage Src="@repo.Owner.AvatarUrl" Alt="" />
+            }
+        </MudAvatar>
         <div>
             <MudText Typo="Typo.h4">@repo.FullName</MudText>
             @if (!string.IsNullOrEmpty(repo.Description))
@@ -19,7 +28,14 @@
     </MudStack>
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap">
-        <MudChip Variant="Variant.Outlined" T="string" Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">@(repo.Private ? "Private" : "Public")</MudChip>
+        @if (Repository.IsRemovedFromGitHub)
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Inventory2">Removed from GitHub</MudChip>
+        }
+        else
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)">@(repo.Private ? "Private" : "Public")</MudChip>
+        }
         @if (!string.IsNullOrEmpty(repo.Language))
         {
             <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Code">@repo.Language</MudChip>
@@ -32,12 +48,19 @@
         {
             <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Material.Filled.Schedule">Last push @pushedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudChip>
         }
-        <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
+        @if (!Repository.IsRemovedFromGitHub)
+        {
+            <MudChip Variant="Variant.Outlined" T="string" Icon="@Icons.Custom.Brands.GitHub" Href="@repo.HtmlUrl" Target="_blank">Open on GitHub</MudChip>
+        }
     </MudStack>
 
-    <RepositoryInfographic RepositoryFullName="@repo.FullName" />
-    <WorkflowRunsInfographic Repository="@repo" />
-    <CopilotSessionsInfographic Repository="@repo" />
-    <CopilotActivityInfographic Repository="@repo" />
-    <CopilotBillingInfographic Repository="@repo" />
+    @* Only the work item counts come from the database; the rest is read from GitHub, which no longer knows a removed repository. *@
+    <RepositoryInfographic RepositoryFullName="@repo.FullName" GitHubAvailable="@(!Repository.IsRemovedFromGitHub)" />
+    @if (!Repository.IsRemovedFromGitHub)
+    {
+        <WorkflowRunsInfographic Repository="@repo" />
+        <CopilotSessionsInfographic Repository="@repo" />
+        <CopilotActivityInfographic Repository="@repo" />
+        <CopilotBillingInfographic Repository="@repo" />
+    }
 }

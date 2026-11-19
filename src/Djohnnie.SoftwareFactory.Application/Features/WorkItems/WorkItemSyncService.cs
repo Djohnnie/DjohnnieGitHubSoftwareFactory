@@ -14,12 +14,14 @@ using Microsoft.Extensions.Options;
 namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
 /// <summary>
-/// Refreshes every accepted work item of every known repository from its GitHub issue; nothing is sent to GitHub.
+/// Checks that every known repository still exists on GitHub (archiving the ones that don't), then refreshes every accepted
+/// work item of the others from its GitHub issue; nothing is sent to GitHub.
 /// What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
 /// </summary>
 public sealed class WorkItemSyncService(
     RepositoryService repositories,
     WorkItemService workItems,
+    GitHubService gitHub,
     ISyncLogStore log,
     TimeProvider time,
     IOptions<WorkItemSyncOptions> options,
@@ -29,7 +31,8 @@ public sealed class WorkItemSyncService(
     private static readonly TimeSpan LogTimeoutAfterCancellation = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// First lists the accepted items of every repository (database only), then refreshes them one by one. A problem with
+    /// First checks every repository on GitHub (<see cref="CheckRepositoriesAsync"/>), then lists the accepted items of the
+    /// ones that are still there (database only), then refreshes them one by one. A problem with
     /// one item or repository is reported in the result and the log and doesn't stop the others; transient errors are
     /// retried first (<see cref="WorkItemSyncOptions.RetryDelays"/>).
     /// </summary>
@@ -57,8 +60,25 @@ public sealed class WorkItemSyncService(
         }
 
         var failures = new List<WorkItemSyncFailure>();
+        List<RepositorySummary> onGitHub;
+        try
+        {
+            onGitHub = await CheckRepositoriesAsync(run, known, failures, cancellationToken);
+        }
+        catch (GitHubApiException ex) when (StopsTheRun(ex))
+        {
+            await WriteAsync(run, cancellationToken);
+            throw;
+        }
+        catch (Exception ex) when (IsRunCancelled(ex, cancellationToken))
+        {
+            run.Add(SyncLogLevel.Warning, SyncLogEventKind.RunFailed, "The run was cancelled while checking the repositories on GitHub; no work items were synced.");
+            await WriteAsync(run, cancellationToken);
+            throw;
+        }
+
         var eligible = new List<WorkItem>();
-        foreach (var repository in known)
+        foreach (var repository in onGitHub)
         {
             try
             {
@@ -82,6 +102,7 @@ public sealed class WorkItemSyncService(
 
         if (eligible.Count == 0 && failures.Count == 0)
         {
+            await WriteArchivingAsync(run, cancellationToken);
             await RepeatAsync(run, SyncLogEventKind.NoEligibleWorkItems,
                 n => $"No action for {Iterations(n)} because no work items are in an eligible state (accepted, with a GitHub issue).", cancellationToken);
             return new(known.Count, 0, 0, failures);
@@ -138,6 +159,7 @@ public sealed class WorkItemSyncService(
         if (changed == 0 && failures.Count == 0 && progressWarnings.Count == 0)
         {
             var repositoryCount = eligible.Select(i => i.RepositoryFullName).Distinct().Count();
+            await WriteArchivingAsync(run, cancellationToken);
             await RepeatAsync(run, SyncLogEventKind.NoChanges,
                 n => $"No changes for {Iterations(n)}: {Count(eligible.Count, "work item")} in {Count(repositoryCount, "repository", "repositories")} checked, all up to date.",
                 cancellationToken);
@@ -149,6 +171,98 @@ public sealed class WorkItemSyncService(
             SyncLogEventKind.RunCompleted, Summary(syncResult, run.Elapsed));
         await WriteAsync(run, cancellationToken);
         return syncResult;
+    }
+
+    /// <summary>
+    /// Asks GitHub for every known repository. One GitHub no longer knows (404) is archived: it leaves the favorites and the
+    /// recently accessed repositories and isn't synced anymore, while what DGHSF stored stays. An archived one that is back
+    /// (e.g. once the sync token has access to it again) is restored. GitHub answers 404 both for a deleted repository and
+    /// for one the sync token can't see, so the token needs access to every repository DGHSF works with.
+    /// A repository that couldn't be checked keeps its state and is reported in <paramref name="failures"/>.
+    /// </summary>
+    /// <returns>The repositories that are (still) on GitHub, whose work items are synced.</returns>
+    /// <exception cref="GitHubApiException">GitHub refused the token or the rate limit was reached; the run is logged as stopped.</exception>
+    private async Task<List<RepositorySummary>> CheckRepositoriesAsync(Run run, IReadOnlyList<RepositorySummary> known, List<WorkItemSyncFailure> failures,
+        CancellationToken cancellationToken)
+    {
+        var onGitHub = new List<RepositorySummary>();
+        foreach (var repository in known)
+        {
+            try
+            {
+                var exists = await WithRetriesAsync(() => ExistsOnGitHubAsync(repository.FullName, cancellationToken), cancellationToken);
+                if (exists == repository.IsArchived)
+                {
+                    await WithRetriesAsync(() => repositories.SetArchivedAsync(repository.FullName, !exists, cancellationToken), cancellationToken);
+                    if (exists)
+                    {
+                        run.Add(SyncLogLevel.Information, SyncLogEventKind.RepositoryRestored,
+                            $"{repository.FullName} exists on GitHub again, so it is no longer archived and its work items are synced again.",
+                            repository.FullName);
+                    }
+                    else
+                    {
+                        run.Add(SyncLogLevel.Warning, SyncLogEventKind.RepositoryArchived,
+                            $"{repository.FullName} no longer exists on GitHub (or the sync token has no access to it), so it was archived: it is no longer " +
+                            "a favorite or among the recently accessed repositories, and its work items aren't synced anymore. Everything DGHSF stored can still be opened.",
+                            repository.FullName);
+                    }
+                }
+
+                // Last, so a repository whose new state couldn't be saved is handled below like one that couldn't be checked.
+                if (exists)
+                {
+                    onGitHub.Add(repository);
+                }
+            }
+            catch (GitHubApiException ex) when (StopsTheRun(ex))
+            {
+                run.Add(SyncLogLevel.Error, SyncLogEventKind.RunStopped,
+                    $"Stopped while checking whether {repository.FullName} still exists on GitHub, so no work items were synced: {StopReason(ex)}",
+                    repository.FullName, detail: $"GitHub answered {(int)ex.StatusCode}: {ex.Message}");
+                throw;
+            }
+            catch (Exception ex) when (AffectsOnlyThisOne(ex, cancellationToken))
+            {
+                // Unknown whether it still exists, so it stays as it was.
+                if (!repository.IsArchived)
+                {
+                    onGitHub.Add(repository);
+                }
+                failures.Add(new(repository.FullName, null, ex.Message));
+                run.Add(SyncLogLevel.Error, SyncLogEventKind.RepositoryFailed,
+                    $"Could not check whether {repository.FullName} still exists on GitHub, so it was left {(repository.IsArchived ? "archived" : "as it was")}: {ex.Message}",
+                    repository.FullName, detail: DetailOf(ex));
+            }
+        }
+        return onGitHub;
+    }
+
+    /// <summary>Whether GitHub knows the repository; a renamed one still exists, since GitHub redirects to its new name.</summary>
+    private async Task<bool> ExistsOnGitHubAsync(string repositoryFullName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gitHub.GetRepositoryAsync(repositoryFullName, cancellationToken);
+            return true;
+        }
+        catch (GitHubApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the archived and restored repositories of a run that otherwise only repeats the previous one
+    /// (<see cref="RepeatAsync"/>), which doesn't write the run's own events.
+    /// </summary>
+    private async Task WriteArchivingAsync(Run run, CancellationToken cancellationToken)
+    {
+        if (run.Events.Count > 0)
+        {
+            await WriteAsync(run, cancellationToken);
+            run.Events.Clear();
+        }
     }
 
     /// <summary>Retries transient errors; the last error, or any other one, is thrown.</summary>

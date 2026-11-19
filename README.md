@@ -25,7 +25,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 | Project | Responsibility |
 | --- | --- |
 | `Djohnnie.SoftwareFactory.Web` | Blazor UI, GitHub sign-in, the selected repository |
-| `Djohnnie.SoftwareFactory.Sync` | Azure Function that refreshes accepted work items from GitHub on a CRON schedule |
+| `Djohnnie.SoftwareFactory.Sync` | Azure Function that archives repositories removed from GitHub and refreshes accepted work items from GitHub on a CRON schedule |
 | `Djohnnie.SoftwareFactory.Tasks` | Azure Function that runs the background tasks in SQL: a timer dispatcher queues them on Azure Service Bus, a queue-triggered executor runs them. It also queues the agent worker's runs |
 | `Djohnnie.SoftwareFactory.Worker` | Console app for an event-driven Azure Container Apps job: takes one agent run from Service Bus and runs it with the GitHub Copilot SDK |
 | `Djohnnie.SoftwareFactory.Application` | MediatR commands and queries per feature, validation, GitHub API client, workflows |
@@ -108,6 +108,8 @@ A knowledge base file is either global (every repository sees it) or belongs to 
 ```
 
 Then run `func start` in that directory. The function doesn't apply migrations, so run the web app once first.
+
+Every run first checks that each repository in the database still exists on GitHub. One that GitHub answers 404 for is archived: it leaves the favorites and the recently accessed repositories, its work items are no longer synced, and the repository picker lists it separately under "Removed from GitHub". It can still be opened to view everything DGHSF stored, with everything that needs GitHub disabled. GitHub also answers 404 for a repository the token can't see, so give the sync token access to every repository DGHSF works with; an archived repository that GitHub knows again is restored by the next run (or by selecting it from GitHub's list in the picker).
 
 ### The tasks function
 

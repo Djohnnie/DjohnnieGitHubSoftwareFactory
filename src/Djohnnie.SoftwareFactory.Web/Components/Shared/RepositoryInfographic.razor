@@ -22,7 +22,7 @@
                 }
                 else
                 {
-                    <MudText Typo="Typo.body1">Could not check</MudText>
+                    <MudText Typo="Typo.body1">@CouldNotCheck</MudText>
                 }
             </div>
         </MudPaper>
@@ -107,6 +107,10 @@
     [Parameter, EditorRequired]
     public string RepositoryFullName { get; set; } = string.Empty;
 
+    /// <summary>False for a repository removed from GitHub: only the work items (from the database) are counted then.</summary>
+    [Parameter]
+    public bool GitHubAvailable { get; set; } = true;
+
     private bool _loading = true;
     private bool? _hasInstructions;
     private int? _agentCount;
@@ -117,7 +121,9 @@
     protected override async Task OnInitializedAsync()
     {
         // Each part fails on its own: GitHub being unreachable doesn't hide the counts from the database.
-        await Task.WhenAll(LoadInstructionsAsync(), LoadAgentCountAsync(), LoadSkillCountAsync(), LoadCountsAsync());
+        await (GitHubAvailable
+            ? Task.WhenAll(LoadInstructionsAsync(), LoadAgentCountAsync(), LoadSkillCountAsync(), LoadCountsAsync())
+            : LoadCountsAsync());
         _loading = false;
     }
 
@@ -130,7 +136,16 @@
 
         return count is { } value
             ? @<MudText Typo="Typo.h6">@value</MudText>
-            : @<MudText Typo="Typo.body1">Could not check</MudText>;
+            : @<MudText Typo="Typo.body1">@CouldNotCheck</MudText>;
+    }
+
+    /// <summary>What a box shows without its value from GitHub.</summary>
+    private string CouldNotCheck
+    {
+        get
+        {
+            return GitHubAvailable ? "Could not check" : "Removed from GitHub";
+        }
     }
 
     // Like the agents, the skills are counted from the directory listing alone: every directory in .github/skills is a skill.

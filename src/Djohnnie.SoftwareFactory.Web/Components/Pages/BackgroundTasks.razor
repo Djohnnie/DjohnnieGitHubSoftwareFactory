@@ -23,7 +23,8 @@
         </MudText>
     </div>
     <MudStack Row="true" Wrap="Wrap.Wrap">
-        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="StartAsync">Generate from repository</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="StartAsync"
+                   Disabled="Repository.IsRemovedFromGitHub" title="@(Repository.IsRemovedFromGitHub ? GitHubLink.RemovedTitle : null)">Generate from repository</MudButton>
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" aria-label="Reload" />
     </MudStack>
@@ -168,7 +169,7 @@ else if (_runs.Count == 0)
                     }
                     @if (task.Run.PullRequestNumber is { } taskPullRequest)
                     {
-                        <MudLink Href="@task.Run.PullRequestUrl" Target="_blank" Typo="Typo.body2">#@taskPullRequest</MudLink>
+                        <GitHubLink Href="@task.Run.PullRequestUrl" Typo="Typo.body2">#@taskPullRequest</GitHubLink>
                     }
                     @if (task.Run.IsActive)
                     {
@@ -195,7 +196,7 @@ else if (_runs.Count == 0)
                         <MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)">Open the work item</MudLink>
                         @if (item.IssueNumber is { } issue)
                         {
-                            <span> · issue <MudLink Href="@item.IssueUrl" Target="_blank">#@issue</MudLink></span>
+                            <span> · issue <GitHubLink Href="@item.IssueUrl">#@issue</GitHubLink></span>
                         }
                     </MudText>
                 }
@@ -237,7 +238,7 @@ else if (_runs.Count == 0)
                             <MudTd DataLabel="Pull request">
                                 @if (context.PullRequestNumber is { } number)
                                 {
-                                    <MudLink Href="@context.PullRequestUrl" Target="_blank">#@number</MudLink>
+                                    <GitHubLink Href="@context.PullRequestUrl">#@number</GitHubLink>
                                 }
                             </MudTd>
                             <MudTd DataLabel="Outcome">

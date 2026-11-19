@@ -3,6 +3,7 @@
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@using Djohnnie.SoftwareFactory.Contracts.Repositories
 
 <MudThemeProvider Theme="AppTheme.Theme" />
 <MudPopoverProvider />
@@ -23,12 +24,20 @@
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="mx-4 my-3 appbar-divider desktop-only" />
                 <div class="current-repo">
-                    <MudAvatar Size="Size.Small"><MudImage Src="@repo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+                    @RepositoryAvatar(repo)
                     <div class="current-repo-text">
                         <span class="current-repo-owner">@repo.Owner.Login /</span>
-                        <a href="@repo.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@repo.Name</a>
+                        @RepositoryName(repo)
                     </div>
-                    <MudIcon Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="ml-1 appbar-muted desktop-only" />
+                    @if (Repository.IsRemovedFromGitHub)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Icon="@Icons.Material.Filled.Inventory2"
+                                 Class="ml-2 desktop-only">Removed from GitHub</MudChip>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@(repo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="ml-1 appbar-muted desktop-only" />
+                    }
                     <MudTooltip Text="Switch repository" RootClass="desktop-only">
                         <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link ml-3"
                                    StartIcon="@Icons.Material.Filled.SwapHoriz" OnClick="OpenRepositoryPicker">Switch</MudButton>
@@ -61,7 +70,7 @@
         @if (ShowNavigation)
         {
             <div class="desktop-only">
-                <AppNavigation HasRepository="@(Repository.Current is not null)" />
+                <AppNavigation HasRepository="@(Repository.Current is not null)" GitHubAvailable="@(!Repository.IsRemovedFromGitHub)" />
             </div>
         }
     </div>
@@ -82,12 +91,19 @@
             @if (Repository.Current is { } drawerRepo)
             {
                 <div class="app-drawer-section app-drawer-repo">
-                    <MudAvatar Size="Size.Small"><MudImage Src="@drawerRepo.Owner.AvatarUrl" Alt="" /></MudAvatar>
+                    @RepositoryAvatar(drawerRepo)
                     <div class="app-drawer-repo-text">
                         <span class="current-repo-owner">@drawerRepo.Owner.Login /</span>
-                        <a href="@drawerRepo.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@drawerRepo.Name</a>
+                        @RepositoryName(drawerRepo)
                     </div>
-                    <MudIcon Icon="@(drawerRepo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="appbar-muted" />
+                    @if (Repository.IsRemovedFromGitHub)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Color="Color.Warning" title="Removed from GitHub" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@(drawerRepo.Private ? Icons.Material.Filled.Lock : Icons.Material.Filled.Public)" Size="Size.Small" Class="appbar-muted" />
+                    }
                 </div>
                 <div class="app-drawer-section">
                     <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Inherit" Class="header-link"
@@ -104,7 +120,7 @@
 
             @if (ShowNavigation)
             {
-                <AppNavigation HasRepository="@(Repository.Current is not null)" Vertical="true" />
+                <AppNavigation HasRepository="@(Repository.Current is not null)" GitHubAvailable="@(!Repository.IsRemovedFromGitHub)" Vertical="true" />
             }
 
             <AuthorizeView>
@@ -150,7 +166,7 @@
                     <MudLink Href="@WorkItemRoutes.TemplatesPath(WorkItemType.Task)">tasks</MudLink>.
                 </MudText>
                 <MudPaper Outlined="true" Elevation="0">
-                    <RepositoryPicker SelectedFullName="@Repository.Current?.FullName" OnSelected="SelectAsync" />
+                    <RepositoryPicker SelectedFullName="@Repository.Current?.FullName" OnSelected="SelectAsync" OnArchivedSelected="SelectArchivedAsync" />
                 </MudPaper>
                 }
 
@@ -159,7 +175,18 @@
                 @* Keyed on the repository, so pages are recreated (and reload their data) after a switch.
                    Only hidden behind the picker, so cancelling a switch keeps the page and its unsaved input. *@
                 <div @key="@(IsRepositoryIndependent ? string.Empty : Repository.Current!.FullName)" hidden="@ShowRepositoryPicker">
-                    @Body
+                    @if (IsBlockedWithoutGitHub)
+                    {
+                        <RemovedFromGitHubNotice RequiresGitHub="true" />
+                    }
+                    else
+                    {
+                        @if (!IsRepositoryIndependent)
+                        {
+                            <RemovedFromGitHubNotice Class="mb-4" />
+                        }
+                        @Body
+                    }
                 </div>
                 }
             }
@@ -182,6 +209,23 @@
 
     private bool IsRepositoryIndependent =>
         RouteData?.PageType.IsDefined(typeof(RepositoryIndependentAttribute), inherit: false) == true;
+
+    private bool RequiresGitHub
+    {
+        get
+        {
+            return RouteData?.PageType.IsDefined(typeof(RequiresGitHubAttribute), inherit: false) == true;
+        }
+    }
+
+    /// <summary>The page only works with GitHub, but the current repository was removed from it.</summary>
+    private bool IsBlockedWithoutGitHub
+    {
+        get
+        {
+            return RequiresGitHub && Repository.IsRemovedFromGitHub;
+        }
+    }
 
     private bool CanRenderPage
     {
@@ -251,12 +295,23 @@
         _choosingRepository = false;
     }
 
-    private async Task SelectAsync(GitHubRepository repository)
+    private Task SelectAsync(GitHubRepository repository)
     {
-        var changed = Repository.Current is not null && repository.FullName != Repository.Current.FullName;
+        return SelectAsync(repository.FullName, () => Repository.SelectAsync(repository));
+    }
+
+    /// <summary>Opens a repository removed from GitHub, to view what DGHSF stored about it.</summary>
+    private Task SelectArchivedAsync(RepositorySummary repository)
+    {
+        return SelectAsync(repository.FullName, () => Repository.SelectArchivedAsync(repository));
+    }
+
+    private async Task SelectAsync(string fullName, Func<Task> select)
+    {
+        var changed = Repository.Current is not null && !string.Equals(fullName, Repository.Current.FullName, StringComparison.OrdinalIgnoreCase);
         try
         {
-            await Repository.SelectAsync(repository);
+            await select();
         }
         catch (Exception ex)
         {
@@ -277,6 +332,31 @@
         {
             Navigation.NavigateTo(WorkItemRoutes.ListPath(type));
         }
+    }
+
+    /// <summary>The owner's avatar; an archive icon for a repository removed from GitHub, which has no avatar to link to.</summary>
+    private RenderFragment RepositoryAvatar(GitHubRepository repository)
+    {
+        return @<MudAvatar Size="Size.Small">
+            @if (Repository.IsRemovedFromGitHub || repository.Owner.AvatarUrl is null)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" />
+            }
+            else
+            {
+                <MudImage Src="@repository.Owner.AvatarUrl" Alt="" />
+            }
+        </MudAvatar>;
+    }
+
+    /// <summary>The repository name, linked to GitHub unless it was removed from there.</summary>
+    private RenderFragment RepositoryName(GitHubRepository repository)
+    {
+        if (Repository.IsRemovedFromGitHub || string.IsNullOrEmpty(repository.HtmlUrl))
+        {
+            return @<span class="current-repo-name" title="Removed from GitHub">@repository.Name</span>;
+        }
+        return @<a href="@repository.HtmlUrl" target="_blank" rel="noopener" class="current-repo-name" title="Open on GitHub">@repository.Name</a>;
     }
 
     private void OnRepositoryChanged()

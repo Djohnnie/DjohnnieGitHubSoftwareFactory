@@ -17,10 +17,11 @@
 
             <MudDivider Class="my-1" />
 
-            <MudButton Href="/copilot-instructions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
-                       StartIcon="@Icons.Material.Filled.IntegrationInstructions">Instructions</MudButton>
+            <MudButton Href="@GitHubHref("/copilot-instructions")" Disabled="!GitHubAvailable" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.IntegrationInstructions" title="@GitHubTitle("Instructions")">Instructions</MudButton>
             <MudButton Href="/skills" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.AutoFixHigh">Skills</MudButton>
-            <MudButton Href="/agents" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.SmartToy">Agents</MudButton>
+            <MudButton Href="@GitHubHref("/agents")" Disabled="!GitHubAvailable" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.SmartToy" title="@GitHubTitle("Agents")">Agents</MudButton>
 
             <MudDivider Class="my-1" />
 
@@ -43,8 +44,10 @@
         {
             <MudDivider Class="my-1" />
 
-            <MudButton Href="/actions" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.PlayCircle">Actions</MudButton>
-            <MudButton Href="/copilot-code-review" Variant="Variant.Text" Color="Color.Inherit" Class="header-link" StartIcon="@Icons.Material.Filled.RateReview">Code review</MudButton>
+            <MudButton Href="@GitHubHref("/actions")" Disabled="!GitHubAvailable" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.PlayCircle" title="@GitHubTitle("Actions")">Actions</MudButton>
+            <MudButton Href="@GitHubHref("/copilot-code-review")" Disabled="!GitHubAvailable" Variant="Variant.Text" Color="Color.Inherit" Class="header-link"
+                       StartIcon="@Icons.Material.Filled.RateReview" title="@GitHubTitle("Code review")">Code review</MudButton>
         }
 
         <MudDivider Class="my-1" />
@@ -78,9 +81,9 @@ else
 
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 
-            @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions")
+            @IconLink("/copilot-instructions", Icons.Material.Filled.IntegrationInstructions, "Instructions", requiresGitHub: true)
             @IconLink("/skills", Icons.Material.Filled.AutoFixHigh, "Skills")
-            @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents")
+            @IconLink("/agents", Icons.Material.Filled.SmartToy, "Agents", requiresGitHub: true)
 
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 
@@ -100,8 +103,8 @@ else
         {
             <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
 
-            @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions")
-            @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review")
+            @IconLink("/actions", Icons.Material.Filled.PlayCircle, "Actions", requiresGitHub: true)
+            @IconLink("/copilot-code-review", Icons.Material.Filled.RateReview, "Code review", requiresGitHub: true)
         }
 
         <MudDivider Vertical="true" FlexItem="true" Class="app-navigation-divider" />
@@ -137,10 +140,37 @@ else
     /// <summary>Renders the links as a vertical list (navigation panel) instead of a horizontal bar.</summary>
     [Parameter] public bool Vertical { get; set; }
 
-    private RenderFragment IconLink(string href, string icon, string label)
+    /// <summary>
+    /// Whether the selected repository is still on GitHub; when it was removed, the pages that only work with GitHub are
+    /// shown disabled.
+    /// </summary>
+    [Parameter] public bool GitHubAvailable { get; set; } = true;
+
+    private RenderFragment IconLink(string href, string icon, string label, bool requiresGitHub = false)
     {
+        if (requiresGitHub && !GitHubAvailable)
+        {
+            var text = GitHubTitle(label);
+            // A disabled button ignores the mouse, so a wrapper carries the tooltip.
+            return @<MudTooltip Text="@text">
+                <span class="app-navigation-disabled">
+                    <MudIconButton Disabled="true" Icon="@icon" Color="Color.Inherit" Class="header-link" aria-label="@text" />
+                </span>
+            </MudTooltip>;
+        }
         return @<MudTooltip Text="@label">
             <MudIconButton Href="@href" Icon="@icon" Color="Color.Inherit" Class="header-link" aria-label="@label" />
         </MudTooltip>;
+    }
+
+    /// <summary>The link of a page that only works with GitHub, or none when the repository was removed from GitHub.</summary>
+    private string? GitHubHref(string href)
+    {
+        return GitHubAvailable ? href : null;
+    }
+
+    private string? GitHubTitle(string label)
+    {
+        return GitHubAvailable ? null : $"{label} needs GitHub, but this repository was removed from GitHub";
     }
 }

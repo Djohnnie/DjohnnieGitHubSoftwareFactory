@@ -1,6 +1,7 @@
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Application.Features.Repositories;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
+using Djohnnie.SoftwareFactory.Contracts.Repositories;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 namespace Djohnnie.SoftwareFactory.Web.Repositories;
@@ -17,7 +18,27 @@ public sealed class RepositoryContext(
 
     public GitHubRepository? Current { get; private set; }
 
+    /// <summary>
+    /// The sync found <see cref="Current"/> removed from GitHub (it is archived in the database). Everything DGHSF stored
+    /// can still be viewed, but everything that needs GitHub is disabled.
+    /// </summary>
+    public bool IsRemovedFromGitHub { get; private set; }
+
+    /// <summary>When the sync found <see cref="Current"/> removed from GitHub; <c>null</c> unless <see cref="IsRemovedFromGitHub"/>.</summary>
+    public DateTimeOffset? RemovedFromGitHubAt { get; private set; }
+
     public event Action? Changed;
+
+    /// <summary>
+    /// A stand-in for a repository that GitHub no longer knows, made from what the database stored. It has no links:
+    /// <see cref="GitHubRepository.HtmlUrl"/> is empty and the owner has no avatar.
+    /// </summary>
+    public static GitHubRepository StandIn(RepositorySummary repository)
+    {
+        var owner = repository.FullName[..repository.FullName.IndexOf('/')];
+        return new GitHubRepository(0, repository.Name, repository.FullName, new GitHubOwner(owner, null), string.Empty,
+            null, false, false, false, null, null, null);
+    }
 
     /// <summary>Restores the last selected repository. Requires an interactive render (JS interop).</summary>
     public async Task LoadAsync()
@@ -49,6 +70,7 @@ public sealed class RepositoryContext(
             {
                 logger.LogWarning(ex, "Could not record access to repository {Repository}.", repository.FullName);
             }
+            await LoadArchivedStateAsync(repository.FullName);
         }
 
         _loaded = true;
@@ -61,8 +83,9 @@ public sealed class RepositoryContext(
     /// </summary>
     public async Task RefreshAsync()
     {
-        if (Current is not { } restored)
+        if (Current is not { } restored || IsRemovedFromGitHub)
         {
+            // GitHub doesn't know a removed repository anymore: the stored copy is all there is.
             return;
         }
 
@@ -99,11 +122,54 @@ public sealed class RepositoryContext(
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Selects a repository GitHub just returned. One the sync archived is restored, since GitHub evidently knows it again
+    /// (e.g. after the sync token couldn't see it).
+    /// </summary>
     public async Task SelectAsync(GitHubRepository repository)
     {
         await history.RecordAccessAsync(repository.FullName);
         await storage.SetAsync(StorageKey, repository);
         Current = repository;
+        try
+        {
+            await history.SetArchivedAsync(repository.FullName, false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not restore repository {Repository}, which GitHub knows again.", repository.FullName);
+        }
+        IsRemovedFromGitHub = false;
+        RemovedFromGitHubAt = null;
         Changed?.Invoke();
+    }
+
+    /// <summary>Selects a repository that was removed from GitHub, to view what DGHSF stored about it.</summary>
+    public async Task SelectArchivedAsync(RepositorySummary repository)
+    {
+        var standIn = StandIn(repository);
+        await history.RecordAccessAsync(repository.FullName);
+        await storage.SetAsync(StorageKey, standIn);
+        Current = standIn;
+        IsRemovedFromGitHub = true;
+        RemovedFromGitHubAt = repository.ArchivedAt;
+        Changed?.Invoke();
+    }
+
+    /// <summary>Reads whether the sync archived the repository; when the database can't tell, GitHub is assumed to know it.</summary>
+    private async Task LoadArchivedStateAsync(string fullName)
+    {
+        try
+        {
+            var known = await history.FindAsync(fullName);
+            IsRemovedFromGitHub = known?.IsArchived == true;
+            RemovedFromGitHubAt = known?.ArchivedAt;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not check whether repository {Repository} was removed from GitHub.", fullName);
+            IsRemovedFromGitHub = false;
+            RemovedFromGitHubAt = null;
+        }
     }
 }

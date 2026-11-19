@@ -486,6 +486,9 @@ public partial class WorkItemServiceTests : IDisposable
 
     private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot");
 
+    [GeneratedRegex(@"^/repos/(?<owner>[^/]+)/(?<name>[^/]+)$")]
+    private static partial Regex RepositoryPath();
+
     [GeneratedRegex(@"^/repos/owner/repo/issues/(\d+)(/\w+)?$")]
     private static partial Regex IssuePath();
 
@@ -543,6 +546,12 @@ public partial class WorkItemServiceTests : IDisposable
 
         /// <summary>When set, listing Actions runs is refused with this status (e.g. a token without Actions access).</summary>
         public HttpStatusCode? RunsFailure { get; set; }
+
+        /// <summary>The repositories (owner/name) GitHub no longer knows; every other one exists.</summary>
+        public HashSet<string> DeletedRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>When set, every request that reads a repository is refused like this.</summary>
+        public (HttpStatusCode Status, string Message)? RepositoryReadFailure { get; set; }
 
         /// <summary>When set, every request that reads an issue is refused like this.</summary>
         public (HttpStatusCode Status, string Message)? IssueReadFailure { get; set; }
@@ -603,6 +612,21 @@ public partial class WorkItemServiceTests : IDisposable
                 return GraphQlFailure is { } refused
                     ? Json(refused.Status, JsonSerializer.Serialize(new { message = refused.Message }))
                     : LinkedPullRequestsResponse(body!);
+            }
+            if (method == "GET" && RepositoryPath().Match(path) is { Success: true } repository)
+            {
+                var fullName = $"{repository.Groups["owner"].Value}/{repository.Groups["name"].Value}";
+                if (RepositoryReadFailure is { } refused)
+                {
+                    return Json(refused.Status, JsonSerializer.Serialize(new { message = refused.Message }));
+                }
+                return DeletedRepositories.Contains(fullName)
+                    ? Json(HttpStatusCode.NotFound, """{"message":"Not Found"}""")
+                    : Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                    {
+                        id = 1, name = repository.Groups["name"].Value, full_name = fullName, owner = new { login = repository.Groups["owner"].Value },
+                        html_url = $"https://github.com/{fullName}", @private = false, fork = false, archived = false, default_branch = "main"
+                    }));
             }
             if (method == "GET" && path == "/repos/owner/repo/actions/runs")
             {

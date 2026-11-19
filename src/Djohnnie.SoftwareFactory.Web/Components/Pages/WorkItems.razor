@@ -25,7 +25,8 @@
         <MudButton Href="@WorkItemRoutes.TemplatesPath(_type)" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.LibraryBooks">Templates</MudButton>
         @if (_type == WorkItemType.Epic)
         {
-            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="GenerateFromRepositoryAsync">Generate from repository</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="GenerateFromRepositoryAsync"
+                       Disabled="Removed" title="@(Removed ? GitHubLink.RemovedTitle : null)">Generate from repository</MudButton>
         }
         <MudSpacer />
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading" title="Reload" />
@@ -85,7 +86,7 @@
         <MudTd DataLabel="Issue">
             @if (context.IssueNumber is { } number)
             {
-                <MudLink Href="@context.IssueUrl" Target="_blank">#@number</MudLink>
+                <GitHubLink Href="@context.IssueUrl">#@number</GitHubLink>
             }
         </MudTd>
         @if (_type.CanBeAssigned)
@@ -98,7 +99,7 @@
         <MudTd Style="text-align:right; white-space:nowrap">
             @if (context.IsDraft)
             {
-                var blocked = WorkItemActions.AcceptBlockedByParent(_type, context.Parent);
+                var blocked = Removed ? GitHubLink.RemovedTitle : WorkItemActions.AcceptBlockedByParent(_type, context.Parent);
                 <MudTooltip Text="@(blocked ?? WorkItemActions.AcceptText(_type))">
                     <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.RocketLaunch"
                                    Disabled="@(_busy || blocked is not null)" OnClick="() => AcceptAsync(context)" aria-label="@WorkItemActions.AcceptText(_type)" />
@@ -106,16 +107,16 @@
             }
             else if (context.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
             {
-                <MudTooltip Text="Assign agent">
+                <MudTooltip Text="@(Removed ? GitHubLink.RemovedTitle : "Assign agent")">
                     <MudIconButton Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.SmartToy"
-                                   Disabled="_busy" OnClick="() => AssignAsync(context)" aria-label="Assign agent" />
+                                   Disabled="@(_busy || Removed)" OnClick="() => AssignAsync(context)" aria-label="Assign agent" />
                 </MudTooltip>
             }
             @if (context.HasIssue)
             {
-                <MudTooltip Text="@WorkItemActions.RefreshText">
+                <MudTooltip Text="@(Removed ? GitHubLink.RemovedTitle : WorkItemActions.RefreshText)">
                     <MudIconButton Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.Sync"
-                                   Disabled="_busy" OnClick="() => RefreshAsync(context)" aria-label="@WorkItemActions.RefreshText" />
+                                   Disabled="@(_busy || Removed)" OnClick="() => RefreshAsync(context)" aria-label="@WorkItemActions.RefreshText" />
                 </MudTooltip>
             }
             <MudIconButton Variant="Variant.Text" Icon="@(context.IsDraft ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
@@ -149,6 +150,15 @@
     private readonly TableGroupDefinition<WorkItem> _groupByParent = new() { Selector = i => i.Parent! };
 
     private string Name => WorkItemActions.Name(_type);
+
+    /// <summary>The repository was removed from GitHub: accepting, assigning and refreshing items need GitHub.</summary>
+    private bool Removed
+    {
+        get
+        {
+            return Repository.IsRemovedFromGitHub;
+        }
+    }
 
     private int ColumnCount
     {

@@ -13,7 +13,7 @@
     {
         <MudSelectItem T="string" Value="@Value">
             <span class="mono">@Value</span>
-            <MudText Typo="Typo.caption" Color="Color.Warning">Not found in @AgentDefinition.Directory</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Warning">@(Repository.IsRemovedFromGitHub ? "The repository was removed from GitHub" : $"Not found in {AgentDefinition.Directory}")</MudText>
         </MudSelectItem>
     }
     @foreach (var agent in _agents)
@@ -59,6 +59,13 @@ else if (SelectedAgent is { Model: { Length: > 0 } model })
 
     protected override async Task OnInitializedAsync()
     {
+        if (Repository.IsRemovedFromGitHub)
+        {
+            // The agents live in the repository on GitHub, which no longer knows it; the stored choice is still shown.
+            _loading = false;
+            return;
+        }
+
         try
         {
             _agents = await GitHub.GetCustomAgentsAsync(Repository.Current!.FullName);

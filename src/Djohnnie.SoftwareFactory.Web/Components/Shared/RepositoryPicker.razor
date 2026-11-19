@@ -115,9 +115,53 @@ else
     </MudTable>
 }
 
+@if (Archived.Count > 0)
+{
+    @* Shown apart from GitHub's list (and also when that couldn't be loaded): these can only be opened to view what DGHSF stored. *@
+    <MudStack Class="pa-4" Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Warning" />
+            <MudText Typo="Typo.h6">Removed from GitHub</MudText>
+        </MudStack>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            The sync found that these repositories no longer exist on GitHub. You can still open them to view everything DGHSF stored,
+            like their work items, mindmaps, chats and knowledge base; everything that needs GitHub is disabled.
+        </MudText>
+        <MudTable Outlined="true" Striped="true" T="RepositorySummary" Items="Archived" Filter="MatchesArchived" Hover="true" Dense="true"
+                  Elevation="0" RowsPerPage="10" OnRowClick="@(args => SelectArchivedAsync(args.Item!))" RowClass="cursor-pointer"
+                  RowClassFunc="@((repo, _) => string.Equals(repo.FullName, SelectedFullName, StringComparison.OrdinalIgnoreCase) ? "mud-theme-primary-text selected-row" : string.Empty)"
+                  aria-label="Repositories removed from GitHub">
+            <HeaderContent>
+                <MudTh>Repository</MudTh>
+                <MudTh>Removed from GitHub</MudTh>
+                <MudTh>Last accessed</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Repository">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1"><b>@context.FullName</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">removed from GitHub</MudChip>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Removed from GitHub">@context.ArchivedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="Last accessed">@context.LastAccessedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No removed repositories match your search.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="[10, 25, 50]" />
+            </PagerContent>
+        </MudTable>
+    </MudStack>
+}
+
 @code {
     /// <summary>Raised when the user clicks a repository.</summary>
     [Parameter] public EventCallback<GitHubRepository> OnSelected { get; set; }
+
+    /// <summary>Raised when the user clicks a repository that was removed from GitHub.</summary>
+    [Parameter] public EventCallback<RepositorySummary> OnArchivedSelected { get; set; }
 
     /// <summary>Highlights the currently selected repository.</summary>
     [Parameter] public string? SelectedFullName { get; set; }
@@ -125,6 +169,7 @@ else
     private IReadOnlyList<GitHubRepository>? _repositories;
     private IReadOnlyList<RepositorySummary> _recentRepositories = [];
     private IReadOnlyList<RepositorySummary> _favoriteRepositories = [];
+    private IReadOnlyList<RepositorySummary> _archivedRepositories = [];
     private readonly CancellationTokenSource _cancellation = new();
     private string? _knownError;
     private string? _selectionError;
@@ -137,13 +182,32 @@ else
         return Task.WhenAll(LoadKnownAsync(), LoadRepositoriesAsync());
     }
 
-    /// <summary>Loads the favorite and the recently accessed repositories (the latter excludes favorites).</summary>
+    /// <summary>
+    /// The repositories removed from GitHub, without any that GitHub lists again (e.g. once the sync token can see it again):
+    /// those are in GitHub's list, and selecting one there restores it.
+    /// </summary>
+    private IReadOnlyList<RepositorySummary> Archived { get; set; } = [];
+
+    private void UpdateArchived()
+    {
+        Archived = _repositories is null
+            ? _archivedRepositories
+            : _archivedRepositories.Where(archived => !_repositories.Any(repository =>
+                string.Equals(repository.FullName, archived.FullName, StringComparison.OrdinalIgnoreCase))).ToList();
+    }
+
+    /// <summary>
+    /// Loads the favorite and the recently accessed repositories (the latter excludes favorites), and the ones removed from
+    /// GitHub (which are neither).
+    /// </summary>
     private async Task LoadKnownAsync()
     {
         try
         {
             _favoriteRepositories = await Repositories.GetFavoritesAsync(_cancellation.Token);
             _recentRepositories = await Repositories.GetRecentAsync(_cancellation.Token);
+            _archivedRepositories = await Repositories.GetArchivedAsync(_cancellation.Token);
+            UpdateArchived();
             _knownError = null;
         }
         catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
@@ -164,6 +228,7 @@ else
         try
         {
             _repositories = await GitHub.GetRepositoriesAsync(_cancellation.Token);
+            UpdateArchived();
         }
         catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
         {
@@ -211,7 +276,17 @@ else
         return SelectAsync(() => Task.FromResult(repository));
     }
 
-    private async Task SelectAsync(Func<Task<GitHubRepository>> loadRepository)
+    private Task SelectAsync(Func<Task<GitHubRepository>> loadRepository)
+    {
+        return RunSelectionAsync(async () => await OnSelected.InvokeAsync(await loadRepository()));
+    }
+
+    private Task SelectArchivedAsync(RepositorySummary repository)
+    {
+        return RunSelectionAsync(() => OnArchivedSelected.InvokeAsync(repository));
+    }
+
+    private async Task RunSelectionAsync(Func<Task> select)
     {
         if (_selecting)
         {
@@ -221,7 +296,7 @@ else
         _selectionError = null;
         try
         {
-            await OnSelected.InvokeAsync(await loadRepository());
+            await select();
         }
         catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
         {
@@ -242,6 +317,11 @@ else
         || repo.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || (repo.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
         || (repo.Language?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool MatchesArchived(RepositorySummary repository)
+    {
+        return string.IsNullOrWhiteSpace(_search) || repository.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()
