@@ -378,7 +378,10 @@ else if (_item is not null)
                                        HelperText="@_item.Executor.Description" AnchorOrigin="Origin.BottomCenter" aria-label="Runs on">
                                 @foreach (var executor in AgentExecutors.All)
                                 {
-                                    <MudSelectItem T="AgentExecutor" Value="executor">@executor.DisplayName</MudSelectItem>
+                                    <MudSelectItem T="AgentExecutor" Value="executor">
+                                        <MudIcon Icon="@WorkItemRoutes.Icon(executor)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-2" />
+                                        @executor.DisplayName
+                                    </MudSelectItem>
                                 }
                             </MudSelect>
                             <AgentPicker @bind-Value="_item.CustomAgent" ReadOnly="!_item.CanEditAssignment"
@@ -459,7 +462,8 @@ else if (_item is not null)
                 </TabContent>
                 <ChildContent><div class="tab-panel">
                     <WorkItemPullRequest RepositoryName="@RepositoryName" Item="_item" State="_pullRequest" Section="PullRequestSection.Discussion"
-                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" OnApproved="RefreshAsync" />
+                                         Active="@(_tab == DiscussionTab)" OnNavigate="ShowPullRequestSection" OnApproved="RefreshAsync"
+                                         OnAgentRunStarted="RefreshAsync" />
                 </div></ChildContent>
             </MudTabPanel>
         </MudTabs>

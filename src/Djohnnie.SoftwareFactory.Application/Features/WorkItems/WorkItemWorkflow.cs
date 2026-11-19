@@ -111,6 +111,45 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     /// </summary>
     public async Task<AgentRun> StartWorkerRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
+        var item = await FindWorkerItemAsync(repositoryFullName, id, cancellationToken);
+        return await agentRuns.CreateAsync(repositoryFullName, id, item.Model, agentRunOptions.Value.MaxAttempts, cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts a revision run of the DGHSF agent worker on the newest open pull request it opened for the item: it addresses
+    /// the feedback written on it since the agent's last run there and pushes to the same branch.
+    /// </summary>
+    public async Task<AgentRun> StartRevisionRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        var item = await FindWorkerItemAsync(repositoryFullName, id, cancellationToken);
+        var opened = (await agentRuns.GetForWorkItemAsync(repositoryFullName, id, cancellationToken))
+            .FirstOrDefault(r => r is { Kind: AgentRunKind.Implement, Status: AgentRunStatus.Succeeded, PullRequestNumber: not null })
+            ?? throw new DomainRuleException("The DGHSF agent worker hasn't opened a pull request for this item yet.");
+        var number = opened.PullRequestNumber!.Value;
+
+        GitHubPullRequestDetails pullRequest;
+        try
+        {
+            pullRequest = await gitHub.GetPullRequestAsync(repositoryFullName, number, cancellationToken);
+        }
+        catch (GitHubApiException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+        {
+            throw new DomainRuleException($"Pull request #{number} no longer exists or can't be read with your account.");
+        }
+        if (!pullRequest.IsOpen)
+        {
+            throw new DomainRuleException($"Pull request #{number} is {(pullRequest.MergedAt is null ? "closed" : "merged")}, so the agent can no longer revise it.");
+        }
+
+        var branch = pullRequest.Head?.Ref ?? opened.Branch
+            ?? throw new DomainRuleException($"The branch of pull request #{number} is unknown.");
+        return await agentRuns.CreateRevisionAsync(repositoryFullName, id, item.Model, agentRunOptions.Value.MaxAttempts, branch, number, pullRequest.HtmlUrl,
+            cancellationToken);
+    }
+
+    /// <summary>A user story, bug or task in progress on the DGHSF agent worker, which can start another run.</summary>
+    private async Task<WorkItem> FindWorkerItemAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken)
+    {
         var item = await FindAsync(repositoryFullName, id, cancellationToken);
         if (item.Executor != AgentExecutor.DghsfWorker || !item.Type.CanBeAssigned)
         {
@@ -122,7 +161,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
                 ? "Assign the agent first."
                 : "Only an item that is in progress can start another worker run.");
         }
-        return await agentRuns.CreateAsync(repositoryFullName, id, item.Model, agentRunOptions.Value.MaxAttempts, cancellationToken);
+        return item;
     }
 
     /// <summary>Stores the current title, description and state of the item's GitHub issue; nothing is sent to GitHub.</summary>

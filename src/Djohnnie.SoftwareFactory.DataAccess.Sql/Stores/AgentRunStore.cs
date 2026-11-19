@@ -8,6 +8,24 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
 {
     public async Task<AgentRun> CreateAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, CancellationToken cancellationToken = default)
     {
+        return await AddAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, run => { }, cancellationToken);
+    }
+
+    public async Task<AgentRun> CreateRevisionAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, string branch,
+        int pullRequestNumber, string pullRequestUrl, CancellationToken cancellationToken = default)
+    {
+        return await AddAsync(repositoryFullName, workItemId, requestedModel, maxAttempts, run =>
+        {
+            run.Kind = AgentRunKind.Revise;
+            run.Branch = Truncate(branch, 250);
+            run.PullRequestNumber = pullRequestNumber;
+            run.PullRequestUrl = Truncate(pullRequestUrl, 500);
+        }, cancellationToken);
+    }
+
+    private async Task<AgentRun> AddAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, Action<Entities.AgentRun> configure,
+        CancellationToken cancellationToken)
+    {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var normalized = Entities.Repository.Normalize(repositoryFullName);
         if (await db.AgentRuns.AnyAsync(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized
@@ -27,6 +45,7 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             UsageComplete = true,
             CreatedAt = timeProvider.GetUtcNow()
         };
+        configure(entity);
         db.AgentRuns.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return entity.ToContract();
@@ -157,6 +176,7 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var summary = Truncate(result.Summary, AgentRun.MaxSummaryLength);
         var models = Truncate(usage.Models, 500);
         var warning = Truncate(result.Warning, AgentRun.MaxErrorLength);
+        var feedbackUntil = result.FeedbackUntil ?? now;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var updated = await db.AgentRuns
             .Where(r => r.Id == id && r.Status == AgentRunStatus.Running)
@@ -175,6 +195,7 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
                 .SetProperty(r => r.CacheReadTokens, r => r.CacheReadTokens + usage.CacheReadTokens)
                 .SetProperty(r => r.CacheWriteTokens, r => r.CacheWriteTokens + usage.CacheWriteTokens)
                 .SetProperty(r => r.Models, models)
+                .SetProperty(r => r.FeedbackUntil, feedbackUntil)
                 .SetProperty(r => r.LeaseUntil, (DateTimeOffset?)null)
                 .SetProperty(r => r.CompletedAt, now), cancellationToken);
         if (updated == 0)

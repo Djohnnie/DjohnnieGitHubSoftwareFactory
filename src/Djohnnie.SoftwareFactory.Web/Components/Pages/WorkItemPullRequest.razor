@@ -1,8 +1,9 @@
 @inject WorkItemService WorkItemService
 @inject ISnackbar Snackbar
 
-@* One tab of a work item's pull request: the diff with line comments, or the discussion with a form to send feedback to Copilot
-   (an @copilot comment or review). Both tabs share the State, which is loaded the first time one of them is shown. *@
+@* One tab of a work item's pull request: the diff with line comments, or the discussion with a form to send feedback to its
+   agent: Copilot (an @copilot comment or review), or, on a pull request the DGHSF agent worker opened, the worker (the comment
+   or review without a mention, and a revision run). Both tabs share the State, which is loaded the first time one of them is shown. *@
 <MudPaper Class="pa-4" Outlined="true" Elevation="0">
     <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudText Typo="Typo.h6">
@@ -218,21 +219,37 @@
 
         @if (State.CanSendFeedback)
         {
-            <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Feedback for Copilot</b></MudText>
+            <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Feedback for @AgentTitle</b></MudText>
             @if (State.SentUrl is not null)
             {
                 <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Dense="true" Class="mb-2" ShowCloseIcon="true" CloseIconClicked="CloseSent">
-                    Feedback sent. <MudLink Href="@State.SentUrl" Target="_blank">View it on GitHub</MudLink>; refresh the work item to follow Copilot's progress.
+                    Feedback sent. <MudLink Href="@State.SentUrl" Target="_blank">View it on GitHub</MudLink>; @(Changes.OpenedByWorker
+                        ? "follow the agent's revision run on the work item."
+                        : "refresh the work item to follow Copilot's progress.")
                 </MudAlert>
             }
-            <DictationTextField Value="@State.Body" ValueChanged="ChangeBody" Label="What should Copilot change?" Lines="4"
+            <DictationTextField Value="@State.Body" ValueChanged="ChangeBody" Label="@($"What should {AgentName} change?")" Lines="4"
                           Immediate="true" MaxLength="PullRequestFeedback.MaxBodyLength" Disabled="State.Sending" />
             <MudCheckBox T="bool" Value="State.RequestChanges" ValueChanged="ChangeRequestChanges" Label="Mark the pull request as &quot;Changes requested&quot; (can block merging until you approve)"
                          Disabled="State.Sending" Dense="true" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                Posted as you on pull request #@Changes.Number, starting with @WorkItemPullRequests.CopilotMention.
-                @FeedbackKind()
-                Copilot uses the model that created the pull request.
+                @if (Changes.OpenedByWorker)
+                {
+                    <text>
+                        Posted as you on pull request #@Changes.Number. @FeedbackKind()
+                        Then the DGHSF agent worker starts a revision run on the pull request's branch: it merges the latest base branch into it,
+                        addresses this and every other comment written since its last run, pushes to the same branch and answers each comment.
+                        It uses the work item's model.
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        Posted as you on pull request #@Changes.Number, starting with @WorkItemPullRequests.CopilotMention.
+                        @FeedbackKind()
+                        Copilot uses the model that created the pull request.
+                    </text>
+                }
             </MudText>
             @if (State.Pending.Count > 0)
             {
@@ -242,7 +259,7 @@
             }
             <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" OnClick="SendAsync"
-                           Disabled="@(State.Sending || (string.IsNullOrWhiteSpace(State.Body) && State.Pending.Count == 0))">Send to Copilot</MudButton>
+                           Disabled="@(State.Sending || (string.IsNullOrWhiteSpace(State.Body) && State.Pending.Count == 0))">Send to @AgentName</MudButton>
                 @if (State.Pending.Count > 0)
                 {
                     <MudButton Variant="Variant.Text" OnClick="ClearComments" Disabled="State.Sending">Discard line comments</MudButton>
@@ -263,7 +280,9 @@
             <DictationTextField Value="@State.ApprovalBody" ValueChanged="ChangeApprovalBody" Label="Comment (optional)" Lines="2"
                           Immediate="true" MaxLength="PullRequestApproval.MaxBodyLength" Disabled="State.Sending" />
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                Submitted as you as a review that approves pull request #@Changes.Number. It doesn't mention @WorkItemPullRequests.CopilotMention, so Copilot doesn't start working on it.
+                Submitted as you as a review that approves pull request #@Changes.Number. @(Changes.OpenedByWorker
+                    ? "It doesn't start the agent."
+                    : $"It doesn't mention {WorkItemPullRequests.CopilotMention}, so Copilot doesn't start working on it.")
                 Merging stays on GitHub.
             </MudText>
             <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
@@ -274,7 +293,7 @@
         else if (!Changes.IsOpen)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">
-                The pull request is @(Changes.IsMerged ? "merged" : "closed"), so Copilot no longer works on it.
+                The pull request is @(Changes.IsMerged ? "merged" : "closed"), so @AgentName no longer works on it.
             </MudText>
         }
     }
@@ -300,6 +319,9 @@
     /// <summary>Raised after the pull request was approved, so the work item can refresh its progress.</summary>
     [Parameter] public EventCallback OnApproved { get; set; }
 
+    /// <summary>Raised after feedback started a revision run of the DGHSF agent worker, so the work item can show the run.</summary>
+    [Parameter] public EventCallback OnAgentRunStarted { get; set; }
+
     private (string Path, DiffSide Side, int Line)? _draftTarget;
     private string? _draftText;
     private int? _draftNumber;
@@ -309,6 +331,23 @@
         get
         {
             return State.Changes;
+        }
+    }
+
+    /// <summary>Who acts on the feedback, in a sentence: Copilot, or the DGHSF agent worker on a pull request it opened.</summary>
+    private string AgentName
+    {
+        get
+        {
+            return Changes?.OpenedByWorker == true ? "the agent" : "Copilot";
+        }
+    }
+
+    private string AgentTitle
+    {
+        get
+        {
+            return Changes?.OpenedByWorker == true ? "the DGHSF agent" : "Copilot";
         }
     }
 
@@ -401,7 +440,7 @@
         {
             return $"It becomes a \"Request changes\" review with {lineComments}. GitHub shows the pull request as \"Changes requested\" "
                 + "and, if the repository requires approving reviews, blocks merging until you approve it or dismiss the review. "
-                + "Copilot acts on the feedback either way.";
+                + $"{char.ToUpperInvariant(AgentName[0])}{AgentName[1..]} acts on the feedback either way.";
         }
 
         return count == 0
@@ -440,17 +479,28 @@
 
     private async Task SendAsync()
     {
+        var agentRunStarted = false;
         State.Sending = true;
         State.NotifyChanged();
         try
         {
             var result = await WorkItemService.SendPullRequestFeedbackAsync(
                 new PullRequestFeedback(RepositoryName, Item.Id, State.Body?.Trim() ?? string.Empty, State.Pending.ToList(), State.RequestChanges));
-            Snackbar.Add($"Sent your feedback to Copilot on pull request #{Changes!.Number}.", Severity.Success);
+            if (result.Warning is not null)
+            {
+                Snackbar.Add(result.Warning, Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(result.AgentRunStarted
+                    ? $"Sent your feedback on pull request #{Changes!.Number}; the agent worker starts a revision run shortly."
+                    : $"Sent your feedback to Copilot on pull request #{Changes!.Number}.", Severity.Success);
+            }
             State.Body = null;
             State.RequestChanges = false;
             State.Pending.Clear();
             State.SentUrl = result.Url;
+            agentRunStarted = result.AgentRunStarted;
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
@@ -463,6 +513,10 @@
             State.NotifyChanged();
         }
         await LoadAsync();
+        if (agentRunStarted)
+        {
+            await OnAgentRunStarted.InvokeAsync();
+        }
     }
 
     private void ChangeApprovalBody(string? body)

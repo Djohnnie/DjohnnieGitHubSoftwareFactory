@@ -36,7 +36,9 @@ public sealed record GitHubPullRequestReview(
     [property: JsonPropertyName("user")] GitHubOwner? User,
     [property: JsonPropertyName("submitted_at")] DateTimeOffset? SubmittedAt,
     [property: JsonPropertyName("state")] string? State = null,
-    [property: JsonPropertyName("html_url")] string? HtmlUrl = null);
+    [property: JsonPropertyName("html_url")] string? HtmlUrl = null,
+    [property: JsonPropertyName("id")] long Id = 0,
+    [property: JsonPropertyName("body")] string? Body = null);
 
 public sealed record GitHubRepository(
     [property: JsonPropertyName("id")] long Id,
@@ -197,10 +199,17 @@ public sealed record GitHubPullRequestDetails(
     [property: JsonPropertyName("additions")] int Additions,
     [property: JsonPropertyName("deletions")] int Deletions,
     [property: JsonPropertyName("changed_files")] int ChangedFiles,
-    [property: JsonPropertyName("mergeable_state")] string? MergeableState = null)
+    [property: JsonPropertyName("mergeable_state")] string? MergeableState = null,
+    [property: JsonPropertyName("head")] GitHubPullRequestBranch? Head = null,
+    [property: JsonPropertyName("base")] GitHubPullRequestBranch? Base = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>The head or base of a pull request: the branch and the commit it points at.</summary>
+public sealed record GitHubPullRequestBranch(
+    [property: JsonPropertyName("ref")] string Ref,
+    [property: JsonPropertyName("sha")] string? Sha = null);
 
 /// <summary>A file of a pull request's diff.</summary>
 /// <param name="Patch">Missing for binary files and diffs that are too large.</param>
@@ -223,7 +232,8 @@ public sealed record GitHubComment(
     [property: JsonPropertyName("html_url")] string HtmlUrl,
     [property: JsonPropertyName("path")] string? Path = null,
     [property: JsonPropertyName("line")] int? Line = null,
-    [property: JsonPropertyName("original_line")] int? OriginalLine = null);
+    [property: JsonPropertyName("original_line")] int? OriginalLine = null,
+    [property: JsonPropertyName("in_reply_to_id")] long? InReplyToId = null);
 
 /// <summary>A line comment of a review that is being submitted.</summary>
 /// <param name="Side"><c>RIGHT</c> (new file) or <c>LEFT</c> (old file).</param>

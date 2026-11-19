@@ -14,6 +14,7 @@ using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Djohnnie.SoftwareFactory.Worker;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -191,7 +192,9 @@ public class AgentRunTests
         var run = (await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!;
         Assert.Equal((7, 2.5m), (run.PullRequestNumber, run.AiCredits));
         Assert.StartsWith("dghsf/42-add-the-endpoint-", run.Branch);
-        Assert.Equal(["clone main " + run.Branch, "changes", "commit", "push " + run.Branch], worker.Git.Commands);
+        Assert.Equal(["clone main " + run.Branch, "changes origin/main", "commit", "push " + run.Branch], worker.Git.Commands);
+        Assert.Equal(AgentRunKind.Implement, run.Kind);
+        Assert.NotNull(run.FeedbackUntil);
         var request = worker.Agent.Request!;
         Assert.Equal(("claude-sonnet-4.5", AgentRunPrompt.Instructions), (request.Model, request.Instructions));
         Assert.Contains("# Add the endpoint", request.Prompt);
@@ -255,6 +258,161 @@ public class AgentRunTests
         Assert.Equal(AgentRunStatus.Cancelled, (await worker.Runs.GetAsync(worker.Run.Id, _cancellationToken))!.Status);
         Assert.DoesNotContain("push", string.Join(" ", worker.Git.Commands));
         Assert.Null(worker.GitHub.PullRequestBody);
+    }
+
+    [Fact]
+    public async Task Execute_ARevision_MergesTheBase_PushesToThePullRequestsBranch_AndAnswersTheNewFeedback()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        worker.Agent.Outcome = new("Added the endpoint.", Usage, null);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        var now = DateTimeOffset.UtcNow;
+        await HandledUntilAsync(database, worker.Run.Id, now.AddHours(-1));
+        worker.GitHub.IssueComments = Comments(
+            (1, "Old remark", now.AddHours(-2), null),
+            (2, "Please also log it.", now.AddMinutes(-30), null),
+            (3, $"Answered before.\n\n{PullRequestDiscussion.Marker(Guid.NewGuid())}", now.AddMinutes(-20), null));
+        worker.GitHub.ReviewComments = Comments((100, "Rename this", now.AddMinutes(-35), "src/App.cs"));
+        worker.Git.Merge = new(GitMergeOutcome.Merged, []);
+        worker.Git.Commands.Clear();
+        worker.Agent.OnRun = async cancellationToken =>
+        {
+            var tool = Assert.Single(worker.Agent.Request!.Tools!);
+            var unknown = await tool.InvokeAsync(new AIFunctionArguments { ["feedbackId"] = "F9", ["reply"] = "?" }, cancellationToken);
+            Assert.Contains("F1, F2", unknown?.ToString());
+            await tool.InvokeAsync(new AIFunctionArguments { ["feedbackId"] = "f1", ["reply"] = "Renamed it to Endpoint." }, cancellationToken);
+        };
+        worker.Agent.Outcome = new("Renamed the endpoint.", Usage, null);
+
+        var revision = await worker.StartRevisionAsync(_cancellationToken);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(revision, _cancellationToken));
+
+        Assert.Equal(["clone-branch dghsf/42-add-the-endpoint-review main", "merge main", "changes abc123", "commit", "push dghsf/42-add-the-endpoint-review"],
+            worker.Git.Commands);
+        var prompt = worker.Agent.Request!.Prompt;
+        Assert.Contains("Revise pull request #7 (\"Add the endpoint\")", prompt);
+        Assert.Contains("DGHSF merged the latest `main` into the branch", prompt);
+        Assert.Contains("### F1 · line comment by @reviewer on `src/App.cs` line 3\n\nRename this\n", prompt);
+        Assert.Contains("### F2 · comment by @reviewer\n\nPlease also log it.\n", prompt);
+        Assert.Contains("## Earlier discussion", prompt);
+        Assert.Contains("Old remark", prompt);
+        Assert.DoesNotContain("Answered before.", prompt);
+        Assert.Contains("# Add the endpoint", prompt);
+
+        var reply = Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/pulls/7/comments/100/replies");
+        Assert.StartsWith("Renamed it to Endpoint.", Body(reply.Body));
+        Assert.Contains("<!-- dghsf:agent-run:" + revision.Id, Body(reply.Body));
+        var comment = Body(Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/issues/7/comments").Body);
+        Assert.StartsWith("Renamed the endpoint.", comment);
+        Assert.Contains("> Please also log it.", comment);
+        Assert.Contains("_The agent didn't answer this._", comment);
+        Assert.Contains("Pushed the changes to `dghsf/42-add-the-endpoint-review`. Merged the latest `main` into the branch.", comment);
+        Assert.Contains("Revised by the DGHSF agent worker", comment);
+        // Only the first run opened a pull request.
+        Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/pulls");
+
+        var revised = (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!;
+        Assert.Equal((AgentRunKind.Revise, 7, "dghsf/42-add-the-endpoint-review", 2.5m), (revised.Kind, revised.PullRequestNumber, revised.Branch, revised.AiCredits));
+        Assert.True(revised.FeedbackUntil > now.AddMinutes(-1));
+        Assert.Null(revised.Error);
+    }
+
+    [Fact]
+    public async Task Execute_ARevisionWithoutNewFeedback_FailsBeforeTheAgentRuns()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        worker.GitHub.IssueComments = Comments((1, "Before the pull request was revised", DateTimeOffset.UtcNow.AddDays(-1), null));
+        var calls = worker.Agent.Calls;
+
+        var revision = await worker.StartRevisionAsync(_cancellationToken);
+        Assert.Equal(AgentRunStatus.Failed, await worker.ExecuteAsync(revision, _cancellationToken));
+
+        Assert.Equal(calls, worker.Agent.Calls);
+        var failed = (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!;
+        Assert.Contains("no new feedback on pull request #7", failed.Error);
+        Assert.Null(failed.AiCredits);
+    }
+
+    [Fact]
+    public async Task Execute_ARevisionThatLeavesConflictMarkers_PushesNothing()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        worker.GitHub.IssueComments = Comments((1, "Fix the typo.", DateTimeOffset.UtcNow.AddMinutes(-1), null));
+        await HandledUntilAsync(database, worker.Run.Id, DateTimeOffset.UtcNow.AddHours(-1));
+        worker.Git.Merge = new(GitMergeOutcome.Conflicts, ["src/App.cs", "src/Deleted.cs"]);
+        worker.Git.Commands.Clear();
+        worker.Agent.OnRun = async cancellationToken =>
+        {
+            var file = Path.Combine(worker.Agent.Request!.WorkingDirectory, "src", "App.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            await File.WriteAllTextAsync(file, "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> origin/main\n", cancellationToken);
+        };
+        worker.Agent.Outcome = new("Fixed it.", Usage, null);
+
+        var revision = await worker.StartRevisionAsync(_cancellationToken);
+        Assert.Equal(AgentRunStatus.Failed, await worker.ExecuteAsync(revision, _cancellationToken));
+
+        Assert.Contains("has conflicts in:\n\n- `src/App.cs`\n- `src/Deleted.cs`\n", worker.Agent.Request!.Prompt);
+        Assert.Contains("left merge conflicts with main in src/App.cs, so nothing was pushed", (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!.Error);
+        Assert.DoesNotContain("push", string.Join(" ", worker.Git.Commands));
+        Assert.Empty(worker.GitHub.Posted.Where(r => r.Path.Contains("/comments")));
+    }
+
+    [Fact]
+    public void Discussion_NumbersTheFeedbackSinceTheLastRun_AndLeavesOutTheWorkersOwnComments()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        static GitHubOwner Owner(string login)
+        {
+            return new GitHubOwner(login, null);
+        }
+
+        var discussion = PullRequestDiscussion.Split(
+            [
+                new GitHubComment(1, Owner("alice"), "Old", start.AddHours(1), "u1"),
+                new GitHubComment(2, Owner("bob"), "A question?", start.AddHours(3), "u2"),
+                new GitHubComment(3, Owner("worker"), $"Answer\n\n{PullRequestDiscussion.Marker(Guid.NewGuid())}", start.AddHours(4), "u3"),
+                new GitHubComment(4, Owner("late"), "Too late for this run", start.AddHours(9), "u4")
+            ],
+            [
+                new GitHubComment(100, Owner("alice"), "Rename", start.AddHours(2.5), "u100", "src/App.cs", null, 7),
+                new GitHubComment(101, Owner("bob"), "Agreed", start.AddHours(3.5), "u101", "src/App.cs", 7, InReplyToId: 100)
+            ],
+            [
+                new GitHubPullRequestReview(Owner("carol"), start.AddHours(2.75), "CHANGES_REQUESTED", "r9", 9, "Needs tests"),
+                new GitHubPullRequestReview(Owner("dave"), start.AddHours(2.8), "COMMENTED", "r10", 10, null)
+            ],
+            since: start.AddHours(2), until: start.AddHours(5));
+
+        Assert.Equal(["F1", "F2", "F3", "F4"], discussion.Feedback.Select(f => f.Id));
+        Assert.Equal((PullRequestDiscussionKind.LineComment, 7, 100L), (discussion.Feedback[0].Kind, discussion.Feedback[0].Line, discussion.Feedback[0].ThreadId));
+        Assert.Equal((PullRequestDiscussionKind.Review, "(Requested changes.) Needs tests"), (discussion.Feedback[1].Kind, discussion.Feedback[1].Body));
+        Assert.Equal(("A question?", "bob"), (discussion.Feedback[2].Body, discussion.Feedback[2].Author));
+        Assert.Equal(("Agreed", 100L), (discussion.Feedback[3].Body, discussion.Feedback[3].ThreadId));
+        Assert.Equal(["Old"], discussion.Earlier.Select(e => e.Body));
+    }
+
+    [Fact]
+    public void HandledUntil_IsTheNewestSucceededTaskOnThePullRequest()
+    {
+        var current = Guid.NewGuid();
+        var start = DateTimeOffset.UnixEpoch;
+        AgentRun[] runs =
+        [
+            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, CompletedAt = start.AddHours(1) },
+            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, FeedbackUntil = start.AddHours(3), CompletedAt = start.AddHours(4) },
+            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Failed, PullRequestNumber = 7, CompletedAt = start.AddHours(6) },
+            new() { Id = Guid.NewGuid(), Status = AgentRunStatus.Succeeded, PullRequestNumber = 8, CompletedAt = start.AddHours(7) },
+            new() { Id = current, Status = AgentRunStatus.Succeeded, PullRequestNumber = 7, CompletedAt = start.AddHours(8) }
+        ];
+
+        Assert.Equal(start.AddHours(3), PullRequestDiscussion.HandledUntil(runs, current, 7));
+        Assert.Equal(DateTimeOffset.MinValue, PullRequestDiscussion.HandledUntil(runs, current, 9));
     }
 
     [Fact]
@@ -343,6 +501,30 @@ public class AgentRunTests
         return (await store.TryStartAsync(run.Id, Lease, _cancellationToken))!;
     }
 
+    /// <summary>Sets until when a task handled its pull request's discussion, as if it ended then.</summary>
+    private async Task HandledUntilAsync(SqlServerDatabase database, Guid runId, DateTimeOffset until)
+    {
+        await using var db = await database.Factory.CreateDbContextAsync(_cancellationToken);
+        var run = await db.AgentRuns.SingleAsync(r => r.Id == runId, _cancellationToken);
+        run.FeedbackUntil = until;
+        await db.SaveChangesAsync(_cancellationToken);
+    }
+
+    /// <summary>Comments by @reviewer as GitHub lists them; with a path they are comments on line 3 of that file.</summary>
+    private static string Comments(params (long Id, string Body, DateTimeOffset CreatedAt, string? Path)[] comments)
+    {
+        return JsonSerializer.Serialize(comments.Select(c => new
+        {
+            id = c.Id, user = new { login = "reviewer" }, body = c.Body, created_at = c.CreatedAt, html_url = $"https://github.com/owner/repo/pull/7#c{c.Id}",
+            path = c.Path, line = c.Path is null ? (int?)null : 3
+        }));
+    }
+
+    private static string Body(string? json)
+    {
+        return JsonDocument.Parse(json!).RootElement.GetProperty("body").GetString()!;
+    }
+
     /// <summary>A started run of an in-progress task with issue #42, and an executor with fake git, agent and GitHub.</summary>
     private async Task<WorkerFixture> WorkerAsync(SqlServerDatabase database, TimeSpan? lease = null)
     {
@@ -391,8 +573,22 @@ public class AgentRunTests
     {
         public async Task<AgentRunStatus?> ExecuteAsync(CancellationToken cancellationToken)
         {
+            return await ExecuteAsync(Run, cancellationToken);
+        }
+
+        public async Task<AgentRunStatus?> ExecuteAsync(AgentRun run, CancellationToken cancellationToken)
+        {
             await using var scope = Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<AgentRunExecutor>().ExecuteAsync(Run, cancellationToken);
+            return await scope.ServiceProvider.GetRequiredService<AgentRunExecutor>().ExecuteAsync(run, cancellationToken);
+        }
+
+        /// <summary>A started revision of pull request #7, which the first run opened.</summary>
+        public async Task<AgentRun> StartRevisionAsync(CancellationToken cancellationToken)
+        {
+            var created = await Runs.CreateRevisionAsync(Repo, Run.WorkItemId, "claude-sonnet-4.5", 2, "dghsf/42-add-the-endpoint-review", 7,
+                "https://github.com/owner/repo/pull/7", cancellationToken);
+            await Runs.ClaimDueAsync(10, cancellationToken);
+            return (await Runs.TryStartAsync(created.Id, Lease, cancellationToken))!;
         }
 
         public async ValueTask DisposeAsync()
@@ -406,6 +602,7 @@ public class AgentRunTests
         public List<string> Commands { get; } = [];
         public bool HasChanges { get; set; } = true;
         public Exception? CloneError { get; set; }
+        public GitMergeResult Merge { get; set; } = GitMergeResult.UpToDate;
 
         public Task CloneAsync(string repositoryFullName, string branch, string newBranch, string directory, string token, CancellationToken cancellationToken)
         {
@@ -418,9 +615,22 @@ public class AgentRunTests
             return Task.CompletedTask;
         }
 
-        public Task<bool> HasChangesAsync(string directory, string baseBranch, CancellationToken cancellationToken)
+        public Task<string> CloneBranchAsync(string repositoryFullName, string branch, string baseBranch, string directory, string token, CancellationToken cancellationToken)
         {
-            Commands.Add("changes");
+            Commands.Add($"clone-branch {branch} {baseBranch}");
+            Directory.CreateDirectory(directory);
+            return Task.FromResult("abc123");
+        }
+
+        public Task<GitMergeResult> MergeBaseAsync(string directory, string baseBranch, string authorName, string authorEmail, CancellationToken cancellationToken)
+        {
+            Commands.Add($"merge {baseBranch}");
+            return Task.FromResult(Merge);
+        }
+
+        public Task<bool> HasChangesAsync(string directory, string since, CancellationToken cancellationToken)
+        {
+            Commands.Add($"changes {since}");
             return Task.FromResult(HasChanges);
         }
 
@@ -442,10 +652,12 @@ public class AgentRunTests
         public CodingAgentRequest? Request { get; private set; }
         public CodingAgentOutcome Outcome { get; set; } = new(null, AgentRunUsage.None, null);
         public Func<CancellationToken, Task>? OnRun { get; set; }
+        public int Calls { get; private set; }
 
         public async Task<CodingAgentOutcome> RunAsync(CodingAgentRequest request, CancellationToken cancellationToken)
         {
             Request = request;
+            Calls++;
             if (OnRun is not null)
             {
                 await OnRun(cancellationToken);
@@ -454,21 +666,53 @@ public class AgentRunTests
         }
     }
 
-    /// <summary>The repository and pull request endpoints; everything else (the refresh) is a 404, which the worker shrugs off.</summary>
+    /// <summary>
+    /// The repository, pull request #7 and its discussion; everything else (the refresh) is a 404, which the worker shrugs off.
+    /// The pull request's branch is <c>dghsf/42-add-the-endpoint-review</c>.
+    /// </summary>
     private sealed class FakeGitHub : HttpMessageHandler
     {
         public string? PullRequestBody { get; private set; }
 
+        /// <summary>Every request that posted something, in order.</summary>
+        public List<(string Path, string? Body)> Posted { get; } = [];
+
+        public string IssueComments { get; set; } = "[]";
+        public string ReviewComments { get; set; } = "[]";
+        public string Reviews { get; set; } = "[]";
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Post)
+            {
+                Posted.Add((path, request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken)));
+            }
+            if (request.Method == HttpMethod.Get)
+            {
+                switch (path)
+                {
+                    case "/repos/owner/repo/pulls/7":
+                        return Json("""{"number":7,"title":"Add the endpoint","html_url":"https://github.com/owner/repo/pull/7","state":"open","draft":false,"user":null,"merged_at":null,"additions":1,"deletions":0,"changed_files":1,"head":{"ref":"dghsf/42-add-the-endpoint-review","sha":"abc123"},"base":{"ref":"main","sha":"def456"}}""");
+                    case "/repos/owner/repo/issues/7/comments":
+                        return Json(IssueComments);
+                    case "/repos/owner/repo/pulls/7/comments":
+                        return Json(ReviewComments);
+                    case "/repos/owner/repo/pulls/7/reviews":
+                        return Json(Reviews);
+                }
+            }
+            if (request.Method == HttpMethod.Post && (path == "/repos/owner/repo/issues/7/comments" || path.EndsWith("/replies", StringComparison.Ordinal)))
+            {
+                return Json("""{"html_url":"https://github.com/owner/repo/pull/7#issuecomment-5"}""", HttpStatusCode.Created);
+            }
             if (request.Method == HttpMethod.Get && path == "/repos/owner/repo")
             {
                 return Json("""{"id":1,"name":"repo","full_name":"owner/repo","owner":{"login":"owner","avatar_url":null},"html_url":"https://github.com/owner/repo","description":null,"private":false,"fork":false,"archived":false,"language":"C#","default_branch":"main","pushed_at":null}""");
             }
             if (request.Method == HttpMethod.Post && path == "/repos/owner/repo/pulls")
             {
-                PullRequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                PullRequestBody = Posted[^1].Body;
                 return Json("""{"number":7,"title":"Add the endpoint","html_url":"https://github.com/owner/repo/pull/7","state":"open","draft":false,"user":null,"merged_at":null,"additions":1,"deletions":0,"changed_files":1}""",
                     HttpStatusCode.Created);
             }

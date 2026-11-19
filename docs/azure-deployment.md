@@ -217,7 +217,7 @@ When you regenerate an admin password, update `ACR_PASSWORD` and the job's regis
 | `ServiceBus` | The Service Bus connection string (or `ServiceBus__fullyQualifiedNamespace`, see above) |
 | `AgentRuns__QueueName` | The queue, e.g. `agent-runs` |
 | `ConnectionStrings__Database` | The same database as the Web App. The worker reads work items and writes runs but doesn't migrate |
-| `AgentWorker__GitHubToken` | The token the worker clones, pushes, opens pull requests and refreshes work items with: a fine-grained token with read and write access to **Contents** and **Pull requests** and read access to **Issues** of the repositories |
+| `AgentWorker__GitHubToken` | The token the worker clones, pushes, opens and comments on pull requests and refreshes work items with: a fine-grained token with read and write access to **Contents** and **Pull requests** and read access to **Issues** of the repositories |
 | `AgentWorker__CopilotToken` | Optional; the token the Copilot SDK runs with, whose Copilot plan pays the AI credits: a fine-grained token with the account permission **Copilot Requests** (classic `ghp_` tokens aren't accepted). Without it, `AgentWorker__GitHubToken` is used, which then needs that permission too |
 | `AgentWorker__MaxAiCreditsPerRun` | Optional; a soft limit per run (checked between model calls). Without it a run has no limit |
 | `AgentWorker__RunTimeout` | Optional; default `01:00:00` |

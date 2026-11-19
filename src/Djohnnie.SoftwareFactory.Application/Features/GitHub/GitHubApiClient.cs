@@ -492,6 +492,18 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
+    /// <summary>Replies in the thread of a comment on a line of the pull request's diff.</summary>
+    /// <param name="commentId">The thread's first comment: GitHub doesn't accept replies to replies.</param>
+    /// <returns>The reply's URL.</returns>
+    public async Task<string> ReplyToReviewCommentAsync(string repositoryFullName, int number, long commentId, string body, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/comments/{commentId}/replies",
+            JsonContent.Create(new Api.CreateCommentRequest(body)), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<Api.HtmlUrlResponse>(cancellationToken))?.HtmlUrl
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+    }
+
     /// <summary>Submits a review with comments on lines of the diff.</summary>
     /// <param name="requestChanges">Request changes instead of only commenting.</param>
     /// <returns>The review's URL.</returns>

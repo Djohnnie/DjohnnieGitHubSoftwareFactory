@@ -27,6 +27,12 @@ public sealed class AgentRunService(IMediator mediator)
         return (await mediator.Send(new StartAgentRunCommand(new(repositoryFullName, workItemId)), cancellationToken)).Dto;
     }
 
+    /// <summary>Starts a revision run on the pull request the worker opened, e.g. after a revision failed; it addresses the feedback that wasn't handled yet.</summary>
+    public async Task<AgentRun> StartRevisionAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new StartAgentRevisionCommand(new(repositoryFullName, workItemId)), cancellationToken)).Dto;
+    }
+
     public async Task CancelRunAsync(string repositoryFullName, Guid runId, CancellationToken cancellationToken = default)
     {
         await mediator.Send(new CancelAgentRunCommand(new(repositoryFullName, runId)), cancellationToken);

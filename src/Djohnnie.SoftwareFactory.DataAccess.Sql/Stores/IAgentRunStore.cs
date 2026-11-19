@@ -14,6 +14,13 @@ public interface IAgentRunStore
     /// </summary>
     Task<AgentRun> CreateAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Adds a <see cref="AgentRunStatus.Pending"/> <see cref="AgentRunKind.Revise"/> run for the pull request on
+    /// <paramref name="branch"/>; refuses like <see cref="CreateAsync"/>.
+    /// </summary>
+    Task<AgentRun> CreateRevisionAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, string branch,
+        int pullRequestNumber, string pullRequestUrl, CancellationToken cancellationToken = default);
+
     /// <summary>Marks up to <paramref name="max"/> pending runs as queued, oldest first, and returns their ids to send.</summary>
     Task<IReadOnlyList<Guid>> ClaimDueAsync(int max, CancellationToken cancellationToken = default);
 
@@ -29,7 +36,10 @@ public interface IAgentRunStore
     /// <summary>Extends the lease of a running run; <c>false</c> when it is no longer running (cancelled or taken back).</summary>
     Task<bool> RenewLeaseAsync(Guid id, TimeSpan lease, CancellationToken cancellationToken = default);
 
-    /// <summary>Ends a running run with its pull request; <c>false</c> when it was no longer running.</summary>
+    /// <summary>
+    /// Ends a running run with its pull request and how far it handled the pull request's discussion; <c>false</c> when it
+    /// was no longer running.
+    /// </summary>
     Task<bool> CompleteAsync(Guid id, AgentRunResult result, CancellationToken cancellationToken = default);
 
     /// <summary>

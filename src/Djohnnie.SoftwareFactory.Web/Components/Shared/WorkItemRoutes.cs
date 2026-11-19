@@ -114,6 +114,16 @@ public static class WorkItemRoutes
         };
     }
 
+    /// <summary>A robot arm for the DGHSF agent worker (the software factory), GitHub's mark for the Copilot cloud agent.</summary>
+    public static string Icon(AgentExecutor executor)
+    {
+        return executor switch
+        {
+            AgentExecutor.DghsfWorker => Icons.Material.Filled.PrecisionManufacturing,
+            _ => Icons.Custom.Brands.GitHub
+        };
+    }
+
     private static string Segment(WorkItemType type)
     {
         return type.PathSegment;

@@ -16,6 +16,7 @@ public class AgentRun : Entity
     public string RepositoryFullName { get; set; } = string.Empty;
 
     public AgentRunStatus Status { get; set; }
+    public AgentRunKind Kind { get; set; }
     public int Attempts { get; set; }
     public int MaxAttempts { get; set; }
 
@@ -46,6 +47,9 @@ public class AgentRun : Entity
     public long OutputTokens { get; set; }
     public long CacheReadTokens { get; set; }
     public long CacheWriteTokens { get; set; }
+
+    /// <summary>The pull request's discussion up to this time was handled by the task, which succeeded.</summary>
+    public DateTimeOffset? FeedbackUntil { get; set; }
 
     /// <summary>Until when the worker that is running the agent owns the run; it renews this while the agent works.</summary>
     public DateTimeOffset? LeaseUntil { get; set; }

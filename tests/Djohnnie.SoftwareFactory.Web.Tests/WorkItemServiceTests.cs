@@ -139,6 +139,7 @@ public partial class WorkItemServiceTests : IDisposable
         {
             RepositoryFullName = Repo,
             Type = WorkItemType.Story,
+            Executor = AgentExecutor.CopilotCloudAgent,
             ParentId = feature.Id,
             Title = " Sign in with a passkey ",
             Description = "As a user I want passkeys.",
@@ -192,7 +193,7 @@ public partial class WorkItemServiceTests : IDisposable
     {
         var task = await _service.SaveAsync(new WorkItem
         {
-            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Cache", Description = "Cache the list.",
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Executor = AgentExecutor.CopilotCloudAgent, Title = "Cache", Description = "Cache the list.",
             TechnicalDetails = "Use `IMemoryCache` in `ListService`."
         }, _cancellationToken);
 
@@ -227,7 +228,8 @@ public partial class WorkItemServiceTests : IDisposable
     {
         var task = await _service.SaveAsync(new WorkItem
         {
-            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Task", Description = "About it.", TechnicalDetails = "Details."
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Executor = AgentExecutor.CopilotCloudAgent, Title = "Task", Description = "About it.",
+            TechnicalDetails = "Details."
         }, _cancellationToken);
         _gitHub.CommentFailures = 1;
 
@@ -248,7 +250,8 @@ public partial class WorkItemServiceTests : IDisposable
     {
         var task = await _service.SaveAsync(new WorkItem
         {
-            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Task", Description = "About it.", TechnicalDetails = "Details."
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Executor = AgentExecutor.CopilotCloudAgent, Title = "Task", Description = "About it.",
+            TechnicalDetails = "Details."
         }, _cancellationToken);
         _gitHub.NextIssueCreationStatus = HttpStatusCode.BadGateway;
         await Assert.ThrowsAsync<GitHubApiException>(() => _service.AcceptAsync(Repo, task.Id, _cancellationToken));
@@ -454,11 +457,13 @@ public partial class WorkItemServiceTests : IDisposable
         Assert.Null(otherRepository);
     }
 
+    /// <summary>A draft for the Copilot cloud agent; items for the DGHSF agent worker (the default) have their own tests.</summary>
     private Task<WorkItem> SaveAsync(WorkItemType type, string title, Guid? parentId = null, string? customAgent = null)
     {
         return _service.SaveAsync(new WorkItem
         {
-            RepositoryFullName = Repo, Type = type, ParentId = parentId, Title = title, Description = $"About {title}.", CustomAgent = customAgent
+            RepositoryFullName = Repo, Type = type, ParentId = parentId, Title = title, Description = $"About {title}.", CustomAgent = customAgent,
+            Executor = AgentExecutor.CopilotCloudAgent
         }, _cancellationToken);
     }
 

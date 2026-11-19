@@ -25,7 +25,10 @@ public partial class WorkItemServiceTests
         var chat = new ScriptedChatClient();
         await using var services = await ServicesWithChatAsync(chat);
         var items = services.GetRequiredService<WorkItemService>();
-        var task = await items.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Bump timeout", Description = "Set the timeout to 30s." }, _cancellationToken);
+        var task = await items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Executor = AgentExecutor.CopilotCloudAgent, Title = "Bump timeout", Description = "Set the timeout to 30s."
+        }, _cancellationToken);
 
         var result = await items.AcceptAsync(Repo, task.Id, _cancellationToken);
 

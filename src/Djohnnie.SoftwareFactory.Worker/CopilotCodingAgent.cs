@@ -2,6 +2,7 @@ using System.Globalization;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Djohnnie.SoftwareFactory.Worker;
@@ -15,6 +16,7 @@ public interface ICodingAgent
 /// <param name="HomeDirectory">Where the agent runtime keeps its state for this session (<c>COPILOT_HOME</c>).</param>
 /// <param name="Model">The model id, or <c>null</c> for the runtime's automatic model selection.</param>
 /// <param name="CustomAgent">A custom agent from the repository's <c>.github/agents</c>, or <c>null</c> for the default agent.</param>
+/// <param name="Tools">Tools of the worker the agent may call besides its own, e.g. to answer feedback.</param>
 public sealed record CodingAgentRequest(
     string WorkingDirectory,
     string HomeDirectory,
@@ -23,7 +25,8 @@ public sealed record CodingAgentRequest(
     string? Model,
     CodingAgentProfile? CustomAgent,
     double? MaxAiCredits,
-    TimeSpan Timeout);
+    TimeSpan Timeout,
+    IReadOnlyList<AIFunction>? Tools = null);
 
 /// <summary>A custom agent profile, read from the repository's agent file.</summary>
 public sealed record CodingAgentProfile(string Name, string? DisplayName, string? Description, string Prompt, string? Model);
@@ -67,6 +70,7 @@ public sealed class CopilotCodingAgent(ILogger<CopilotCodingAgent> logger, Micro
 #pragma warning restore GHCP001
             EnableSessionStore = false,
             CoauthorEnabled = false,
+            Tools = request.Tools is { Count: > 0 } tools ? [.. tools] : null,
             OnEvent = evt =>
             {
                 switch (evt)

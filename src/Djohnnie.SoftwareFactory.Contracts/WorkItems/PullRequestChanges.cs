@@ -3,6 +3,9 @@ namespace Djohnnie.SoftwareFactory.Contracts.WorkItems;
 /// <summary>The changes of a work item's pull request and the discussion on it, as GitHub has them now.</summary>
 /// <param name="IsOpen">Whether feedback can still be sent (not merged or closed).</param>
 /// <param name="FilesTruncated">GitHub lists at most 3,000 files of a pull request; there were more.</param>
+/// <param name="OpenedByWorker">
+/// The DGHSF agent worker opened it: feedback goes to the worker (a revision run) instead of to Copilot.
+/// </param>
 public sealed record PullRequestChanges(
     int Number,
     string Url,
@@ -16,7 +19,8 @@ public sealed record PullRequestChanges(
     IReadOnlyList<PullRequestFileChange> Files,
     bool FilesTruncated,
     IReadOnlyList<PullRequestComment> Comments,
-    PullRequestReviewStatus Review);
+    PullRequestReviewStatus Review,
+    bool OpenedByWorker = false);
 
 /// <summary>Where the pull request stands with its reviewers and whether GitHub would merge it.</summary>
 /// <param name="Reviewers">Each reviewer's verdict, most recent first.</param>
@@ -71,7 +75,10 @@ public sealed record PullRequestComment(
     string? Path = null,
     int? Line = null);
 
-/// <summary>Feedback for Copilot on a work item's pull request; DGHSF adds the <c>@copilot</c> mention.</summary>
+/// <summary>
+/// Feedback on a work item's pull request. For a pull request of Copilot, DGHSF adds the <c>@copilot</c> mention; for one
+/// the DGHSF agent worker opened, it starts a revision run of the worker instead.
+/// </summary>
 /// <param name="Body">General feedback; may be empty when there are line comments.</param>
 /// <param name="RequestChanges">Submit as a review that requests changes instead of a plain comment or review.</param>
 public sealed record PullRequestFeedback(
@@ -102,4 +109,6 @@ public enum DiffSide
 }
 
 /// <param name="Url">The comment or review on GitHub.</param>
-public sealed record PullRequestFeedbackResult(string Url);
+/// <param name="AgentRunStarted">The DGHSF agent worker will start a revision run on the feedback.</param>
+/// <param name="Warning">Why the feedback was posted but no revision run started.</param>
+public sealed record PullRequestFeedbackResult(string Url, bool AgentRunStarted = false, string? Warning = null);

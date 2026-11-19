@@ -4,7 +4,8 @@
 @inject AgentRunService AgentRuns
 @inject ISnackbar Snackbar
 
-@* The DGHSF agent worker's runs of one work item, newest first, with what each one cost. *@
+@* The DGHSF agent worker's runs of one work item, newest first, with what each one cost. A revision run continues the pull
+   request an earlier run opened, on feedback sent from the pull request's discussion. *@
 <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Agent worker runs">
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
         <MudText Typo="Typo.h6">Agent worker runs</MudText>
@@ -37,6 +38,10 @@
                 <div class="agent-run" @key="run.Id">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@ColorOf(run.Status)" Icon="@IconOf(run.Status)">@run.Status.DisplayName</MudChip>
+                        @if (run.Kind == AgentRunKind.Revise)
+                        {
+                            <MudText Typo="Typo.caption" Class="agent-run-kind">Revision</MudText>
+                        }
                         <MudText Typo="Typo.caption" Color="Color.Secondary"><TimeAgo At="@(run.StartedAt ?? run.CreatedAt)" /></MudText>
                         @if (run.Duration is { } duration)
                         {
@@ -81,8 +86,20 @@
 
         @if (CanStart && !_runs.Any(r => r.IsActive))
         {
-            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Replay" Class="mt-2"
-                       OnClick="StartAsync" Disabled="_busy">Run again</MudButton>
+            <MudStack Row="true" Spacing="1" Class="mt-2" Wrap="Wrap.Wrap">
+                @if (RevisablePullRequest is { } revised)
+                {
+                    @* Feedback that no revision handled yet (it failed, or was never started) is still new for this one. *@
+                    <MudTooltip Text="Address the feedback written on the pull request since the agent's last run on it, on the same branch">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RateReview"
+                                   OnClick="ReviseAsync" Disabled="_busy">Revise #@revised</MudButton>
+                    </MudTooltip>
+                }
+                <MudTooltip Text="Start over from the base branch, on a new branch with a new pull request">
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Replay"
+                               OnClick="StartAsync" Disabled="_busy">Start over (new pull request)</MudButton>
+                </MudTooltip>
+            </MudStack>
         }
     }
 </MudPaper>
@@ -110,6 +127,18 @@
         get
         {
             return _runs?.Sum(r => r.AiCredits ?? 0) ?? 0;
+        }
+    }
+
+    /// <summary>
+    /// The pull request the worker opened for the item (the newest), which a revision continues; whether it is still open is
+    /// checked when the revision starts.
+    /// </summary>
+    private int? RevisablePullRequest
+    {
+        get
+        {
+            return _runs?.FirstOrDefault(r => r is { Kind: AgentRunKind.Implement, Status: AgentRunStatus.Succeeded, PullRequestNumber: not null })?.PullRequestNumber;
         }
     }
 
@@ -158,6 +187,26 @@
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not start a run: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReviseAsync()
+    {
+        _busy = true;
+        try
+        {
+            await AgentRuns.StartRevisionAsync(RepositoryFullName, WorkItemId);
+            Snackbar.Add("The agent worker will start a revision run on the same branch shortly.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not start a revision run: {ex.Message}", Severity.Error);
         }
         finally
         {

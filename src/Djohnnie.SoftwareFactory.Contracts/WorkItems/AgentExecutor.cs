@@ -15,7 +15,8 @@ public enum AgentExecutor
 
 public static class AgentExecutors
 {
-    public static IReadOnlyList<AgentExecutor> All { get; } = [AgentExecutor.CopilotCloudAgent, AgentExecutor.DghsfWorker];
+    /// <summary>The executors in the order they are offered: the DGHSF agent worker (the default for new items) first.</summary>
+    public static IReadOnlyList<AgentExecutor> All { get; } = [AgentExecutor.DghsfWorker, AgentExecutor.CopilotCloudAgent];
 
     extension(AgentExecutor executor)
     {

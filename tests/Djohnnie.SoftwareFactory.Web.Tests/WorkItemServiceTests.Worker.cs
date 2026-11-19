@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
@@ -124,6 +125,75 @@ public partial class WorkItemServiceTests
         Assert.Equal(WorkItemStatus.InProgress, assigned.WorkItem.Status);
         Assert.Equal(2, (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken)).Count);
         Assert.DoesNotContain(_gitHub.Requests, r => r.Path.EndsWith("/assignees"));
+    }
+
+    /// <summary>A task for the worker whose first run opened pull request #7, refreshed so the item follows it.</summary>
+    private async Task<WorkItem> WorkerTaskWithPullRequestAsync()
+    {
+        var task = await AcceptWorkerTaskAsync();
+        var run = Assert.Single(await _services.GetRequiredService<AgentRunService>().GetRunsAsync(Repo, task.Id, _cancellationToken));
+        await SetRunAsync(run.Id, AgentRunStatus.Succeeded, pullRequest: 7);
+        var refreshed = await RefreshWorkerTaskAsync(task);
+        Assert.Equal(7, refreshed.PullRequestNumber);
+        return refreshed;
+    }
+
+    [Fact]
+    public async Task Feedback_OnThePullRequestTheWorkerOpened_IsPostedWithoutMentioningCopilot_AndStartsARevision()
+    {
+        var task = await WorkerTaskWithPullRequestAsync();
+        var runs = _services.GetRequiredService<AgentRunService>();
+        Assert.True((await _service.GetPullRequestChangesAsync(Repo, task.Id, _cancellationToken)).OpenedByWorker);
+
+        var result = await _service.SendPullRequestFeedbackAsync(new(Repo, task.Id, "  Please add tests.  ", []), _cancellationToken);
+
+        Assert.Equal((true, (string?)null), (result.AgentRunStarted, result.Warning));
+        var posted = Assert.Single(_gitHub.Requests, r => r is { Method: "POST", Path: "/repos/owner/repo/issues/7/comments" });
+        Assert.Equal("Please add tests.", JsonDocument.Parse(posted.Body!).RootElement.GetProperty("body").GetString());
+        var revision = (await runs.GetRunsAsync(Repo, task.Id, _cancellationToken))[0];
+        Assert.Equal((AgentRunKind.Revise, AgentRunStatus.Pending, 7, "dghsf/42-task-1a2b3c4d", "claude-sonnet-4.5"),
+            (revision.Kind, revision.Status, revision.PullRequestNumber, revision.Branch, revision.RequestedModel));
+
+        // The revision that is waiting wouldn't see more feedback, so nothing is posted.
+        var refused = await Assert.ThrowsAsync<DomainRuleException>(() => _service.SendPullRequestFeedbackAsync(new(Repo, task.Id, "And docs.", []), _cancellationToken));
+        Assert.Contains("still working", refused.Message);
+        Assert.Single(_gitHub.Requests, r => r is { Method: "POST", Path: "/repos/owner/repo/issues/7/comments" });
+    }
+
+    [Fact]
+    public async Task Feedback_WithLineComments_OnThePullRequestTheWorkerOpened_IsAReviewThatDoesntRepeatThem()
+    {
+        var task = await WorkerTaskWithPullRequestAsync();
+
+        await _service.SendPullRequestFeedbackAsync(
+            new(Repo, task.Id, string.Empty, [new("src/App.cs", 1, DiffSide.Right, "Rename this")], RequestChanges: true), _cancellationToken);
+
+        var review = JsonDocument.Parse(_gitHub.Requests.Single(r => r.Path.EndsWith("/reviews") && r.Method == "POST").Body!).RootElement;
+        Assert.Equal(("REQUEST_CHANGES", "Please address the comments on the lines."), (review.GetProperty("event").GetString(), review.GetProperty("body").GetString()));
+        Assert.Single(review.GetProperty("comments").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Revision_OfAPullRequestThatWasMerged_IsRefused_AndFeedbackOnItToo()
+    {
+        var task = await WorkerTaskWithPullRequestAsync();
+        _gitHub.PullRequestStates[7] = "merged";
+
+        var refused = await Assert.ThrowsAsync<DomainRuleException>(() => _services.GetRequiredService<AgentRunService>().StartRevisionAsync(Repo, task.Id, _cancellationToken));
+        Assert.Contains("merged", refused.Message);
+        var feedback = await Assert.ThrowsAsync<DomainRuleException>(() => _service.SendPullRequestFeedbackAsync(new(Repo, task.Id, "Fix it", []), _cancellationToken));
+        Assert.Contains("the agent only works on open pull requests", feedback.Message);
+    }
+
+    [Fact]
+    public async Task Revision_BeforeTheWorkerOpenedAPullRequest_IsRefused()
+    {
+        var task = await AcceptWorkerTaskAsync();
+        var runs = _services.GetRequiredService<AgentRunService>();
+        await SetRunAsync(Assert.Single(await runs.GetRunsAsync(Repo, task.Id, _cancellationToken)).Id, AgentRunStatus.Failed);
+
+        var refused = await Assert.ThrowsAsync<DomainRuleException>(() => runs.StartRevisionAsync(Repo, task.Id, _cancellationToken));
+        Assert.Contains("hasn't opened a pull request", refused.Message);
     }
 
     [Fact]

@@ -22,8 +22,21 @@ public sealed record AgentRun
     public string RepositoryFullName { get; init; } = string.Empty;
 
     public AgentRunStatus Status { get; init; }
+
+    /// <summary>
+    /// Whether the task opens a pull request or revises one; a revision has its <see cref="Branch"/> and
+    /// <see cref="PullRequestNumber"/> from the start.
+    /// </summary>
+    public AgentRunKind Kind { get; init; }
+
     public int Attempts { get; init; }
     public int MaxAttempts { get; init; }
+
+    /// <summary>
+    /// For a task that succeeded: the pull request's discussion up to this time was handled, so the next revision only
+    /// addresses what was written after it.
+    /// </summary>
+    public DateTimeOffset? FeedbackUntil { get; init; }
 
     /// <summary>The model the item asked for, or <c>null</c> for automatic model selection.</summary>
     public string? RequestedModel { get; init; }
@@ -179,4 +192,6 @@ public sealed record AgentRunModelUsage(
 
 /// <summary>What a run that finished produced.</summary>
 /// <param name="Warning">Why the agent stopped before it finished (e.g. the credit limit); its work is then a draft pull request.</param>
-public sealed record AgentRunResult(string Branch, int PullRequestNumber, string PullRequestUrl, string? Summary, AgentRunUsage Usage, string? Warning = null);
+/// <param name="FeedbackUntil">The pull request's discussion up to this time was handled; <c>null</c> for the time the run ends.</param>
+public sealed record AgentRunResult(string Branch, int PullRequestNumber, string PullRequestUrl, string? Summary, AgentRunUsage Usage, string? Warning = null,
+    DateTimeOffset? FeedbackUntil = null);

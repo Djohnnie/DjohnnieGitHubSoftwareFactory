@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119092017_AddAgentRunAttempts";
+    public override string LastMigrationId => "20261119102025_AddAgentRunRevisions";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -93,8 +93,16 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .HasMaxLength(4000)
                     .HasColumnType("nvarchar(4000)");
 
+                b.Property<DateTimeOffset?>("FeedbackUntil")
+                    .HasColumnType("datetimeoffset");
+
                 b.Property<long>("InputTokens")
                     .HasColumnType("bigint");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasColumnType("nvarchar(20)");
 
                 b.Property<DateTimeOffset?>("LeaseUntil")
                     .HasColumnType("datetimeoffset");

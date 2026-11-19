@@ -374,12 +374,12 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Contains("9 min", panel.Markup);
         Assert.Contains("Handed to the DGHSF agent worker", cut.Markup);
 
-        await cut.InvokeAsync(() => panel.FindAll("button").Single(b => b.TextContent.Contains("Run again")).Click());
+        await cut.InvokeAsync(() => panel.FindAll("button").Single(b => b.TextContent.Contains("Start over")).Click());
 
         panel.WaitForAssertion(() => Assert.Contains("2 runs", panel.Markup));
         Assert.Contains("Waiting", panel.Markup);
         Assert.Contains(panel.FindAll("button"), b => b.TextContent.Contains("Cancel run"));
-        Assert.DoesNotContain(panel.FindAll("button"), b => b.TextContent.Contains("Run again"));
+        Assert.DoesNotContain(panel.FindAll("button"), b => b.TextContent.Contains("Start over"));
     }
 
     [Fact]
