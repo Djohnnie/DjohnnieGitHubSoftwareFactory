@@ -1,0 +1,190 @@
+@using Djohnnie.SoftwareFactory.Contracts.AgentRuns
+
+@* One task of the DGHSF agent worker: its final status, cost and pull request, with a row per run (a retry, a fresh start or
+   a revision). The background tasks page collapses it to its header and names its work item; the work item page shows it
+   in full. *@
+<MudPaper Outlined="true" Class="pa-4 agent-task">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        @if (Collapsible)
+        {
+            <button type="button" class="run-toggle d-flex flex-grow-1 justify-start align-center" style="text-align:left" aria-expanded="@(Expanded ? "true" : "false")"
+                    aria-controls="@DetailsId" title="@(Expanded ? "Hide the runs" : "Show the runs")" @onclick="OnToggle">
+                <MudIcon Icon="@(Expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" />
+                @Header
+            </button>
+        }
+        else
+        {
+            <div class="d-flex flex-grow-1 justify-start align-center gap-2">@Header</div>
+        }
+        @if (Overview.Run.AiCredits is { } taskCredits)
+        {
+            <MudText Typo="Typo.body2" title="@AgentRunsPanel.TokenDetails(Overview.Run)">@AiModel.FormatCredits(taskCredits)@(Overview.Run.UsageComplete ? null : " (at least)")</MudText>
+        }
+        @if (Overview.Run.PullRequestNumber is { } taskPullRequest)
+        {
+            <GitHubLink Href="@Overview.Run.PullRequestUrl" Typo="Typo.body2">#@taskPullRequest</GitHubLink>
+        }
+        @if (Overview.Run.IsActive)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Stop"
+                       OnClick="OnCancel" Disabled="Busy">Cancel</MudButton>
+        }
+    </MudStack>
+    @if (Collapsible)
+    {
+        <MudCollapse Expanded="Expanded" id="@DetailsId">@Details</MudCollapse>
+    }
+    else
+    {
+        <div id="@DetailsId">@Details</div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public AgentRunOverview Overview { get; set; } = null!;
+
+    /// <summary>Whether the header toggles the details and runs; otherwise they are always shown.</summary>
+    [Parameter]
+    public bool Collapsible { get; set; }
+
+    [Parameter]
+    public bool Expanded { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggle { get; set; }
+
+    /// <summary>Whether the header names the work item and the details link to it; not on the work item's own page.</summary>
+    [Parameter]
+    public bool ShowWorkItem { get; set; } = true;
+
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private string DetailsId
+    {
+        get
+        {
+            return $"agent-task-{Overview.Run.Id}";
+        }
+    }
+
+    private RenderFragment Header
+    {
+        get
+        {
+            return @<text>
+                @StatusChip(Overview.Run.Status)
+                @if (!ShowWorkItem)
+                {
+                    <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left">@(Overview.Run.Kind == AgentRunKind.Revise ? "Revision" : "Implementation")</MudText>
+                }
+                else if (Overview.WorkItem is { } header)
+                {
+                    <MudIcon Icon="@WorkItemRoutes.Icon(header.Type)" Size="Size.Small" />
+                    <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left">@header.Title</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left" Color="Color.Secondary">Deleted work item</MudText>
+                }
+            </text>;
+        }
+    }
+
+    private RenderFragment Details
+    {
+        get
+        {
+            return @<text>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                    Created <TimeAgo At="Overview.Run.CreatedAt" />
+                    @if (Overview.Run.CompletedAt is { } taskCompleted)
+                    {
+                        <span>, ended <TimeAgo At="taskCompleted" /></span>
+                    }
+                    <span> · @Overview.Run.Attempts @(Overview.Run.Attempts == 1 ? "run" : "runs")</span>
+                    @if (Overview.Run.RequestedModel is { } requested)
+                    {
+                        <span> · asked for @requested</span>
+                    }
+                </MudText>
+                @if (ShowWorkItem && Overview.WorkItem is { } item)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1">
+                        <MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)">Open the work item</MudLink>
+                        @if (item.IssueNumber is { } issue)
+                        {
+                            <span> · issue <GitHubLink Href="@item.IssueUrl">#@issue</GitHubLink></span>
+                        }
+                    </MudText>
+                }
+                @if (Overview.Run.Error is { } taskError)
+                {
+                    <MudAlert Variant="Variant.Outlined" Severity="@(Overview.Run.Status == AgentRunStatus.Succeeded ? Severity.Warning : Severity.Error)" Dense="true" Class="mt-2">@taskError</MudAlert>
+                }
+                @if (Overview.Runs.Count > 0)
+                {
+                    <MudTable T="AgentRunAttempt" Items="Overview.Runs" Dense="true" Hover="true" Elevation="0" Class="mt-3" aria-label="Runs">
+                        <HeaderContent>
+                            <MudTh>Run</MudTh>
+                            <MudTh>Kind</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Started</MudTh>
+                            <MudTh>Duration</MudTh>
+                            <MudTh>AI credits</MudTh>
+                            <MudTh>Pull request</MudTh>
+                            <MudTh>Outcome</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Run">@context.Attempt</MudTd>
+                            <MudTd DataLabel="Kind">@(context.Kind == AgentRunKind.Revise ? "Revision" : "Implementation")</MudTd>
+                            <MudTd DataLabel="Status">@StatusChip(context.Status)</MudTd>
+                            <MudTd DataLabel="Started"><TimeAgo At="context.StartedAt" /></MudTd>
+                            <MudTd DataLabel="Duration">@(context.Duration is { } duration ? AgentRunsPanel.FormatDuration(duration) : "–")</MudTd>
+                            <MudTd DataLabel="AI credits">
+                                @if (context.AiCredits is { } credits)
+                                {
+                                    <span>@AiModel.FormatCredits(credits)@(context.UsageComplete ? null : " (at least)")</span>
+                                    @if (context.Models is { } models)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@models</MudText>
+                                    }
+                                }
+                                else
+                                {
+                                    <span>–</span>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Pull request">
+                                @if (context.PullRequestNumber is { } number)
+                                {
+                                    <GitHubLink Href="@context.PullRequestUrl">#@number</GitHubLink>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Outcome">
+                                @if (context.Error is { } runError)
+                                {
+                                    <MudText Typo="Typo.body2" Color="@(context.Status == AgentRunStatus.Succeeded ? Color.Warning : Color.Error)">@runError</MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">No runs yet: the task waits for a worker.</MudText>
+                }
+            </text>;
+        }
+    }
+
+    private static RenderFragment StatusChip(AgentRunStatus status)
+    {
+        return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@AgentRunsPanel.ColorOf(status)" Icon="@AgentRunsPanel.IconOf(status)">@status.DisplayName</MudChip>;
+    }
+}

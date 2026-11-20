@@ -9,6 +9,8 @@
 @page "/tasks/new"
 @page "/tasks/{Id:guid}"
 @implements IDisposable
+@using Djohnnie.SoftwareFactory.Application.Features.AgentRuns
+@using Djohnnie.SoftwareFactory.Contracts.AgentRuns
 @inject WorkItemService WorkItemService
 @inject WorkItemTemplateService Templates
 @inject AiModelService ModelService
@@ -23,6 +25,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject ILogger<WorkItemEditor> Logger
+@inject AgentRunService AgentRunService
 
 <PageTitle>@Heading</PageTitle>
 
@@ -453,11 +456,26 @@ else if (_item is not null)
         </MudGrid>
     </MudForm>;
 
-    @* With a pull request the page gets tabs; the pull request is only loaded from GitHub when one of its tabs is opened.
-       The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
-    @if (_item.PullRequestNumber is { } pullRequestNumber && !Removed)
+    RenderFragment agentTasksContent = @<div aria-label="Agent worker tasks">
+        @* Like the agent worker tasks on the background tasks page, but only this item's and not collapsible: they have the tab to themselves. *@
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            The tasks of the DGHSF agent worker on this @Name, newest first. A retry, a fresh start or a revision is another run of a task ·
+            @AiModel.FormatCredits(_agentTasks.Sum(t => t.Run.AiCredits ?? 0))@(_agentTasks.Any(t => t.Run.NanoAiu is not null && !t.Run.UsageComplete) ? " (at least)" : null)
+        </MudText>
+        <MudStack Spacing="3">
+            @foreach (var task in _agentTasks)
+            {
+                <AgentTaskCard @key="task.Run.Id" Overview="task" ShowWorkItem="false" Busy="_busy" OnCancel="() => CancelAgentTaskAsync(task)" />
+            }
+        </MudStack>
+    </div>;
+
+    @* With a pull request or agent worker runs the page gets tabs; the pull request is only loaded from GitHub when one of its
+       tabs is opened. The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
+    @if ((_item.PullRequestNumber is not null || HasAgentTasksTab) && !Removed)
     {
-        @if (CanBeMerged)
+        var pullRequestNumber = _item.PullRequestNumber;
+        @if (pullRequestNumber is not null && CanBeMerged)
         {
             <MudAlert Variant="Variant.Outlined" Severity="Severity.Success" Icon="@Icons.Material.Filled.MergeType" Class="mb-4 pr-mergeable">
                 Pull request #@pullRequestNumber can be merged and closed. Go to the
@@ -470,6 +488,18 @@ else if (_item is not null)
             <MudTabPanel Text="@_type.DisplayName" Icon="@WorkItemRoutes.Icon(_type)">
                 <div class="tab-panel">@workItemContent</div>
             </MudTabPanel>
+            @if (HasAgentTasksTab)
+            {
+                <MudTabPanel Icon="@WorkItemRoutes.Icon(AgentExecutor.DghsfWorker)">
+                    <TabContent>
+                        Agent runs
+                        <span class="tab-count" title="Runs">@AgentRunCount</span>
+                    </TabContent>
+                    <ChildContent><div class="tab-panel">@agentTasksContent</div></ChildContent>
+                </MudTabPanel>
+            }
+            @if (pullRequestNumber is not null)
+            {
             <MudTabPanel Icon="@Icons.Material.Filled.Difference">
                 <TabContent>
                     Pull request #@pullRequestNumber
@@ -497,6 +527,7 @@ else if (_item is not null)
                                          OnAgentRunStarted="RefreshAsync" />
                 </div></ChildContent>
             </MudTabPanel>
+            }
         </MudTabs>
     }
     else
@@ -517,8 +548,24 @@ else if (_item is not null)
     /// <summary>Changes on every navigation, so switching between the type pages (which share this component) reloads.</summary>
     [CascadingParameter] private RouteData? RouteData { get; set; }
 
-    private const int ChangesTab = 1;
-    private const int DiscussionTab = 2;
+    private const int AgentTasksTab = 1;
+
+    /// <summary>The pull request's tabs come after the agent runs tab, when there is one.</summary>
+    private int ChangesTab
+    {
+        get
+        {
+            return HasAgentTasksTab ? AgentTasksTab + 1 : AgentTasksTab;
+        }
+    }
+
+    private int DiscussionTab
+    {
+        get
+        {
+            return ChangesTab + 1;
+        }
+    }
 
     private int _tab;
     private WorkItemPullRequestState _pullRequest = null!;
@@ -704,6 +751,8 @@ else if (_item is not null)
         // Another work item: start on its own tab, with nothing of the previous pull request.
         _tab = 0;
         _pullRequest.Follow(null);
+        _agentTasks = [];
+        StopAgentTasksRefresh();
         _loading = true;
         _error = null;
         _templates = [];
@@ -738,6 +787,7 @@ else if (_item is not null)
                     await LoadTemplatesAsync();
                     await LoadMindmapIdeaAsync();
                 }
+                await LoadAgentTasksAsync();
                 _generatorActive = !IsNew && _type.GeneratedChildType is not null && Assistant.IsConfigured
                     && (await InternalAgents.GetAsync(InternalAgentKeys.WorkItemBreakdown)).IsEnabled;
             }
@@ -1133,6 +1183,7 @@ else if (_item is not null)
     {
         _pullRequest.Changed -= OnPullRequestChanged;
         CancelModelSuggestion();
+        StopAgentTasksRefresh();
     }
 
     private string ParentLabel(Guid? parentId)
@@ -1289,6 +1340,111 @@ else if (_item is not null)
 
     private AgentRunsPanel? _agentRuns;
 
+    /// <summary>How often the agent runs reload while one of them is active.</summary>
+    private static readonly TimeSpan AgentTasksRefreshInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>The agent worker's tasks on the item, newest first, each with its runs.</summary>
+    private IReadOnlyList<AgentRunOverview> _agentTasks = [];
+    private Timer? _agentTasksTimer;
+
+    private bool HasAgentTasksTab
+    {
+        get
+        {
+            return _agentTasks.Count > 0;
+        }
+    }
+
+    /// <summary>The runs of the item's tasks, counting the run a task waits to start.</summary>
+    private int AgentRunCount
+    {
+        get
+        {
+            return _agentTasks.Sum(t => t.Run.Attempts + (t.Run.Status is AgentRunStatus.Pending or AgentRunStatus.Queued ? 1 : 0));
+        }
+    }
+
+    /// <summary>
+    /// Reads the agent worker's tasks on the item, and keeps the open tab when the agent runs tab appears or disappears before
+    /// it. Reloads by itself while a task is active.
+    /// </summary>
+    private async Task LoadAgentTasksAsync()
+    {
+        var hadTab = HasAgentTasksTab;
+        if (_item is null || _item.Id == Guid.Empty || !IsWorker || !_item.HasIssue || Removed)
+        {
+            _agentTasks = [];
+        }
+        else
+        {
+            try
+            {
+                _agentTasks = await AgentRunService.GetWorkItemTasksAsync(RepositoryName, _item.Id);
+            }
+            catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+            {
+                Snackbar.Add($"Could not load the agent worker's runs: {ex.Message}", Severity.Error);
+            }
+        }
+
+        if (hadTab != HasAgentTasksTab && _tab >= AgentTasksTab)
+        {
+            // The tab was removed: back to the item from it, or the pull request's tabs move one to the left; it was added: they
+            // move one to the right.
+            _tab = hadTab ? (_tab == AgentTasksTab ? 0 : _tab - 1) : _tab + 1;
+        }
+        ScheduleAgentTasksRefresh();
+    }
+
+    /// <summary>Reloads once after <see cref="AgentTasksRefreshInterval"/> while a task is active; each reload schedules the next.</summary>
+    private void ScheduleAgentTasksRefresh()
+    {
+        StopAgentTasksRefresh();
+        if (_agentTasks.Any(t => t.Run.IsActive))
+        {
+            _agentTasksTimer = new Timer(_ =>
+            {
+                _ = InvokeAsync(async () =>
+                {
+                    await LoadAgentTasksAsync();
+                    if (!_agentTasks.Any(t => t.Run.IsActive) && _agentRuns is not null)
+                    {
+                        // The task ended: the panel's status and actions follow.
+                        await _agentRuns.ReloadAsync();
+                    }
+                    StateHasChanged();
+                });
+            }, null, AgentTasksRefreshInterval, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void StopAgentTasksRefresh()
+    {
+        _agentTasksTimer?.Dispose();
+        _agentTasksTimer = null;
+    }
+
+    private async Task CancelAgentTaskAsync(AgentRunOverview task)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Cancel agent task",
+                "Cancel the agent worker's task? A worker that is running it stops within a few minutes and pushes nothing, and it isn't retried.",
+                yesText: "Cancel task", cancelText: "Keep running") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await AgentRunService.CancelRunAsync(RepositoryName, task.Run.Id);
+            Snackbar.Add("The agent task is cancelled.", Severity.Info);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not cancel the task: {ex.Message}", Severity.Error);
+        }
+        await RefreshAsync();
+    }
+
     /// <summary>Whether the item's agent is the DGHSF agent worker instead of the Copilot cloud agent.</summary>
     private bool IsWorker
     {
@@ -1363,6 +1519,7 @@ else if (_item is not null)
             {
                 await _agentRuns.ReloadAsync();
             }
+            await LoadAgentTasksAsync();
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {

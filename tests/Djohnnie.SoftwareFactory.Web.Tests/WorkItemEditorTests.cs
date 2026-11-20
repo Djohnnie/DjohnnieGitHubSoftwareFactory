@@ -436,6 +436,99 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task TaskOnTheWorker_ListsItsRunsOnTheAgentRunsTab_BeforeThePullRequestTabs()
+    {
+        await SelectRepositoryAsync();
+        var task = await Items.SaveAsync(new WorkItem
+        {
+            RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Worker task", Description = "About it.", Executor = AgentExecutor.DghsfWorker
+        }, _cancellationToken);
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.IssueNumber = 7;
+            entity.IssueUrl = "https://github.com/owner/repo/issues/7";
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            var run = new DataAccess.Sql.Entities.AgentRun
+            {
+                Id = Guid.NewGuid(), WorkItemId = task.Id, RepositoryFullName = Repo, Status = Contracts.AgentRuns.AgentRunStatus.Succeeded,
+                Kind = Contracts.AgentRuns.AgentRunKind.Revise, Attempts = 2, MaxAttempts = 3, NanoAiu = 2_500_000_000, UsageComplete = true,
+                PullRequestNumber = 12, PullRequestUrl = "https://github.com/owner/repo/pull/12",
+                CreatedAt = DateTimeOffset.UtcNow.AddHours(-2), StartedAt = DateTimeOffset.UtcNow.AddHours(-2), CompletedAt = DateTimeOffset.UtcNow.AddHours(-1)
+            };
+            db.AgentRuns.Add(run);
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 1, Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 1_000_000_000,
+                Models = "claude-sonnet-4.5", PullRequestNumber = 12, PullRequestUrl = "https://github.com/owner/repo/pull/12", UsageComplete = true,
+                StartedAt = DateTimeOffset.UtcNow.AddHours(-2), CompletedAt = DateTimeOffset.UtcNow.AddHours(-2).AddMinutes(9)
+            });
+            db.AgentRunAttempts.Add(new DataAccess.Sql.Entities.AgentRunAttempt
+            {
+                Id = Guid.NewGuid(), AgentRunId = run.Id, Attempt = 2, Kind = Contracts.AgentRuns.AgentRunKind.Revise,
+                Status = Contracts.AgentRuns.AgentRunStatus.Succeeded, NanoAiu = 1_500_000_000, UsageComplete = true,
+                StartedAt = DateTimeOffset.UtcNow.AddHours(-1).AddMinutes(-4), CompletedAt = DateTimeOffset.UtcNow.AddHours(-1)
+            });
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Agent runs")));
+        var tabs = cut.FindAll(".mud-tab").Select(t => t.TextContent).ToList();
+        Assert.Equal(4, tabs.Count);
+        Assert.Contains("Agent runs", tabs[1]);
+        Assert.Contains("2", tabs[1]);
+        Assert.Contains("Pull request #12", tabs[2]);
+        Assert.Contains("Discussion", tabs[3]);
+
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab")[1].Click());
+
+        // The whole tab is the item's tasks: not collapsible, and without the item's own title.
+        var card = cut.Find(".agent-task");
+        Assert.Empty(card.QuerySelectorAll(".run-toggle"));
+        Assert.DoesNotContain("Worker task", card.TextContent);
+        Assert.Contains("3 AI credits", card.TextContent);
+        var rows = cut.FindComponent<MudTable<Contracts.AgentRuns.AgentRunAttempt>>().FindAll("tbody tr");
+        Assert.Equal(2, rows.Count);
+        Assert.Contains("Revision", rows[0].TextContent);
+        Assert.Contains("Implementation", rows[1].TextContent);
+        Assert.Contains("claude-sonnet-4.5", rows[1].TextContent);
+        Assert.Contains("9 min", rows[1].TextContent);
+
+        // The pull request's tabs still open their own section.
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+        Assert.Equal(3, cut.FindComponent<MudTabs>().Instance.ActivePanelIndex);
+    }
+
+    [Fact]
+    public async Task TaskOnTheWorker_WithoutRuns_HasNoAgentRunsTab()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Executor = AgentExecutor.DghsfWorker;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Pull request #12")));
+        Assert.Equal(3, cut.FindAll(".mud-tab").Count);
+        Assert.DoesNotContain(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Agent runs"));
+    }
+
+    [Fact]
     public async Task Draft_HasNoRefreshButtons()
     {
         await SelectRepositoryAsync();

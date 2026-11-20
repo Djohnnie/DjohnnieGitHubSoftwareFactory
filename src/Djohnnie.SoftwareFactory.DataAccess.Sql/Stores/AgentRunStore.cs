@@ -376,6 +376,24 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .OrderByDescending(r => r.SysId)
             .Take(max)
             .ToListAsync(cancellationToken);
+        return await ToOverviewsAsync(db, normalized, runs, cancellationToken);
+    }
+
+    public async Task<List<AgentRunOverview>> GetOverviewsForWorkItemAsync(string repositoryFullName, Guid workItemId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var normalized = Entities.Repository.Normalize(repositoryFullName);
+        var runs = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized)
+            .OrderByDescending(r => r.SysId)
+            .ToListAsync(cancellationToken);
+        return await ToOverviewsAsync(db, normalized, runs, cancellationToken);
+    }
+
+    /// <summary>The tasks with their work items and their runs (one per attempt, newest first).</summary>
+    private static async Task<List<AgentRunOverview>> ToOverviewsAsync(AppDbContext db, string normalized, List<Entities.AgentRun> runs,
+        CancellationToken cancellationToken)
+    {
         // No foreign key: a run keeps its work item's id after the item was deleted.
         var ids = runs.Select(r => r.WorkItemId).Distinct().ToList();
         var items = await db.WorkItems.AsNoTracking()

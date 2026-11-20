@@ -146,118 +146,8 @@ else if (_runs.Count == 0)
     <MudStack Spacing="3" aria-label="Agent worker tasks">
         @foreach (var task in _agentRuns)
         {
-            var expanded = _expanded.Contains(task.Run.Id);
-            <MudPaper Outlined="true" Class="pa-4 agent-task" @key="task.Run.Id">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <button type="button" class="run-toggle d-flex flex-grow-1 justify-start align-center" style="text-align:left" aria-expanded="@(expanded ? "true" : "false")"
-                            aria-controls="@($"agent-task-{task.Run.Id}")" title="@(expanded ? "Hide the runs" : "Show the runs")" @onclick="() => Toggle(task.Run.Id)">
-                        <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" />
-                        @AgentStatusChip(task.Run.Status)
-                        @if (task.WorkItem is { } header)
-                        {
-                            <MudIcon Icon="@WorkItemRoutes.Icon(header.Type)" Size="Size.Small" />
-                            <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left">@header.Title</MudText>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.h6" HtmlTag="span" Align="Align.Left" Color="Color.Secondary">Deleted work item</MudText>
-                        }
-                    </button>
-                    @if (task.Run.AiCredits is { } taskCredits)
-                    {
-                        <MudText Typo="Typo.body2" title="@AgentRunsPanel.TokenDetails(task.Run)">@AiModel.FormatCredits(taskCredits)@(task.Run.UsageComplete ? null : " (at least)")</MudText>
-                    }
-                    @if (task.Run.PullRequestNumber is { } taskPullRequest)
-                    {
-                        <GitHubLink Href="@task.Run.PullRequestUrl" Typo="Typo.body2">#@taskPullRequest</GitHubLink>
-                    }
-                    @if (task.Run.IsActive)
-                    {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Stop"
-                                   OnClick="() => CancelAgentRunAsync(task)" Disabled="_busy">Cancel</MudButton>
-                    }
-                </MudStack>
-                <MudCollapse Expanded="expanded" id="@($"agent-task-{task.Run.Id}")">
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
-                    Created <TimeAgo At="task.Run.CreatedAt" />
-                    @if (task.Run.CompletedAt is { } taskCompleted)
-                    {
-                        <span>, ended <TimeAgo At="taskCompleted" /></span>
-                    }
-                    <span> · @task.Run.Attempts @(task.Run.Attempts == 1 ? "run" : "runs")</span>
-                    @if (task.Run.RequestedModel is { } requested)
-                    {
-                        <span> · asked for @requested</span>
-                    }
-                </MudText>
-                @if (task.WorkItem is { } item)
-                {
-                    <MudText Typo="Typo.body2" Class="mt-1">
-                        <MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)">Open the work item</MudLink>
-                        @if (item.IssueNumber is { } issue)
-                        {
-                            <span> · issue <GitHubLink Href="@item.IssueUrl">#@issue</GitHubLink></span>
-                        }
-                    </MudText>
-                }
-                @if (task.Run.Error is { } taskError)
-                {
-                    <MudAlert Variant="Variant.Outlined" Severity="@(task.Run.Status == AgentRunStatus.Succeeded ? Severity.Warning : Severity.Error)" Dense="true" Class="mt-2">@taskError</MudAlert>
-                }
-                @if (task.Runs.Count > 0)
-                {
-                    <MudTable T="AgentRunAttempt" Items="task.Runs" Dense="true" Hover="true" Elevation="0" Class="mt-3" aria-label="Runs">
-                        <HeaderContent>
-                            <MudTh>Run</MudTh>
-                            <MudTh>Kind</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>Started</MudTh>
-                            <MudTh>Duration</MudTh>
-                            <MudTh>AI credits</MudTh>
-                            <MudTh>Pull request</MudTh>
-                            <MudTh>Outcome</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Run">@context.Attempt</MudTd>
-                            <MudTd DataLabel="Kind">@(context.Kind == AgentRunKind.Revise ? "Revision" : "Implementation")</MudTd>
-                            <MudTd DataLabel="Status">@AgentStatusChip(context.Status)</MudTd>
-                            <MudTd DataLabel="Started"><TimeAgo At="context.StartedAt" /></MudTd>
-                            <MudTd DataLabel="Duration">@(context.Duration is { } duration ? AgentRunsPanel.FormatDuration(duration) : "–")</MudTd>
-                            <MudTd DataLabel="AI credits">
-                                @if (context.AiCredits is { } credits)
-                                {
-                                    <span>@AiModel.FormatCredits(credits)@(context.UsageComplete ? null : " (at least)")</span>
-                                    @if (context.Models is { } models)
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@models</MudText>
-                                    }
-                                }
-                                else
-                                {
-                                    <span>–</span>
-                                }
-                            </MudTd>
-                            <MudTd DataLabel="Pull request">
-                                @if (context.PullRequestNumber is { } number)
-                                {
-                                    <GitHubLink Href="@context.PullRequestUrl">#@number</GitHubLink>
-                                }
-                            </MudTd>
-                            <MudTd DataLabel="Outcome">
-                                @if (context.Error is { } runError)
-                                {
-                                    <MudText Typo="Typo.body2" Color="@(context.Status == AgentRunStatus.Succeeded ? Color.Warning : Color.Error)">@runError</MudText>
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">No runs yet: the task waits for a worker.</MudText>
-                }
-                </MudCollapse>
-            </MudPaper>
+            <AgentTaskCard @key="task.Run.Id" Overview="task" Collapsible="true" Expanded="_expanded.Contains(task.Run.Id)"
+                           OnToggle="() => Toggle(task.Run.Id)" Busy="_busy" OnCancel="() => CancelAgentRunAsync(task)" />
         }
     </MudStack>
 }
@@ -456,11 +346,6 @@ else if (_runs.Count == 0)
             _ => (Color.Default, Icons.Material.Filled.Cancel)
         };
         return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@color" Icon="@icon">@LabelOf(status)</MudChip>;
-    }
-
-    private static RenderFragment AgentStatusChip(AgentRunStatus status)
-    {
-        return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@AgentRunsPanel.ColorOf(status)" Icon="@AgentRunsPanel.IconOf(status)">@status.DisplayName</MudChip>;
     }
 
     public static string LabelOf(TodoTaskStatus status)
