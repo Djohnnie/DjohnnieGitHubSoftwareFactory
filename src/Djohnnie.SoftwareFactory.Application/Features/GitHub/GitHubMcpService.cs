@@ -27,7 +27,7 @@ public sealed class GitHubMcpService(
         timeout.CancelAfter(ConnectTimeout);
         try
         {
-            var token = await tokenProvider.GetAccessTokenAsync();
+            var token = await tokenProvider.GetAccessTokenAsync(timeout.Token);
             var session = await connector.ConnectAsync(token, repositoryFullName, timeout.Token);
             logger.LogInformation("Connected to the GitHub MCP server for {Repository} with {Count} tools.", repositoryFullName, session.Tools.Count);
             return new RepositoryGitHubTools(session);

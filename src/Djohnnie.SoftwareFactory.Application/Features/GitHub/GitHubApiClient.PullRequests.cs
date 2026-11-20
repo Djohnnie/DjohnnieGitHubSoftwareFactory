@@ -51,7 +51,7 @@ public sealed partial class GitHubApiClient
     {
         var (owner, name) = SplitFullName(repositoryFullName);
         using var response = await SendAsync(HttpMethod.Post, "graphql",
-            JsonContent.Create(new Api.GraphQlRequest(LinkedPullRequestsQuery, new { owner, name, number = issueNumber })), cancellationToken);
+            JsonContent.Create(new Api.GraphQlRequest(LinkedPullRequestsQuery, new { owner, name, number = issueNumber })), cancellationToken, readOnly: true);
         await EnsureSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<Api.GraphQlResponse<Api.LinkedPullRequestsData>>(cancellationToken)
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");

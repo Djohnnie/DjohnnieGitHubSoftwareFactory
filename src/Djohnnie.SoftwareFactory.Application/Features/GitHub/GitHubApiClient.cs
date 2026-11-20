@@ -3,12 +3,15 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Polly;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using Api = Djohnnie.SoftwareFactory.Contracts.GitHub.Api;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
 
-public sealed class GitHubApiException(HttpStatusCode statusCode, string message) : Exception(message)
+public sealed class GitHubApiException(HttpStatusCode statusCode, string message, Exception? innerException = null) : Exception(message, innerException)
 {
     public HttpStatusCode StatusCode { get; } = statusCode;
 }
@@ -92,10 +95,12 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
 
     /// <param name="accept">A media type instead of the client's default <c>application/vnd.github+json</c>.</param>
     /// <param name="apiVersion">A REST API version instead of the client's default one.</param>
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken, string? accept = null, string? apiVersion = null)
+    /// <param name="readOnly">The request changes nothing although its method isn't GET (a GraphQL query), so it may be retried.</param>
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken,
+        string? accept = null, string? apiVersion = null, bool readOnly = false)
     {
         using var request = new HttpRequestMessage(method, url) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync(cancellationToken));
         // A header on the request replaces the client's default header of the same name.
         if (accept is not null)
         {
@@ -105,9 +110,37 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         {
             request.Headers.Add(ApiVersionHeader, apiVersion);
         }
-        var response = await httpClient.SendAsync(request, cancellationToken);
+        if (readOnly)
+        {
+            request.Options.Set(GitHubApiResilience.ReadOnly, true);
+        }
+        var response = await SendRequestAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
         ReportWhenUnauthorized(response);
         return response;
+    }
+
+    /// <summary>
+    /// Sends through the resilience pipeline and turns its refusals into <see cref="GitHubApiException"/>, one of the
+    /// exceptions the UI expects; a timeout or an open circuit is GitHub being unavailable, not a bug.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await httpClient.SendAsync(request, completionOption, cancellationToken);
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            throw new GitHubApiException(HttpStatusCode.GatewayTimeout, "GitHub didn't answer in time. Try again later.", ex);
+        }
+        catch (BrokenCircuitException ex)
+        {
+            throw new GitHubApiException(HttpStatusCode.ServiceUnavailable, "GitHub is failing repeatedly, so requests are paused for a moment. Try again shortly.", ex);
+        }
+        catch (ExecutionRejectedException ex)
+        {
+            throw new GitHubApiException(HttpStatusCode.ServiceUnavailable, "Too many GitHub requests at once. Try again shortly.", ex);
+        }
     }
 
     /// <summary>A 401 means the token itself is no longer valid (expired or revoked), so the session that owns it is ended.</summary>

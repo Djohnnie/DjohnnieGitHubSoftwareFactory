@@ -79,6 +79,7 @@ DGHSF is a single-user Blazor app that plans work items per GitHub repository an
 - The Azure AI Search field names (`file_id`, `chunk`, `text_vector`, `scope`, `repository`) are shared with `AzureAiKnowledgeSearchIndex` and `docs/knowledge-base-search`.
 - `MindmapStore.NodeData` property names are the stored JSON shape.
 - Don't use GitHub's search API for activity numbers: its secondary rate limit trips after a few quick requests.
+- `GitHubApiClient` goes through a resilience pipeline (`GitHubApiResilience`) that retries only GET requests and requests sent with `readOnly: true` (GraphQL queries). Never mark a request that creates or changes something as read-only: a retry would repeat it.
 
 ## Repository guidance
 

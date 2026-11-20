@@ -31,7 +31,7 @@ public class FavoritesTests : IDisposable
 
     private sealed class UnusedTokenProvider : IGitHubTokenProvider
     {
-        public Task<string> GetAccessTokenAsync()
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("GitHub must not be called.");
         }

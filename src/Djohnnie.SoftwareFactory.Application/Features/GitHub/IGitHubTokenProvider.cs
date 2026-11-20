@@ -2,7 +2,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
 
 public interface IGitHubTokenProvider
 {
-    Task<string> GetAccessTokenAsync();
+    Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Called when GitHub rejected the token (401): it expired or was revoked. A signed-in user's provider ends the session,

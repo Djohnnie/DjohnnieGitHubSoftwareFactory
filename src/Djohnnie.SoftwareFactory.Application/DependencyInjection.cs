@@ -26,6 +26,7 @@ using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -140,18 +141,32 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
-            services.AddHttpClient<GitHubApiClient>(client =>
+            services.AddGitHubApiClient();
+            return services;
+        }
+
+        /// <summary>The typed <see cref="GitHubApiClient"/> with its resilience pipeline (<see cref="GitHubApiResilience"/>).</summary>
+        public IHttpClientBuilder AddGitHubApiClient()
+        {
+            var builder = services.AddHttpClient<GitHubApiClient>(client =>
             {
-                client.BaseAddress = new Uri("https://api.github.com/");
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
-                client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+                GitHubHttpDefaults.Apply(client);
                 client.DefaultRequestHeaders.Add(GitHubApiClient.ApiVersionHeader, "2022-11-28");
+                // The pipeline's attempt and total timeouts apply instead; HttpClient's own 100 seconds would cut off its retries.
+                client.Timeout = Timeout.InfiniteTimeSpan;
             }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 // Copilot metrics report files may be served compressed.
                 AutomaticDecompression = System.Net.DecompressionMethods.All
             });
-            return services;
+            // By authority: failing report downloads (signed links on another host) don't open the breaker for the API.
+            builder.AddStandardResilienceHandler()
+                .Configure((options, provider) =>
+                {
+                    GitHubApiResilience.Configure(options, provider.GetService<TimeProvider>() ?? TimeProvider.System);
+                })
+                .SelectPipelineByAuthority();
+            return builder;
         }
 
         public IServiceCollection AddSoftwareFactory(IConfiguration configuration)

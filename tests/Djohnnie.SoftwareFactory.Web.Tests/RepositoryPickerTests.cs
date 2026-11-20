@@ -295,7 +295,7 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
 
     private sealed class TokenProvider : IGitHubTokenProvider
     {
-        public Task<string> GetAccessTokenAsync()
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult("token");
         }

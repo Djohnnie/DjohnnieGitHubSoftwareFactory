@@ -6,7 +6,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
 /// </summary>
 public sealed class ConfiguredGitHubTokenProvider(string token) : IGitHubTokenProvider
 {
-    public Task<string> GetAccessTokenAsync()
+    public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(token);
     }

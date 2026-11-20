@@ -8,7 +8,7 @@ namespace Djohnnie.SoftwareFactory.Web.Auth;
 #pragma warning disable BL0013
 public sealed class GitHubTokenProvider(AuthenticationStateProvider authenticationStateProvider) : IGitHubTokenProvider
 {
-    public async Task<string> GetAccessTokenAsync()
+    public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         var state = await authenticationStateProvider.GetAuthenticationStateAsync();
         return state.User.FindFirst(GitHubClaims.AccessToken)?.Value

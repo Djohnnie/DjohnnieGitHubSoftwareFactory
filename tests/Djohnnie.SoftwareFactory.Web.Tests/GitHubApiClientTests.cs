@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
 using Djohnnie.SoftwareFactory.Agents;
+using Djohnnie.SoftwareFactory.Application;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
+using Microsoft.Extensions.DependencyInjection;
 using Djohnnie.SoftwareFactory.Contracts.Assistant;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
@@ -144,9 +146,125 @@ public class GitHubApiClientTests
         Assert.Equal(0, token.UnauthorizedReports);
     }
 
+    [Fact]
+    public async Task Get_RetriesATransientFailure()
+    {
+        var calls = 0;
+        var handler = new Handler(_ => ++calls == 1 ? Failure(HttpStatusCode.ServiceUnavailable, retryAfterSeconds: 0) : Json(Repository("a")));
+
+        var repository = await ResilientClient(handler).GetRepositoryAsync("owner/a", _cancellationToken);
+
+        Assert.Equal("owner/a", repository.FullName);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Get_GivesUpAfterTheLastRetry()
+    {
+        var handler = new Handler(_ => Failure(HttpStatusCode.BadGateway, retryAfterSeconds: 0));
+
+        var error = await Assert.ThrowsAsync<GitHubApiException>(() => ResilientClient(handler).GetRepositoryAsync("owner/a", _cancellationToken));
+
+        Assert.Equal(HttpStatusCode.BadGateway, error.StatusCode);
+        Assert.Equal(1 + GitHubApiResilience.MaxRetries, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Post_IsNeverRetried()
+    {
+        var handler = new Handler(_ => Failure(HttpStatusCode.ServiceUnavailable, retryAfterSeconds: 0));
+
+        await Assert.ThrowsAsync<GitHubApiException>(() => ResilientClient(handler).CreateIssueCommentAsync("owner/a", 1, "Hello", _cancellationToken));
+
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GraphQlQuery_IsRetriedAlthoughItIsAPost()
+    {
+        var handler = new Handler(_ => Failure(HttpStatusCode.ServiceUnavailable, retryAfterSeconds: 0));
+
+        await Assert.ThrowsAsync<GitHubApiException>(() => ResilientClient(handler).GetLinkedPullRequestsAsync("owner/a", 1, _cancellationToken));
+
+        Assert.Equal(1 + GitHubApiResilience.MaxRetries, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task SecondaryRateLimit_WithAShortWait_IsRetried()
+    {
+        var calls = 0;
+        var handler = new Handler(_ => ++calls == 1 ? Failure(HttpStatusCode.Forbidden, retryAfterSeconds: 0) : Json(Repository("a")));
+
+        await ResilientClient(handler).GetRepositoryAsync("owner/a", _cancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task PrimaryRateLimit_ThatResetsLater_FailsAtOnce()
+    {
+        var reset = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds();
+        var handler = new Handler(_ =>
+        {
+            var response = Failure(HttpStatusCode.Forbidden);
+            response.Headers.Add("x-ratelimit-remaining", "0");
+            response.Headers.Add("x-ratelimit-reset", reset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return response;
+        });
+
+        var error = await Assert.ThrowsAsync<GitHubApiException>(() => ResilientClient(handler).GetRepositoryAsync("owner/a", _cancellationToken));
+
+        Assert.Equal(HttpStatusCode.Forbidden, error.StatusCode);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Forbidden_WithoutRateLimitHeaders_IsNotRetried()
+    {
+        var handler = new Handler(_ => Failure(HttpStatusCode.Forbidden));
+
+        await Assert.ThrowsAsync<GitHubApiException>(() => ResilientClient(handler).GetRepositoryAsync("owner/a", _cancellationToken));
+
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public void RequestedWait_ReadsRetryAfterAndTheRateLimitReset()
+    {
+        var now = new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        var retryAfter = Failure(HttpStatusCode.TooManyRequests, retryAfterSeconds: 42);
+        var reset = Failure(HttpStatusCode.Forbidden);
+        reset.Headers.Add("x-ratelimit-remaining", "0");
+        reset.Headers.Add("x-ratelimit-reset", now.AddSeconds(10).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.Equal(TimeSpan.FromSeconds(42), GitHubApiResilience.RequestedWait(retryAfter, now));
+        Assert.Equal(TimeSpan.FromSeconds(11), GitHubApiResilience.RequestedWait(reset, now));
+        Assert.Null(GitHubApiResilience.RequestedWait(Failure(HttpStatusCode.ServiceUnavailable), now));
+    }
+
     private static GitHubApiClient Client(Handler handler, Token? token = null)
     {
         return new GitHubApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") }, token ?? new Token());
+    }
+
+    /// <summary>The client as the application registers it, with its resilience pipeline, on <paramref name="handler"/>.</summary>
+    private static GitHubApiClient ResilientClient(Handler handler)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IGitHubTokenProvider>(new Token());
+        services.AddGitHubApiClient().ConfigurePrimaryHttpMessageHandler(() => handler);
+        return services.BuildServiceProvider().GetRequiredService<GitHubApiClient>();
+    }
+
+    private static HttpResponseMessage Failure(HttpStatusCode status, int? retryAfterSeconds = null)
+    {
+        var response = new HttpResponseMessage(status) { Content = new StringContent("""{"message":"failed"}""", Encoding.UTF8, "application/json") };
+        if (retryAfterSeconds is { } seconds)
+        {
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+        }
+        return response;
     }
 
     private static string Repository(string name)
@@ -168,7 +286,7 @@ public class GitHubApiClientTests
     {
         public int UnauthorizedReports { get; private set; }
 
-        public Task<string> GetAccessTokenAsync()
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult("token");
         }

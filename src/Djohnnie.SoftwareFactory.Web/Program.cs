@@ -27,9 +27,8 @@ builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.AddSingleton<GitHubSessionValidator>();
 builder.Services.AddHttpClient(GitHubSessionValidator.HttpClientName, client =>
 {
-    client.BaseAddress = new Uri("https://api.github.com/");
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
-    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    // No resilience pipeline: a failed check keeps the session, and the next request checks again.
+    GitHubHttpDefaults.Apply(client);
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 // Replaces the default circuit authentication state: it signs the circuit out when the GitHub token stops working.

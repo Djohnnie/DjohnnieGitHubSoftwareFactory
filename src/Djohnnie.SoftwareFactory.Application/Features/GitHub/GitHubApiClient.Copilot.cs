@@ -67,7 +67,7 @@ public sealed partial class GitHubApiClient
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await SendRequestAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new GitHubApiException(response.StatusCode, $"Downloading the Copilot metrics report failed: {(int)response.StatusCode} {response.ReasonPhrase}");

@@ -78,8 +78,8 @@ public sealed partial class GitHubApiClient
     public async Task DownloadTarballAsync(string repositoryFullName, Func<Stream, Task> read, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"repos/{repositoryFullName}/tarball/HEAD");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
-        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync(cancellationToken));
+        using var response = await SendRequestAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         ReportWhenUnauthorized(response);
         await EnsureSuccessAsync(response, cancellationToken);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
