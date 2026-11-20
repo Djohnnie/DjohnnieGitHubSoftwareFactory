@@ -18,7 +18,8 @@ namespace Djohnnie.SoftwareFactory.Worker;
 /// clones the base branch, lets the agent implement the work item on a new branch, commits and pushes its changes and opens
 /// the pull request that closes the issue. A <see cref="AgentRunKind.Revise"/> run clones the pull request's branch, merges
 /// the base branch into it, lets the agent address the feedback written since its last run there, pushes to the same branch
-/// and answers the feedback on the pull request.
+/// and answers the feedback on the pull request; when it pushed something, it then asks Copilot code review to review the
+/// pull request again.
 /// </summary>
 /// <remarks>
 /// While the agent works, the run's lease is renewed every third of <see cref="AgentRunOptions.Lease"/>; a renewal that finds
@@ -245,6 +246,10 @@ public sealed class AgentRunExecutor(
 
         var screenshotsSection = await PostScreenshotsAsync(run, screenshots, screenshotsOff);
         var problems = await AnswerAsync(run, number, discussion, replies, outcome, pushed, branch, baseBranch, merge, screenshotsSection);
+        if (pushed && await RequestCopilotReviewAsync(run, number) is { } reviewProblem)
+        {
+            problems.Add(reviewProblem);
+        }
         var warning = string.Join(" ", new[] { outcome.StoppedEarly }.Concat(problems).OfType<string>());
         return new AgentRunResult(branch, number, pullRequest.HtmlUrl, outcome.Summary, usage, warning.Length == 0 ? null : warning, until);
     }
@@ -289,6 +294,26 @@ public sealed class AgentRunExecutor(
             problems.Add($"Could not comment on pull request #{number}: {ex.Message}");
         }
         return problems;
+    }
+
+    /// <summary>
+    /// Asks Copilot code review to review the revised pull request, last, so it sees the pushed changes and the answers. The
+    /// changes are pushed by then, so a failure here is only reported.
+    /// </summary>
+    /// <returns>Why the review couldn't be requested, or <c>null</c>.</returns>
+    private async Task<string?> RequestCopilotReviewAsync(AgentRun run, int number)
+    {
+        try
+        {
+            await gitHub.RequestCopilotReviewAsync(run.RepositoryFullName, number, CancellationToken.None);
+            logger.LogInformation("Run {Run}: asked Copilot code review to review pull request #{PullRequest}.", run.Id, number);
+            return null;
+        }
+        catch (Exception ex) when (ex is GitHubApiException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "Run {Run}: could not request a Copilot code review of pull request #{PullRequest}.", run.Id, number);
+            return $"Could not request a Copilot code review of pull request #{number}: {ex.Message}";
+        }
     }
 
     /// <summary>

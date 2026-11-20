@@ -219,7 +219,8 @@ internal static class ContractMapping
                 PullRequestChecks = value.PullRequestChecks,
                 AgentRunUrl = value.AgentRunUrl,
                 PullRequestBranch = value.PullRequestBranch,
-                GeneratedByTaskId = value.GeneratedByTaskId
+                GeneratedByTaskId = value.GeneratedByTaskId,
+                CopilotRevisionRequestedAt = value.CopilotRevisionRequestedAt
             };
         }
 

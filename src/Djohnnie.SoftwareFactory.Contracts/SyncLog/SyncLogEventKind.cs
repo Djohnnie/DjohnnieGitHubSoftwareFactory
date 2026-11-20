@@ -43,5 +43,14 @@ public enum SyncLogEventKind
     RepositoryArchived = 9,
 
     /// <summary>An archived repository exists on GitHub again, so it is synced again.</summary>
-    RepositoryRestored = 10
+    RepositoryRestored = 10,
+
+    /// <summary>The Copilot cloud agent finished a revision asked from DGHSF, so Copilot code review was asked to review the pull request.</summary>
+    CopilotReviewRequested = 11,
+
+    /// <summary>
+    /// No Copilot code review will be requested for a revision asked from the Copilot cloud agent, e.g. because the pull request
+    /// was closed, Copilot's session failed or GitHub refused the request.
+    /// </summary>
+    CopilotReviewAbandoned = 12
 }

@@ -97,4 +97,10 @@ public class WorkItem : Entity
     /// finished tasks can be cleaned up without touching the work items.
     /// </summary>
     public Guid? GeneratedByTaskId { get; set; }
+
+    /// <summary>
+    /// When feedback was last sent to the Copilot cloud agent, while a Copilot code review of its revision is still to be
+    /// requested; <c>null</c> otherwise.
+    /// </summary>
+    public DateTimeOffset? CopilotRevisionRequestedAt { get; set; }
 }

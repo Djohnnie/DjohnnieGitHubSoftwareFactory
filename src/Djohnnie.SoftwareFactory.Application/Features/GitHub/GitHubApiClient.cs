@@ -526,6 +526,20 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
     }
 
+    /// <summary>
+    /// Asks Copilot code review to review the pull request (again). The token's account needs Copilot code review and write
+    /// access to pull requests; GitHub answers 422 otherwise.
+    /// </summary>
+    public async Task RequestCopilotReviewAsync(string repositoryFullName, int number, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/requested_reviewers",
+            JsonContent.Create(new Api.RequestReviewersRequest([CopilotReviewerLogin])), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <summary>The reviewer to request for a Copilot code review.</summary>
+    public const string CopilotReviewerLogin = "copilot-pull-request-reviewer[bot]";
+
     /// <summary>Merges the pull request, which closes it.</summary>
     /// <param name="mergeMethod"><c>merge</c>, <c>squash</c> or <c>rebase</c>.</param>
     /// <returns>The commit the merge created on the base branch.</returns>

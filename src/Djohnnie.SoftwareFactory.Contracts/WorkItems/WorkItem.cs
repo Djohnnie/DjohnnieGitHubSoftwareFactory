@@ -104,6 +104,13 @@ public sealed record WorkItem
     /// <summary>The run (root background task) that generated the item from its repository, or <c>null</c>.</summary>
     public Guid? GeneratedByTaskId { get; set; }
 
+    /// <summary>
+    /// When feedback was last sent to the Copilot cloud agent on the pull request, while the sync still has to ask Copilot
+    /// code review to review the revision once Copilot's agent session for it has finished; <c>null</c> otherwise. Only
+    /// sending feedback and the sync change it; saving the item leaves it as it is.
+    /// </summary>
+    public DateTimeOffset? CopilotRevisionRequestedAt { get; set; }
+
     /// <summary>A draft, also one the background agents generated (<see cref="WorkItemStatus.Generated"/>).</summary>
     public bool IsDraft => Status.IsDraft;
 

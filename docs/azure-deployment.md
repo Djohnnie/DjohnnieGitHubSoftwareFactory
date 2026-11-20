@@ -79,7 +79,7 @@ Configure these app settings on the Function App (`FUNCTIONS_WORKER_RUNTIME` is 
 | --- | --- |
 | `WorkItemSyncSchedule` | CRON expression with six fields (seconds first), in UTC, e.g. `0 */15 * * * *` for every 15 minutes. The function fails to start without it |
 | `ConnectionStrings__Database` | The same database as the Web App. The function reads and updates work items but doesn't migrate |
-| `GitHub__SyncToken` | GitHub token that can read every repository in the database: a classic token with `repo`, or a fine-grained token with read access to issues, pull requests, commit statuses, checks and Actions. The function fails to start without it |
+| `GitHub__SyncToken` | GitHub token that can read every repository in the database and request a Copilot code review once the Copilot cloud agent finished a revision: a classic token with `repo`, or a fine-grained token with read access to issues, commit statuses, checks and Actions and read and write access to pull requests. Its account needs Copilot code review. The function fails to start without it |
 | `MediatR__LicenseKey` | Optional; the same MediatR license key as the Web App, if it has one |
 
 The token's permissions aren't checked when the function starts, and missing ones don't fail the run:
@@ -217,7 +217,7 @@ When you regenerate an admin password, update `ACR_PASSWORD` and the job's regis
 | `ServiceBus` | The Service Bus connection string (or `ServiceBus__fullyQualifiedNamespace`, see above) |
 | `AgentRuns__QueueName` | The queue, e.g. `agent-runs` |
 | `ConnectionStrings__Database` | The same database as the Web App. The worker reads work items and writes runs but doesn't migrate |
-| `AgentWorker__GitHubToken` | The token the worker clones, pushes, opens and comments on pull requests and refreshes work items with: a fine-grained token with read and write access to **Contents** and **Pull requests** and read access to **Issues** of the repositories |
+| `AgentWorker__GitHubToken` | The token the worker clones, pushes, opens and comments on pull requests and refreshes work items with, and that asks Copilot code review to review a revision it pushed: a fine-grained token with read and write access to **Contents** and **Pull requests** and read access to **Issues** of the repositories. Without Copilot code review on its account, a revision succeeds with a warning |
 | `AgentWorker__CopilotToken` | Optional; the token the Copilot SDK runs with, whose Copilot plan pays the AI credits: a fine-grained token with the account permission **Copilot Requests** (classic `ghp_` tokens aren't accepted). Without it, `AgentWorker__GitHubToken` is used, which then needs that permission too |
 | `AgentWorker__MaxAiCreditsPerRun` | Optional; a soft limit per run (checked between model calls). Without it a run has no limit |
 | `AgentWorker__RunTimeout` | Optional; default `01:00:00` |

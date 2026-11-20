@@ -145,6 +145,8 @@ public sealed record StatusCheckRollupNode([property: JsonPropertyName("state")]
 
 public sealed record CreateCommentRequest([property: JsonPropertyName("body")] string Body);
 
+public sealed record RequestReviewersRequest([property: JsonPropertyName("reviewers")] IReadOnlyList<string> Reviewers);
+
 /// <param name="Event"><c>COMMENT</c> or <c>REQUEST_CHANGES</c>.</param>
 public sealed record CreateReviewRequest(
     [property: JsonPropertyName("body")] string Body,

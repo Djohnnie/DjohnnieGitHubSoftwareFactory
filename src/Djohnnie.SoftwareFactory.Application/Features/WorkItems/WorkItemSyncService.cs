@@ -16,8 +16,9 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
 /// <summary>
 /// Checks that every known repository still exists on GitHub (archiving the ones that don't), then refreshes every accepted
-/// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. Nothing is sent to GitHub.
-/// What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
+/// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. The only thing it sends to
+/// GitHub is a request for a Copilot code review, once the Copilot cloud agent finished a revision asked from DGHSF
+/// (<see cref="WorkItemService.RequestCopilotRevisionReviewAsync"/>). What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
 /// </summary>
 public sealed class WorkItemSyncService(
     RepositoryService repositories,
@@ -126,6 +127,11 @@ public sealed class WorkItemSyncService(
                 if (result.ProgressWarning is { } warning)
                 {
                     progressWarnings.Add((item, warning));
+                }
+                if (result.WorkItem.CopilotRevisionRequestedAt is not null)
+                {
+                    var review = await WithRetriesAsync(() => workItems.RequestCopilotRevisionReviewAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
+                    AddReviewEvent(run, result.WorkItem, review);
                 }
             }
             catch (GitHubApiException ex) when (StopsTheRun(ex))
@@ -363,6 +369,23 @@ public sealed class WorkItemSyncService(
             parts.Add($"{result.ProgressWarnings} without (all of) Copilot's progress");
         }
         return $"Synced {Count(result.Items, "work item")} of {Count(result.Repositories, "repository", "repositories")} in {elapsed.TotalSeconds:N1} s: {string.Join(", ", parts)}.";
+    }
+
+    private static void AddReviewEvent(Run run, WorkItem item, CopilotRevisionReviewResult review)
+    {
+        switch (review.Outcome)
+        {
+            case CopilotRevisionReviewOutcome.Requested:
+                run.Add(SyncLogLevel.Information, SyncLogEventKind.CopilotReviewRequested,
+                    $"Copilot finished the revision of pull request #{review.PullRequestNumber} of {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}', so Copilot code review was asked to review it.",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+            case CopilotRevisionReviewOutcome.Abandoned:
+                run.Add(SyncLogLevel.Warning, SyncLogEventKind.CopilotReviewAbandoned,
+                    $"No Copilot code review will be requested for the revision Copilot was asked for on {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}': {review.Reason}",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+        }
     }
 
     /// <summary>One warning per repository and reason, listing its items, rather than one per item.</summary>

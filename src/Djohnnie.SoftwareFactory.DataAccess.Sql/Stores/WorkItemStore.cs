@@ -317,6 +317,14 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         return entity.ToContract();
     }
 
+    public async Task SetCopilotRevisionRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset? requestedAt, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        entity.CopilotRevisionRequestedAt = requestedAt;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

@@ -480,6 +480,8 @@ public class AgentRunTests
         Assert.Contains("_The agent didn't answer this._", comment);
         Assert.Contains("Pushed the changes to `dghsf/42-add-the-endpoint-review`. Merged the latest `main` into the branch.", comment);
         Assert.Contains("Revised by the DGHSF agent worker", comment);
+        // Copilot code review is asked last, so it sees the pushed changes and the answers.
+        Assert.Equal(("/repos/owner/repo/pulls/7/requested_reviewers", """{"reviewers":["copilot-pull-request-reviewer[bot]"]}"""), worker.GitHub.Posted[^1]);
         // Only the first run opened a pull request.
         Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/pulls");
 
@@ -489,6 +491,42 @@ public class AgentRunTests
         Assert.Equal((AgentRunKind.Revise, 7, "dghsf/42-add-the-endpoint-review", 5m), (revised.Kind, revised.PullRequestNumber, revised.Branch, revised.AiCredits));
         Assert.True(revised.FeedbackUntil > now.AddMinutes(-1));
         Assert.Null(revised.Error);
+    }
+
+    [Fact]
+    public async Task Execute_ARevisionThatChangesNothing_AnswersWithoutRequestingACopilotReview()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        worker.GitHub.IssueComments = Comments((1, "Why this name?", DateTimeOffset.UtcNow.AddMinutes(-1), null));
+        await HandledUntilAsync(database, worker.Run.Id, DateTimeOffset.UtcNow.AddHours(-1));
+        worker.Git.HasChanges = false;
+        worker.Agent.Outcome = new("It matches the API.", Usage, null);
+
+        var revision = await worker.StartRevisionAsync(_cancellationToken);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(revision, _cancellationToken));
+
+        Assert.Single(worker.GitHub.Posted, r => r.Path == "/repos/owner/repo/issues/7/comments");
+        Assert.DoesNotContain(worker.GitHub.Posted, r => r.Path.EndsWith("/requested_reviewers", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Execute_ARevisionWhoseCopilotReviewIsRefused_StillSucceeds_WithAWarning()
+    {
+        await using var database = await SqlServerDatabase.CreateAsync();
+        await using var worker = await WorkerAsync(database);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(_cancellationToken));
+        worker.GitHub.IssueComments = Comments((1, "Fix the typo.", DateTimeOffset.UtcNow.AddMinutes(-1), null));
+        await HandledUntilAsync(database, worker.Run.Id, DateTimeOffset.UtcNow.AddHours(-1));
+        worker.GitHub.ReviewRequestStatus = HttpStatusCode.UnprocessableEntity;
+        worker.Agent.Outcome = new("Fixed it.", Usage, null);
+
+        var revision = await worker.StartRevisionAsync(_cancellationToken);
+        Assert.Equal(AgentRunStatus.Succeeded, await worker.ExecuteAsync(revision, _cancellationToken));
+
+        var revised = (await worker.Runs.GetAsync(revision.Id, _cancellationToken))!;
+        Assert.Contains("Could not request a Copilot code review of pull request #7", revised.Error);
     }
 
     [Fact]
@@ -876,6 +914,9 @@ public class AgentRunTests
         public string ReviewComments { get; set; } = "[]";
         public string Reviews { get; set; } = "[]";
 
+        /// <summary>The answer to requesting a Copilot code review; created by default.</summary>
+        public HttpStatusCode ReviewRequestStatus { get; set; } = HttpStatusCode.Created;
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
@@ -902,6 +943,12 @@ public class AgentRunTests
             if (request.Method == HttpMethod.Post && (path == "/repos/owner/repo/issues/7/comments" || path.EndsWith("/replies", StringComparison.Ordinal)))
             {
                 return Json("""{"html_url":"https://github.com/owner/repo/pull/7#issuecomment-5"}""", HttpStatusCode.Created);
+            }
+            if (request.Method == HttpMethod.Post && path == "/repos/owner/repo/pulls/7/requested_reviewers")
+            {
+                return ReviewRequestStatus == HttpStatusCode.Created
+                    ? Json("""{"number":7,"requested_reviewers":[{"login":"Copilot","type":"Bot"}]}""", HttpStatusCode.Created)
+                    : Json("""{"message":"Reviews may only be requested from collaborators."}""", ReviewRequestStatus);
             }
             if (request.Method == HttpMethod.Get && path == "/repos/owner/repo")
             {

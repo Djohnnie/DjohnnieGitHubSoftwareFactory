@@ -60,6 +60,12 @@ public interface IWorkItemStore
     /// </summary>
     Task<WorkItem> ApplyIssueAsync(string repositoryFullName, Guid id, WorkItemIssueSnapshot issue, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Sets or clears <see cref="WorkItem.CopilotRevisionRequestedAt"/>: when feedback was sent to the Copilot cloud agent,
+    /// so the sync asks for a Copilot code review once Copilot finished. <see cref="WorkItem.UpdatedAt"/> doesn't change.
+    /// </summary>
+    Task SetCopilotRevisionRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset? requestedAt, CancellationToken cancellationToken);
+
     /// <summary>Remembers GitHub's issue id of an item that was accepted before the id was stored.</summary>
     Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken);
 }

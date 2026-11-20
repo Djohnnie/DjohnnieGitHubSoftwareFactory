@@ -95,4 +95,13 @@ public sealed class WorkItemService(ISender mediator)
     {
         return (await mediator.Send(new RefreshWorkItemCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
+
+    /// <summary>
+    /// Asks Copilot code review to review the item's pull request once the Copilot cloud agent finished the revision that
+    /// feedback sent from DGHSF asked for; nothing happens while Copilot is busy or when no feedback waits for a review.
+    /// </summary>
+    public async Task<CopilotRevisionReviewResult> RequestCopilotRevisionReviewAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new RequestCopilotRevisionReviewCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
 }

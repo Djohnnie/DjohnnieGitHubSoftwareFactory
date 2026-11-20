@@ -484,7 +484,9 @@ public partial class WorkItemServiceTests : IDisposable
     private sealed record PullRequestOnGitHub(int Number, string Title, string State, string Branch, string? ReviewDecision = null,
         string[]? LatestReviews = null, string? Checks = null);
 
-    private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot");
+    /// <param name="CreatedAt">When the run was created; by default a day earlier per run, starting at 1970.</param>
+    private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot",
+        DateTimeOffset? CreatedAt = null);
 
     [GeneratedRegex(@"^/repos/(?<owner>[^/]+)/(?<name>[^/]+)$")]
     private static partial Regex RepositoryPath();
@@ -515,6 +517,12 @@ public partial class WorkItemServiceTests : IDisposable
 
         /// <summary>The pull requests linked to an issue, by issue number; none when missing.</summary>
         public Dictionary<int, List<PullRequestOnGitHub>> LinkedPullRequests { get; } = [];
+
+        /// <summary>The pull requests a Copilot code review was requested for, in order.</summary>
+        public List<int> CopilotReviewRequests { get; } = [];
+
+        /// <summary>The answer to requesting a Copilot code review, instead of success.</summary>
+        public (HttpStatusCode Status, string Message)? ReviewRequestFailure { get; set; }
 
         /// <summary>The Actions runs of a branch, newest first; none when missing.</summary>
         public Dictionary<string, List<RunOnGitHub>> RunsByBranch { get; } = [];
@@ -739,8 +747,16 @@ public partial class WorkItemServiceTests : IDisposable
                 ("POST", "/reviews") => Json(HttpStatusCode.OK, $$"""{"id":9,"html_url":"https://github.com/owner/repo/pull/{{number}}#pullrequestreview-9"}"""),
                 ("PUT", "/merge") when MergeFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),
                 ("PUT", "/merge") => Merge(number),
+                ("POST", "/requested_reviewers") when ReviewRequestFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),
+                ("POST", "/requested_reviewers") => RequestReview(number),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
+        }
+
+        private HttpResponseMessage RequestReview(int number)
+        {
+            CopilotReviewRequests.Add(number);
+            return Json(HttpStatusCode.Created, $$"""{"number":{{number}},"requested_reviewers":[{"login":"Copilot","type":"Bot"}]}""");
         }
 
         private HttpResponseMessage Merge(int number)
@@ -788,7 +804,7 @@ public partial class WorkItemServiceTests : IDisposable
                 status = run.Status,
                 conclusion = run.Conclusion,
                 html_url = $"https://github.com/owner/repo/actions/runs/{500 + index}",
-                created_at = DateTimeOffset.UnixEpoch.AddDays(-index)
+                created_at = run.CreatedAt ?? DateTimeOffset.UnixEpoch.AddDays(-index)
             });
             return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { workflow_runs = runs }));
         }

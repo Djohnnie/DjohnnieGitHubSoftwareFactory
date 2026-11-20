@@ -49,6 +49,7 @@ public static class DependencyInjection
             services.AddSqlStores();
             services.AddScoped<WorkItemWorkflow>();
             services.AddScoped<WorkItemPullRequests>();
+            services.AddScoped<CopilotRevisionReviews>();
             services.AddScoped<AgentTemplateWorkflow>();
             services.AddScoped<SkillWorkflow>();
             services.AddScoped<AiModelService>();

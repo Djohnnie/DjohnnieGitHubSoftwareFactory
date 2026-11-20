@@ -13,7 +13,7 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 /// The pull request of a work item (the one its progress is about): its diff, its discussion and feedback for its agent:
 /// Copilot, or the DGHSF agent worker when the worker opened it.
 /// </summary>
-public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient gitHub, IAgentRunStore agentRuns, WorkItemWorkflow workflow)
+public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient gitHub, IAgentRunStore agentRuns, WorkItemWorkflow workflow, TimeProvider time)
 {
     public const string CopilotMention = "@copilot";
 
@@ -158,6 +158,8 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
     /// On a pull request the DGHSF agent worker opened, nothing mentions Copilot: the feedback is posted as it is, and a
     /// revision run of the worker starts that reads the pull request's discussion, so it also gets feedback written on GitHub.
     /// That is refused while the worker is still running, because that run wouldn't see the feedback.
+    /// Feedback for Copilot is remembered on the item (<see cref="WorkItem.CopilotRevisionRequestedAt"/>), so the sync asks
+    /// Copilot code review to review the pull request once Copilot finished the revision; the worker does that itself.
     /// </remarks>
     public async Task<PullRequestFeedbackResult> SendFeedbackAsync(PullRequestFeedback feedback, CancellationToken cancellationToken = default)
     {
@@ -171,7 +173,16 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         }
         if (workerRuns is null)
         {
-            return new(await PostAsync(feedback, number, mentionCopilot: true, cancellationToken));
+            var posted = await PostAsync(feedback, number, mentionCopilot: true, cancellationToken);
+            try
+            {
+                await store.SetCopilotRevisionRequestedAsync(feedback.RepositoryFullName, feedback.Id, time.GetUtcNow(), cancellationToken);
+                return new(posted);
+            }
+            catch (PersistenceException)
+            {
+                return new(posted, Warning: "Your feedback was posted, but DGHSF couldn't remember it, so Copilot code review won't be asked to review Copilot's revision.");
+            }
         }
 
         if (workerRuns.Any(r => r.IsActive))

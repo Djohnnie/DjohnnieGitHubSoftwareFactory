@@ -8,7 +8,7 @@ DGHSF is a personal software factory for GitHub: a single-user web app to plan w
 
 - **Plan work items** per repository: epics, features, user stories, bugs and tasks, with templates per type.
 - **Accept** an item to create a labelled GitHub issue, linked to its parent and children as sub-issues. Stories, bugs and tasks are then assigned to the Copilot cloud agent, optionally with a custom agent, model, base branch and extra instructions.
-- **Or run the agent yourself**: an item that runs on the DGHSF agent worker is implemented by a container job with the GitHub Copilot SDK. The job clones the repository, lets the agent work on a new branch, opens the pull request, and records the AI credits and tokens of every run. Feedback sent from the pull request's discussion in DGHSF starts a revision run: it merges the latest base branch into the pull request's branch, addresses every comment written since the agent's last run (also those written on GitHub), pushes to the same branch and answers each comment.
+- **Or run the agent yourself**: an item that runs on the DGHSF agent worker is implemented by a container job with the GitHub Copilot SDK. The job clones the repository, lets the agent work on a new branch, opens the pull request, and records the AI credits and tokens of every run. Feedback sent from the pull request's discussion in DGHSF starts a revision run: it merges the latest base branch into the pull request's branch, addresses every comment written since the agent's last run (also those written on GitHub), pushes to the same branch and answers each comment. When a revision pushed changes, it then asks Copilot code review to review the pull request again; for feedback sent to the Copilot cloud agent, the sync function does that once Copilot's agent session for the feedback has succeeded.
 - **Manage custom agents** (`.github/agents/*.agent.md`) and the repository's `.github/copilot-instructions.md`, and share agent templates across repositories.
 - **DGHSF Agent** chats on every editor (including the Copilot Skills Agent on the skill editor) help fill in the form. Background agents suggest a model per item and write suggestion chips. Their prompts are editable on the internal agents page.
 - **Chat** about the whole project: the DGHSF Agent on `/chat` answers questions about the selected repository from everything DGHSF stores about it, the repository's files and (with the GitHub MCP server) its GitHub activity. Conversations are kept per repository in a history list and named in two words; every 10 messages a summary replaces the older messages in what the agent gets, while the chat keeps showing them all.
@@ -103,7 +103,7 @@ A knowledge base file is either global (every repository sees it) or belongs to 
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "WorkItemSyncSchedule": "0 */15 * * * *",
     "ConnectionStrings__Database": "Server=(localdb)\\MSSQLLocalDB;Database=DGHSF;Trusted_Connection=True;TrustServerCertificate=True",
-    "GitHub__SyncToken": "<GitHub token that can read the issues, pull requests, checks and Actions runs of your repositories>"
+    "GitHub__SyncToken": "<GitHub token that can read the issues, pull requests, checks and Actions runs of your repositories, and request reviewers on pull requests>"
   }
 }
 ```
@@ -111,6 +111,8 @@ A knowledge base file is either global (every repository sees it) or belongs to 
 Then run `func start` in that directory. The function doesn't apply migrations, so run the web app once first.
 
 Every run first checks that each repository in the database still exists on GitHub. One that GitHub answers 404 for is archived: it leaves the favorites and the recently accessed repositories, its work items are no longer synced, and the repository picker lists it separately under "Removed from GitHub". It can still be opened to view everything DGHSF stored, with everything that needs GitHub disabled. GitHub also answers 404 for a repository the token can't see, so give the sync token access to every repository DGHSF works with; an archived repository that GitHub knows again is restored by the next run (or by selecting it from GitHub's list in the picker).
+
+After feedback was sent to the Copilot cloud agent from DGHSF, the sync watches Copilot's Actions runs on the pull request's branch. Once the first session that started after the feedback has succeeded, it asks Copilot code review to review the pull request; that is the only thing the sync writes to GitHub. It stops waiting when the pull request is merged or closed, when Copilot's session fails, when Copilot hasn't started within 6 hours, or when GitHub refuses the request, and writes a warning to the sync log. The token's account needs Copilot code review for the request to succeed.
 
 ### The tasks function
 
