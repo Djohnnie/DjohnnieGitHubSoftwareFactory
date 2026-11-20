@@ -502,7 +502,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
         // The pull request's tabs still open their own section.
         await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
-        Assert.Equal(3, cut.FindComponent<MudTabs>().Instance.ActivePanelIndex);
+        Assert.Equal(3, cut.FindComponent<MudTabs>().Instance.GetState(x => x.ActivePanelIndex));
     }
 
     [Fact]
