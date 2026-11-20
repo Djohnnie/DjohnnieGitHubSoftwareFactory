@@ -79,9 +79,19 @@ public sealed partial class GitHubApiClient
         return runs.Where(IsCopilotRun).DistinctBy(r => r.Id).ToList();
     }
 
+    /// <summary>
+    /// An agent session of the Copilot cloud agent (<c>dynamic/copilot-swe-agent/copilot</c>). Copilot code review runs as a
+    /// dynamic run on the pull request's branch too (<c>dynamic/agents/copilot-pull-request-reviewer</c>, "Running Copilot Code
+    /// Review"); that one is no agent session, or a review would look like Copilot working on (and finishing) a revision.
+    /// </summary>
     public static bool IsCopilotRun(GitHubWorkflowRun run)
     {
-        return string.Equals(run.Event, "dynamic", StringComparison.OrdinalIgnoreCase)
-            && (run.Path?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true || run.Name?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true);
+        if (!string.Equals(run.Event, "dynamic", StringComparison.OrdinalIgnoreCase)
+            || run.Path?.Contains("copilot-pull-request-reviewer", StringComparison.OrdinalIgnoreCase) == true
+            || run.Name?.Contains("code review", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return false;
+        }
+        return run.Path?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true || run.Name?.Contains("copilot", StringComparison.OrdinalIgnoreCase) == true;
     }
 }

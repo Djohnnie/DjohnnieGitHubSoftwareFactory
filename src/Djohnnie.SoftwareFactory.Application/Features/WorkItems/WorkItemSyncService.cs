@@ -403,7 +403,7 @@ public sealed class WorkItemSyncService(
                 break;
             case CopilotRevisionReviewOutcome.Abandoned:
                 run.Add(SyncLogLevel.Warning, SyncLogEventKind.CopilotReviewAbandoned,
-                    $"No Copilot code review will be requested for the revision Copilot was asked for on {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}': {review.Reason}",
+                    $"No Copilot code review will be requested for {(review.AfterFeedback ? "the revision Copilot was asked for" : "Copilot's agent session")} on {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}': {review.Reason}",
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
         }

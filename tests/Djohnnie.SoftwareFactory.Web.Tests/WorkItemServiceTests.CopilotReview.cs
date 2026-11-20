@@ -147,6 +147,29 @@ public partial class WorkItemServiceTests
     }
 
     [Fact]
+    public async Task CopilotCodeReviewsOwnRun_IsNoAgentSession_SoItIsNotReviewedAgain()
+    {
+        var task = await TaskWithPullRequestAsync();
+        var session = DateTimeOffset.UtcNow.AddHours(-2);
+        _gitHub.RunsByBranch[CopilotBranch] = [new("completed", "success", CreatedAt: session)];
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+        Assert.Equal([7], _gitHub.CopilotReviewRequests);
+
+        // Copilot code review runs as a dynamic run on the same branch; it finishes after its review was submitted.
+        _gitHub.RunsByBranch[CopilotBranch] =
+        [
+            new("completed", "success", Path: "dynamic/agents/copilot-pull-request-reviewer", CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-2), UpdatedAt: DateTimeOffset.UtcNow),
+            new("completed", "success", CreatedAt: session)
+        ];
+        _gitHub.ReviewsOnGitHub.Add(new(new("copilot-pull-request-reviewer[bot]", null, "Bot"), DateTimeOffset.UtcNow.AddMinutes(-1), "COMMENTED", Id: 300));
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Equal([7], _gitHub.CopilotReviewRequests);
+        Assert.Equal(CopilotProgress.ReadyForReview, (await _service.GetAsync(Repo, task.Id, _cancellationToken))!.Progress);
+        Assert.DoesNotContain(await SyncLogAsync(), e => e.Kind == SyncLogEventKind.CopilotReviewAbandoned);
+    }
+
+    [Fact]
     public async Task CopilotsSession_ThatFailed_IsNotHandedOverForReview()
     {
         await TaskWithPullRequestAsync();

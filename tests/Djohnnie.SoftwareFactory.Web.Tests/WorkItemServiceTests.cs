@@ -491,8 +491,9 @@ public partial class WorkItemServiceTests : IDisposable
         string? Mergeable = null);
 
     /// <param name="CreatedAt">When the run was created; by default a day earlier per run, starting at 1970.</param>
+    /// <param name="UpdatedAt">When the run was last updated (for a completed run: when it finished); GitHub's field is left out when missing.</param>
     private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot",
-        DateTimeOffset? CreatedAt = null);
+        DateTimeOffset? CreatedAt = null, DateTimeOffset? UpdatedAt = null);
 
     [GeneratedRegex(@"^/repos/(?<owner>[^/]+)/(?<name>[^/]+)$")]
     private static partial Regex RepositoryPath();
@@ -837,7 +838,8 @@ public partial class WorkItemServiceTests : IDisposable
                 status = run.Status,
                 conclusion = run.Conclusion,
                 html_url = $"https://github.com/owner/repo/actions/runs/{500 + index}",
-                created_at = run.CreatedAt ?? DateTimeOffset.UnixEpoch.AddDays(-index)
+                created_at = run.CreatedAt ?? DateTimeOffset.UnixEpoch.AddDays(-index),
+                updated_at = run.UpdatedAt
             });
             return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { workflow_runs = runs }));
         }
