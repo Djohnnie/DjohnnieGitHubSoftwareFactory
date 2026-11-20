@@ -373,6 +373,8 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Contains("without changing any files", panel.Markup);
         Assert.Contains("9 min", panel.Markup);
         Assert.Contains("Handed to the DGHSF agent worker", cut.Markup);
+        // Starting over first refreshes the item from its issue, because the worker reads it from the database.
+        _gitHub.IssueJson = """{"id":1007,"number":7,"title":"Renamed on GitHub","html_url":"https://github.com/owner/repo/issues/7","state":"open","body":"Edited","assignees":[]}""";
 
         await cut.InvokeAsync(() => panel.FindAll("button").Single(b => b.TextContent.Contains("Start over")).Click());
 
@@ -380,6 +382,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Contains("Waiting", panel.Markup);
         Assert.Contains(panel.FindAll("button"), b => b.TextContent.Contains("Cancel run"));
         Assert.DoesNotContain(panel.FindAll("button"), b => b.TextContent.Contains("Start over"));
+        Assert.Equal("Renamed on GitHub", (await Items.GetAsync(Repo, task.Id, _cancellationToken))!.Title);
     }
 
     [Fact]

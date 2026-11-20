@@ -107,11 +107,13 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
 
     /// <summary>
     /// Starts another run of the DGHSF agent worker on an item it already worked on, e.g. after a failed run. The new run
-    /// branches from the base branch again and opens its own pull request; it is a run of the item's task.
+    /// branches from the base branch again and opens its own pull request; it is a run of the item's task. The item and
+    /// every item above it are refreshed from their GitHub issues first (<see cref="RefreshWithAncestorsAsync"/>).
     /// </summary>
     public async Task<AgentRun> StartWorkerRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {
         var item = await FindWorkerItemAsync(repositoryFullName, id, cancellationToken);
+        item = await RefreshWorkerItemAsync(item, cancellationToken);
         return await agentRuns.CreateAsync(repositoryFullName, id, item.Model, agentRunOptions.Value.MaxAttempts, cancellationToken);
     }
 
@@ -120,9 +122,17 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
     /// the feedback written on it since the agent's last run there and pushes to the same branch. The revision is a run of
     /// the item's task, next to the run that opened the pull request.
     /// </summary>
-    public async Task<AgentRun> StartRevisionRunAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    /// <param name="refreshFirst">
+    /// Refresh the item and every item above it from their GitHub issues first (<see cref="RefreshWithAncestorsAsync"/>);
+    /// <c>false</c> only when the caller just did.
+    /// </param>
+    public async Task<AgentRun> StartRevisionRunAsync(string repositoryFullName, Guid id, bool refreshFirst = true, CancellationToken cancellationToken = default)
     {
         var item = await FindWorkerItemAsync(repositoryFullName, id, cancellationToken);
+        if (refreshFirst)
+        {
+            item = await RefreshWorkerItemAsync(item, cancellationToken);
+        }
         var opened = (await agentRuns.GetForWorkItemAsync(repositoryFullName, id, cancellationToken))
             .FirstOrDefault(r => r.PullRequestNumber is not null)
             ?? throw new DomainRuleException("The DGHSF agent worker hasn't opened a pull request for this item yet.");
@@ -148,19 +158,65 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
             cancellationToken);
     }
 
+    /// <summary>
+    /// Refreshes the item and then every item above it (closest first) from their GitHub issues, one after the other, so a
+    /// worker run that starts next reads their current title and description from the database: the worker doesn't read
+    /// the issues on GitHub. The Copilot cloud agent does, so its items don't need this.
+    /// </summary>
+    /// <returns>The item as refreshed.</returns>
+    /// <exception cref="DomainRuleException">An issue couldn't be read; the message says which item.</exception>
+    public async Task<WorkItem> RefreshWithAncestorsAsync(WorkItem item, CancellationToken cancellationToken = default)
+    {
+        var refreshed = await RefreshForRunAsync(item, cancellationToken);
+        foreach (var ancestor in await store.GetAncestorsAsync(item.RepositoryFullName, refreshed.ParentId, cancellationToken))
+        {
+            if (ancestor.HasIssue)
+            {
+                await RefreshForRunAsync(ancestor, cancellationToken);
+            }
+        }
+        return refreshed;
+    }
+
+    private async Task<WorkItem> RefreshForRunAsync(WorkItem item, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await RefreshFromIssueAsync(item.RepositoryFullName, item.Id, cancellationToken)).WorkItem;
+        }
+        catch (Exception ex) when (ex is DomainRuleException or GitHubApiException or HttpRequestException)
+        {
+            throw new DomainRuleException(
+                $"The {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}' couldn't be refreshed from GitHub, so the agent would work with outdated details: {ex.Message}");
+        }
+    }
+
+    /// <summary>Refreshes a worker item and its ancestors, then checks again that it can start a run (its issue may have been closed).</summary>
+    private async Task<WorkItem> RefreshWorkerItemAsync(WorkItem item, CancellationToken cancellationToken)
+    {
+        return CheckWorkerItem(await RefreshWithAncestorsAsync(item, cancellationToken));
+    }
+
     /// <summary>A user story, bug or task in progress on the DGHSF agent worker, which can start another run.</summary>
     private async Task<WorkItem> FindWorkerItemAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken)
     {
-        var item = await FindAsync(repositoryFullName, id, cancellationToken);
+        return CheckWorkerItem(await FindAsync(repositoryFullName, id, cancellationToken));
+    }
+
+    private static WorkItem CheckWorkerItem(WorkItem item)
+    {
         if (item.Executor != AgentExecutor.DghsfWorker || !item.Type.CanBeAssigned)
         {
             throw new DomainRuleException("Only user stories, bugs and tasks that run on the DGHSF agent worker can start a worker run.");
         }
         if (item.Status != WorkItemStatus.InProgress || item.IssueNumber is null)
         {
-            throw new DomainRuleException(item.Status == WorkItemStatus.Accepted
-                ? "Assign the agent first."
-                : "Only an item that is in progress can start another worker run.");
+            throw new DomainRuleException(item.Status switch
+            {
+                WorkItemStatus.Accepted => "Assign the agent first.",
+                WorkItemStatus.Done => $"GitHub issue #{item.IssueNumber} is closed, so the agent worker can't start another run on it.",
+                _ => "Only an item that is in progress can start another worker run."
+            });
         }
         return item;
     }

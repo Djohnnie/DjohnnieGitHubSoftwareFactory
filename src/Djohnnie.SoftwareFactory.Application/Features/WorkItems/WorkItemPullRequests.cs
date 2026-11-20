@@ -157,7 +157,9 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
     /// <remarks>
     /// On a pull request the DGHSF agent worker opened, nothing mentions Copilot: the feedback is posted as it is, and a
     /// revision run of the worker starts that reads the pull request's discussion, so it also gets feedback written on GitHub.
-    /// That is refused while the worker is still running, because that run wouldn't see the feedback.
+    /// That is refused while the worker is still running, because that run wouldn't see the feedback. Before anything is
+    /// posted, the item and every item above it are refreshed from their GitHub issues, because the worker reads them from the
+    /// database; when that fails, nothing is posted. Copilot reads the issues on GitHub itself, so its feedback skips that.
     /// Feedback for Copilot is remembered on the item (<see cref="WorkItem.CopilotRevisionRequestedAt"/>), so the sync asks
     /// Copilot code review to review the pull request once Copilot finished the revision; the worker does that itself.
     /// </remarks>
@@ -189,10 +191,23 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         {
             throw new DomainRuleException("The DGHSF agent worker is still working on this item and wouldn't see new feedback. Send it when its run has ended, or cancel the run.");
         }
+        WorkItem refreshed;
+        try
+        {
+            refreshed = await workflow.RefreshWithAncestorsAsync(item, cancellationToken);
+        }
+        catch (DomainRuleException ex)
+        {
+            throw new DomainRuleException($"{ex.Message} Your feedback wasn't sent.");
+        }
+        if (refreshed.Status == WorkItemStatus.Done)
+        {
+            throw new DomainRuleException($"GitHub issue #{refreshed.IssueNumber} is closed, so the agent can no longer revise its pull request. Your feedback wasn't sent.");
+        }
         var url = await PostAsync(feedback, number, mentionCopilot: false, cancellationToken);
         try
         {
-            await workflow.StartRevisionRunAsync(feedback.RepositoryFullName, feedback.Id, cancellationToken);
+            await workflow.StartRevisionRunAsync(feedback.RepositoryFullName, feedback.Id, refreshFirst: false, cancellationToken);
             return new(url, AgentRunStarted: true);
         }
         catch (DomainRuleException ex)

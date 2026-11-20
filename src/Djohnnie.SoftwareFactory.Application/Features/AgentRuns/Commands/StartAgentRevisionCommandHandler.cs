@@ -9,6 +9,6 @@ public sealed class StartAgentRevisionCommandHandler(WorkItemWorkflow workflow) 
 {
     public async Task<Response<AgentRun>> Handle(StartAgentRevisionCommand request, CancellationToken cancellationToken)
     {
-        return new(await workflow.StartRevisionRunAsync(request.Dto.RepositoryFullName, request.Dto.Id, cancellationToken));
+        return new(await workflow.StartRevisionRunAsync(request.Dto.RepositoryFullName, request.Dto.Id, cancellationToken: cancellationToken));
     }
 }
