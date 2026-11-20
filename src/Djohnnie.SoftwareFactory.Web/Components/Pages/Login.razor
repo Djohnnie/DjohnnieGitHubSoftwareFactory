@@ -15,6 +15,10 @@
         {
             <MudAlert Variant="Variant.Outlined" Severity="Severity.Error" Class="mb-4">Sign-in failed or this GitHub account is not allowed.</MudAlert>
         }
+        else if (Error == "expired")
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Class="mb-4">Your GitHub session has expired. Please sign in again.</MudAlert>
+        }
 
         <MudButton Href="@($"/auth/login?returnUrl={Uri.EscapeDataString(SafeReturnUrl)}")" Variant="Variant.Outlined" Color="Color.Primary"
                    StartIcon="@Icons.Custom.Brands.GitHub" Size="Size.Large">Sign in with GitHub</MudButton>

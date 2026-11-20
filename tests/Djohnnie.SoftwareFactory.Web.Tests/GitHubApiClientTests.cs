@@ -121,9 +121,32 @@ public class GitHubApiClientTests
         Assert.Empty(requested);
     }
 
-    private static GitHubApiClient Client(Handler handler)
+    [Fact]
+    public async Task Unauthorized_ReportsTheRejectedTokenToEndTheSession()
     {
-        return new GitHubApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") }, new Token());
+        var token = new Token();
+        var client = Client(new Handler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)), token);
+
+        var error = await Assert.ThrowsAsync<GitHubApiException>(() => client.GetRepositoryAsync("owner/a", _cancellationToken));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, error.StatusCode);
+        Assert.Equal(1, token.UnauthorizedReports);
+    }
+
+    [Fact]
+    public async Task OtherErrors_DoNotEndTheSession()
+    {
+        var token = new Token();
+        var client = Client(new Handler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)), token);
+
+        await Assert.ThrowsAsync<GitHubApiException>(() => client.GetRepositoryAsync("owner/a", _cancellationToken));
+
+        Assert.Equal(0, token.UnauthorizedReports);
+    }
+
+    private static GitHubApiClient Client(Handler handler, Token? token = null)
+    {
+        return new GitHubApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com/") }, token ?? new Token());
     }
 
     private static string Repository(string name)
@@ -143,9 +166,16 @@ public class GitHubApiClientTests
 
     private sealed class Token : IGitHubTokenProvider
     {
+        public int UnauthorizedReports { get; private set; }
+
         public Task<string> GetAccessTokenAsync()
         {
             return Task.FromResult("token");
+        }
+
+        public void ReportUnauthorized()
+        {
+            UnauthorizedReports++;
         }
     }
 

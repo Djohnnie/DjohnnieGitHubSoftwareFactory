@@ -2,7 +2,12 @@
     <Found Context="routeData">
         @* The layout uses the route data to see whether the page needs a selected repository. *@
         <CascadingValue Value="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                @* Every page requires a signed-in user, so this only happens when the GitHub session expired in an open circuit. *@
+                <NotAuthorized>
+                    <RedirectToSessionExpired />
+                </NotAuthorized>
+            </AuthorizeRouteView>
         </CascadingValue>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>

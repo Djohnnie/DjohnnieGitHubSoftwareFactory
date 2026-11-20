@@ -14,5 +14,14 @@ public sealed class GitHubTokenProvider(AuthenticationStateProvider authenticati
         return state.User.FindFirst(GitHubClaims.AccessToken)?.Value
             ?? throw new GitHubApiException(HttpStatusCode.Unauthorized, "No GitHub access token in the current session. Please sign out and sign in again.");
     }
+
+    public void ReportUnauthorized()
+    {
+        // Sends the circuit to the login page; other providers (e.g. in tests) keep their state.
+        if (authenticationStateProvider is GitHubAuthenticationStateProvider gitHub)
+        {
+            gitHub.SignOut();
+        }
+    }
 }
 #pragma warning restore BL0013

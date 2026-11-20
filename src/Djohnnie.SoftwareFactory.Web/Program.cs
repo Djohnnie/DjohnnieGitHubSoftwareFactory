@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 
@@ -22,6 +23,16 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddSingleton<SqlTicketStore>();
 builder.Services.AddScoped<RepositoryContext>();
 builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
+builder.Services.AddSingleton<GitHubSessionValidator>();
+builder.Services.AddHttpClient(GitHubSessionValidator.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri("https://api.github.com/");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("DGHSF/1.0");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+// Replaces the default circuit authentication state: it signs the circuit out when the GitHub token stops working.
+builder.Services.AddScoped<AuthenticationStateProvider, GitHubAuthenticationStateProvider>();
 builder.Services.AddSoftwareFactory(builder.Configuration);
 
 builder.Services.AddOptions<GitHubAuthOptions>()
@@ -46,6 +57,14 @@ builder.Services
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = SqlTicketStore.Lifetime;
+        // An expired or revoked GitHub token ends the session, so the next request goes to the login page.
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnValidatePrincipal = async context =>
+            {
+                await context.HttpContext.RequestServices.GetRequiredService<GitHubSessionValidator>().ValidatePrincipalAsync(context);
+            }
+        };
     })
     .AddGitHub(options =>
     {
@@ -136,6 +155,14 @@ app.MapPost("/auth/logout", async (HttpContext context) =>
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/login");
 });
+
+// An open circuit whose GitHub token stopped working lands here: the cookie session is ended before signing in again.
+app.MapGet("/auth/session-expired", async (HttpContext context, string? returnUrl) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect($"/login?error=expired&returnUrl={Uri.EscapeDataString(IsLocal(returnUrl) ? returnUrl! : "/")}");
+})
+    .AllowAnonymous();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

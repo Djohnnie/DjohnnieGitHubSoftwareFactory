@@ -127,6 +127,7 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         using var request = new HttpRequestMessage(HttpMethod.Get, $"repos/{repositoryFullName}/tarball/HEAD");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetAccessTokenAsync());
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        ReportWhenUnauthorized(response);
         await EnsureSuccessAsync(response, cancellationToken);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         await read(stream);
@@ -683,7 +684,18 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
         {
             request.Headers.Add(ApiVersionHeader, apiVersion);
         }
-        return await httpClient.SendAsync(request, cancellationToken);
+        var response = await httpClient.SendAsync(request, cancellationToken);
+        ReportWhenUnauthorized(response);
+        return response;
+    }
+
+    /// <summary>A 401 means the token itself is no longer valid (expired or revoked), so the session that owns it is ended.</summary>
+    private void ReportWhenUnauthorized(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            tokenProvider.ReportUnauthorized();
+        }
     }
 
     public const string ApiVersionHeader = "X-GitHub-Api-Version";
