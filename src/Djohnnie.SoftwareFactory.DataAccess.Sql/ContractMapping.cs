@@ -206,6 +206,7 @@ internal static class ContractMapping
                 BaseBranch = value.BaseBranch,
                 CustomInstructions = value.CustomInstructions,
                 IncludeScreenshots = value.IncludeScreenshots,
+                ReviseOnCopilotReview = value.ReviseOnCopilotReview,
                 IssueNumber = value.IssueNumber,
                 IssueId = value.IssueId,
                 IssueUrl = value.IssueUrl,
@@ -220,7 +221,8 @@ internal static class ContractMapping
                 AgentRunUrl = value.AgentRunUrl,
                 PullRequestBranch = value.PullRequestBranch,
                 GeneratedByTaskId = value.GeneratedByTaskId,
-                CopilotRevisionRequestedAt = value.CopilotRevisionRequestedAt
+                CopilotRevisionRequestedAt = value.CopilotRevisionRequestedAt,
+                CopilotReviewHandledAt = value.CopilotReviewHandledAt
             };
         }
 

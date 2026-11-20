@@ -69,6 +69,12 @@ public sealed record WorkItem
     /// </summary>
     public bool IncludeScreenshots { get; set; } = true;
 
+    /// <summary>
+    /// Whether the sync starts a revision run of the DGHSF agent worker by itself when Copilot code review has reviewed the
+    /// worker's pull request with remarks. Only for the DGHSF agent worker; the store clears it for the Copilot cloud agent.
+    /// </summary>
+    public bool ReviseOnCopilotReview { get; set; }
+
     public int? IssueNumber { get; set; }
 
     /// <summary>GitHub's issue id (not the number); the sub-issues API needs it.</summary>
@@ -110,6 +116,13 @@ public sealed record WorkItem
     /// sending feedback and the sync change it; saving the item leaves it as it is.
     /// </summary>
     public DateTimeOffset? CopilotRevisionRequestedAt { get; set; }
+
+    /// <summary>
+    /// When the latest Copilot code review was submitted that the sync acted on for <see cref="ReviseOnCopilotReview"/> (it
+    /// started a revision run or gave up on it), so it acts on every review once; <c>null</c> before the first. Only the sync
+    /// changes it; saving the item leaves it as it is.
+    /// </summary>
+    public DateTimeOffset? CopilotReviewHandledAt { get; set; }
 
     /// <summary>A draft, also one the background agents generated (<see cref="WorkItemStatus.Generated"/>).</summary>
     public bool IsDraft => Status.IsDraft;

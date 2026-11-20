@@ -66,6 +66,12 @@ public interface IWorkItemStore
     /// </summary>
     Task SetCopilotRevisionRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset? requestedAt, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Sets <see cref="WorkItem.CopilotReviewHandledAt"/>: the sync acted on the Copilot code review submitted then, so it
+    /// doesn't act on it again. <see cref="WorkItem.UpdatedAt"/> doesn't change.
+    /// </summary>
+    Task SetCopilotReviewHandledAsync(string repositoryFullName, Guid id, DateTimeOffset submittedAt, CancellationToken cancellationToken);
+
     /// <summary>Remembers GitHub's issue id of an item that was accepted before the id was stored.</summary>
     Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken);
 }

@@ -244,7 +244,8 @@ public sealed record GitHubComment(
     [property: JsonPropertyName("in_reply_to_id")] long? InReplyToId = null,
     [property: JsonPropertyName("diff_hunk")] string? DiffHunk = null,
     [property: JsonPropertyName("start_line")] int? StartLine = null,
-    [property: JsonPropertyName("original_start_line")] int? OriginalStartLine = null);
+    [property: JsonPropertyName("original_start_line")] int? OriginalStartLine = null,
+    [property: JsonPropertyName("pull_request_review_id")] long? PullRequestReviewId = null);
 
 /// <summary>A line comment of a review that is being submitted.</summary>
 /// <param name="Side"><c>RIGHT</c> (new file) or <c>LEFT</c> (old file).</param>

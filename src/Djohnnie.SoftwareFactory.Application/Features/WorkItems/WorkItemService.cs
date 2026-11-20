@@ -104,4 +104,13 @@ public sealed class WorkItemService(ISender mediator)
     {
         return (await mediator.Send(new RequestCopilotRevisionReviewCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
+
+    /// <summary>
+    /// Starts a revision run of the DGHSF agent worker when Copilot code review has reviewed the item's pull request with
+    /// remarks since the worker's last run and the item asks for it (<see cref="WorkItem.ReviseOnCopilotReview"/>).
+    /// </summary>
+    public async Task<CopilotReviewRevisionResult> StartCopilotReviewRevisionAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new StartCopilotReviewRevisionCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
 }

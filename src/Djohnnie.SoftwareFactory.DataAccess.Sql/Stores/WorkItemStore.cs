@@ -82,6 +82,8 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.BaseBranch = assignable ? NullIfEmpty(item.BaseBranch) : null;
         entity.CustomInstructions = assignable ? NullIfEmpty(item.CustomInstructions) : null;
         entity.IncludeScreenshots = !assignable || item.IncludeScreenshots;
+        // Only the DGHSF agent worker revises its pull request on Copilot code review's remarks.
+        entity.ReviseOnCopilotReview = assignable && entity.Executor == AgentExecutor.DghsfWorker && item.ReviseOnCopilotReview;
         entity.UpdatedAt = now;
         if (item.Id == Guid.Empty)
         {
@@ -322,6 +324,14 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
         entity.CopilotRevisionRequestedAt = requestedAt;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetCopilotReviewHandledAsync(string repositoryFullName, Guid id, DateTimeOffset submittedAt, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        entity.CopilotReviewHandledAt = submittedAt;
         await db.SaveChangesAsync(cancellationToken);
     }
 

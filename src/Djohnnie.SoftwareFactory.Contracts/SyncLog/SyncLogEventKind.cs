@@ -52,5 +52,17 @@ public enum SyncLogEventKind
     /// No Copilot code review will be requested for a revision asked from the Copilot cloud agent, e.g. because the pull request
     /// was closed, Copilot's session failed or GitHub refused the request.
     /// </summary>
-    CopilotReviewAbandoned = 12
+    CopilotReviewAbandoned = 12,
+
+    /// <summary>
+    /// Copilot code review left remarks on a pull request of the DGHSF agent worker, so the sync started a revision run
+    /// (<see cref="WorkItems.WorkItem.ReviseOnCopilotReview"/>).
+    /// </summary>
+    CopilotReviewRevisionStarted = 13,
+
+    /// <summary>
+    /// Copilot code review left remarks on a pull request of the DGHSF agent worker, but the sync didn't start a revision run,
+    /// e.g. because enough rounds were revised automatically already or the revision was refused.
+    /// </summary>
+    CopilotReviewRevisionSkipped = 14
 }

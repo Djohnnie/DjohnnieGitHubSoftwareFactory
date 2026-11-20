@@ -51,6 +51,9 @@ public class WorkItem : Entity
     /// <summary>Whether the DGHSF agent worker adds screenshots of the user interface it changed to the pull request.</summary>
     public bool IncludeScreenshots { get; set; } = true;
 
+    /// <summary>Whether the sync starts a revision run of the DGHSF agent worker when Copilot code review left remarks.</summary>
+    public bool ReviseOnCopilotReview { get; set; }
+
     public int? IssueNumber { get; set; }
 
     /// <summary>GitHub's issue id (not the number); the sub-issues API needs it.</summary>
@@ -103,4 +106,7 @@ public class WorkItem : Entity
     /// requested; <c>null</c> otherwise.
     /// </summary>
     public DateTimeOffset? CopilotRevisionRequestedAt { get; set; }
+
+    /// <summary>When the latest Copilot code review was submitted that the sync acted on for <see cref="ReviseOnCopilotReview"/>.</summary>
+    public DateTimeOffset? CopilotReviewHandledAt { get; set; }
 }

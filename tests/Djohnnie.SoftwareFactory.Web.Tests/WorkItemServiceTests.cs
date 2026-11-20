@@ -553,6 +553,9 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>The submitted reviews of every pull request, oldest first.</summary>
         public List<(string Login, string State)> Reviews { get; } = [];
 
+        /// <summary>Reviews as GitHub returns them, with their author, time and id; listed after <see cref="Reviews"/>.</summary>
+        public List<Djohnnie.SoftwareFactory.Contracts.GitHub.GitHubPullRequestReview> ReviewsOnGitHub { get; } = [];
+
         /// <summary>The <c>mergeable_state</c> of every pull request.</summary>
         public string? MergeableState { get; set; }
 
@@ -729,11 +732,11 @@ public partial class WorkItemServiceTests : IDisposable
                     merged_at = state == "merged" ? DateTimeOffset.UnixEpoch : (DateTimeOffset?)null,
                     additions = 3, deletions = 1, changed_files = PullRequestFiles.Count, mergeable_state = MergeableState
                 })),
-                ("GET", "/reviews") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(Reviews.Select((r, index) => new
+                ("GET", "/reviews") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(Reviews.Select((r, index) => (object)new
                 {
                     id = 200 + index, user = new { login = r.Login }, state = r.State,
                     submitted_at = DateTimeOffset.UnixEpoch.AddHours(index), html_url = $"https://github.com/owner/repo/pull/{number}#pullrequestreview-{200 + index}"
-                }))),
+                }).Concat(ReviewsOnGitHub))),
                 ("GET", "/files") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(PullRequestFiles.Select(f => new
                 {
                     filename = f.FileName, status = "modified", additions = 1, deletions = 1, patch = f.Patch,
