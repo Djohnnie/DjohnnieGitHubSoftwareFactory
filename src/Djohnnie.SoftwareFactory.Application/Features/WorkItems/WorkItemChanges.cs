@@ -55,6 +55,7 @@ public static class WorkItemChanges
         {
             WorkItemStatus.InProgress => "In progress",
             WorkItemStatus.Done => "Closed",
+            WorkItemStatus.NotPlanned => "Not planned",
             _ => status.ToString()
         };
     }

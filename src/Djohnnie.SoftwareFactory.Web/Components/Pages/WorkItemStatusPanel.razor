@@ -1,0 +1,52 @@
+@* The work item editor's Status box: the issue, when it was accepted and assigned, and the agent's progress. *@
+
+<MudPaper Class="pa-4" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h6" GutterBottom="true">Status</MudText>
+    <WorkItemStatusChip Status="Item.Status" Executor="Item.Executor" />
+    @if (Item.IssueNumber is { } number)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">
+            GitHub issue <GitHubLink Href="@Item.IssueUrl">#@number</GitHubLink>
+        </MudText>
+    }
+    @if (Item.AcceptedAt is { } accepted)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Accepted <TimeAgo At="accepted" /></MudText>
+    }
+    @if (Item.AssignedAt is { } assigned)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+            @(IsWorker ? "Handed to the DGHSF agent worker" : "Assigned to Copilot") <TimeAgo At="assigned" />
+        </MudText>
+    }
+    @if (Item.Progress != CopilotProgress.None)
+    {
+        <div class="mt-2"><CopilotProgressChip Item="Item" /></div>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@CopilotProgressChip.DescriptionOf(Item.Progress)</MudText>
+        @if (Item.AgentRunUrl is not null)
+        {
+            <GitHubLink Href="@Item.AgentRunUrl" Typo="Typo.caption">Copilot session log</GitHubLink>
+        }
+    }
+    @if (Item.Status == WorkItemStatus.Accepted && Item.Type.CanBeAssigned)
+    {
+        <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
+            @(IsWorker
+                ? "The issue exists but the DGHSF agent worker has no run for it. Check the assignment and try again."
+                : "The issue exists but is not assigned to Copilot yet. Check the assignment and try again.")
+        </MudAlert>
+    }
+    @if (!Item.Type.CanBeAssigned)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+            @Item.Type.PluralName give structure and are not assigned to an agent; their user stories, bugs and tasks are.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
+
+    /// <summary>The item's agent is the DGHSF agent worker instead of the Copilot cloud agent.</summary>
+    [Parameter] public bool IsWorker { get; set; }
+}

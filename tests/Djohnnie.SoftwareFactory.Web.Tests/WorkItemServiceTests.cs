@@ -478,7 +478,11 @@ public partial class WorkItemServiceTests : IDisposable
 
     private sealed record Request(string Method, string Path, string? Body);
 
-    private sealed record IssueOnGitHub(string Title, string? Body, string State, params string[] Assignees);
+    private sealed record IssueOnGitHub(string Title, string? Body, string State, params string[] Assignees)
+    {
+        /// <summary>GitHub's <c>state_reason</c>: <c>completed</c>, <c>not_planned</c>, <c>duplicate</c>, <c>reopened</c> or none.</summary>
+        public string? StateReason { get; init; }
+    }
 
     /// <param name="State">GraphQL's OPEN, CLOSED or MERGED.</param>
     /// <param name="ReviewRequests">The pending review requests: each reviewer's GraphQL type (User, Bot, Team) and login.</param>
@@ -710,6 +714,7 @@ public partial class WorkItemServiceTests : IDisposable
                         title = changed.Title,
                         html_url = $"https://github.com/owner/repo/issues/{number}",
                         state = changed.State,
+                        state_reason = changed.StateReason,
                         body = changed.Body,
                         assignees = changed.Assignees.Select(login => new { login })
                     })),

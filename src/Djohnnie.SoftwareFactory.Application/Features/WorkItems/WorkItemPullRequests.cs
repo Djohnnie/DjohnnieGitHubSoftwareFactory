@@ -219,7 +219,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         {
             throw new DomainRuleException($"{ex.Message} Your feedback wasn't sent.");
         }
-        if (refreshed.Status == WorkItemStatus.Done)
+        if (refreshed.Status.IsClosed)
         {
             throw new DomainRuleException($"GitHub issue #{refreshed.IssueNumber} is closed, so the agent can no longer revise its pull request. Your feedback wasn't sent.");
         }

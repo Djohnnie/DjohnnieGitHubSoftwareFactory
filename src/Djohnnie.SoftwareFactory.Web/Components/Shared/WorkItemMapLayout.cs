@@ -156,7 +156,10 @@ public sealed class WorkItemMapLayout
         return count;
     }
 
-    /// <summary>How far the items below an item (at any depth) are, by status: accepted includes in progress, as on the overview.</summary>
+    /// <summary>
+    /// How far the items below an item (at any depth) are, by status: accepted includes in progress, as on the overview. Items
+    /// closed as not planned aren't work to finish, so they are left out (the items below them still count).
+    /// </summary>
     public WorkItemMapProgress Progress(Guid id)
     {
         int draft = 0, accepted = 0, done = 0;
@@ -175,6 +178,8 @@ public sealed class WorkItemMapLayout
                         break;
                     case WorkItemStatus.Done:
                         done++;
+                        break;
+                    case WorkItemStatus.NotPlanned:
                         break;
                     default:
                         accepted++;

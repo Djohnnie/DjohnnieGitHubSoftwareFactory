@@ -371,6 +371,7 @@
             WorkItemStatus.Draft or WorkItemStatus.Generated => "status-draft",
             WorkItemStatus.InProgress => "status-inprogress",
             WorkItemStatus.Done => "status-done",
+            WorkItemStatus.NotPlanned => "status-notplanned",
             _ => "status-accepted"
         };
         return $"map-node {role} {status}{(node.Crowded ? " crowded" : null)}";

@@ -33,13 +33,15 @@ public sealed record GitHubPullRequest(
 public sealed record GitHubBranchRef([property: JsonPropertyName("ref")] string Ref);
 
 /// <param name="State"><c>APPROVED</c>, <c>CHANGES_REQUESTED</c>, <c>COMMENTED</c>, <c>DISMISSED</c> or <c>PENDING</c>.</param>
+/// <param name="AuthorAssociation">The reviewer's relation to the repository, e.g. <c>OWNER</c>, <c>COLLABORATOR</c> or <c>NONE</c>.</param>
 public sealed record GitHubPullRequestReview(
     [property: JsonPropertyName("user")] GitHubOwner? User,
     [property: JsonPropertyName("submitted_at")] DateTimeOffset? SubmittedAt,
     [property: JsonPropertyName("state")] string? State = null,
     [property: JsonPropertyName("html_url")] string? HtmlUrl = null,
     [property: JsonPropertyName("id")] long Id = 0,
-    [property: JsonPropertyName("body")] string? Body = null);
+    [property: JsonPropertyName("body")] string? Body = null,
+    [property: JsonPropertyName("author_association")] string? AuthorAssociation = null);
 
 public sealed record GitHubRepository(
     [property: JsonPropertyName("id")] long Id,
@@ -73,9 +75,14 @@ public sealed record GitHubIssue(
     [property: JsonPropertyName("html_url")] string HtmlUrl,
     [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("assignees")] IReadOnlyList<GitHubOwner>? Assignees,
-    [property: JsonPropertyName("body")] string? Body = null)
+    [property: JsonPropertyName("body")] string? Body = null,
+    [property: JsonPropertyName("state_reason")] string? StateReason = null)
 {
     public bool IsClosed => string.Equals(State, "closed", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Closed without the work being done: GitHub's <c>not_planned</c> or <c>duplicate</c> close reason.</summary>
+    public bool IsNotPlanned => IsClosed
+        && (string.Equals(StateReason, "not_planned", StringComparison.OrdinalIgnoreCase) || string.Equals(StateReason, "duplicate", StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Options for a Copilot cloud agent assignment (the <c>agent_assignment</c> object of the issues API).</summary>
@@ -237,6 +244,7 @@ public sealed record GitHubPullRequestFile(
 /// <param name="Line">For a review comment: the line in the file it is on; <c>null</c> when that line is no longer in the diff.</param>
 /// <param name="DiffHunk">For a review comment: the diff as it was when it was written, ending at its (last) line.</param>
 /// <param name="StartLine">For a review comment on several lines: the first of them.</param>
+/// <param name="AuthorAssociation">The author's relation to the repository, e.g. <c>OWNER</c>, <c>COLLABORATOR</c> or <c>NONE</c>.</param>
 public sealed record GitHubComment(
     [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("user")] GitHubOwner? User,
@@ -250,7 +258,8 @@ public sealed record GitHubComment(
     [property: JsonPropertyName("diff_hunk")] string? DiffHunk = null,
     [property: JsonPropertyName("start_line")] int? StartLine = null,
     [property: JsonPropertyName("original_start_line")] int? OriginalStartLine = null,
-    [property: JsonPropertyName("pull_request_review_id")] long? PullRequestReviewId = null);
+    [property: JsonPropertyName("pull_request_review_id")] long? PullRequestReviewId = null,
+    [property: JsonPropertyName("author_association")] string? AuthorAssociation = null);
 
 /// <summary>A line comment of a review that is being submitted.</summary>
 /// <param name="Side"><c>RIGHT</c> (new file) or <c>LEFT</c> (old file).</param>

@@ -315,6 +315,16 @@
     color: var(--mud-palette-text-secondary);
 }
 
+/* Closed as not planned or as a duplicate: faded and struck through, not filled like finished work. */
+.status-notplanned .map-badge {
+    opacity: 0.5;
+}
+
+.status-notplanned .map-label {
+    color: var(--mud-palette-text-secondary);
+    text-decoration: line-through;
+}
+
 .map-done {
     position: absolute;
     right: -3px;

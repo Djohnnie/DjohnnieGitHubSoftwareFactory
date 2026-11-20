@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261120135952_AddWorkItemMergeConflictFix";
+    public override string LastMigrationId => "20261120194606_AddAgentRunActiveTaskIndex";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -178,6 +178,11 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Status");
 
                 b.HasIndex("WorkItemId");
+
+                b.HasIndex("RepositoryFullName", "WorkItemId")
+                    .IsUnique()
+                    .HasDatabaseName("IX_AgentRuns_RepositoryFullName_WorkItemId_Active")
+                    .HasFilter("[Status] IN ('Pending', 'Queued', 'Running')");
 
                 b.ToTable("AgentRuns");
             });

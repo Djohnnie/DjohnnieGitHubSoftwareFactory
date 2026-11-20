@@ -1,6 +1,8 @@
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
+using Djohnnie.SoftwareFactory.Contracts.Mindmaps;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -100,6 +102,36 @@ public partial class WorkItemServiceTests
 
         Assert.Equal(WorkItemStatus.InProgress, (await RefreshWithAsync("open", "Copilot")).Status);
         Assert.DoesNotContain(_gitHub.Requests, r => r.Method != "GET" && r.Path.EndsWith("/issues/42"));
+    }
+
+    [Fact]
+    public async Task Refresh_AnIssueClosedAsNotPlannedOrDuplicate_IsNotPlanned_NotDone()
+    {
+        var task = await AcceptAsync(WorkItemType.Task, "Task");
+        var marker = WorkItemWorkflow.Marker(task);
+        var map = Mindmap.Create(Repo, "Plan");
+        var idea = MindmapLayout.AddChild(map, map.Root!.Id, "Do the task");
+        var saved = await Mindmaps.SaveAsync(map, _cancellationToken);
+        await Mindmaps.LinkAsync(Repo, saved.Id, idea.Id, task.Id, _cancellationToken);
+
+        async Task<WorkItem> CloseAsync(string? reason)
+        {
+            _gitHub.IssuesOnGitHub[42] = new("Task", $"About Task.\n\n{marker}", "closed", "Copilot") { StateReason = reason };
+            return (await _service.RefreshAsync(Repo, task.Id, _cancellationToken)).WorkItem;
+        }
+
+        Assert.Equal(WorkItemStatus.NotPlanned, (await CloseAsync("not_planned")).Status);
+        Assert.Equal(WorkItemStatus.NotPlanned, (await CloseAsync("duplicate")).Status);
+
+        // Not finished work: it isn't counted as closed, and the linked idea isn't done.
+        var counts = (await _service.GetCountsAsync(Repo, _cancellationToken)).Single(c => c.Type == WorkItemType.Task);
+        Assert.Equal((0, 1, 1), (counts.Closed, counts.NotPlanned, counts.Total + counts.NotPlanned));
+        Assert.False((await Mindmaps.GetAsync(Repo, saved.Id, _cancellationToken))!.Find(idea.Id)!.IsDone);
+
+        // Closed as completed, or without a reason (older issues), is done.
+        Assert.Equal(WorkItemStatus.Done, (await CloseAsync("completed")).Status);
+        Assert.Equal(WorkItemStatus.Done, (await CloseAsync(null)).Status);
+        Assert.True((await Mindmaps.GetAsync(Repo, saved.Id, _cancellationToken))!.Find(idea.Id)!.IsDone);
     }
 
     [Fact]

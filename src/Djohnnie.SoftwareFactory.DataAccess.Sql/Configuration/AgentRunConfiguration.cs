@@ -12,11 +12,17 @@ internal static class AgentRunConfiguration
             modelBuilder.Entity<AgentRun>(entry =>
             {
                 // Stored by name to keep rows readable; the dispatcher looks runs up by status.
-                entry.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+                // A concurrency token for the few tracked updates (reopening a task); status changes are conditional updates.
+                entry.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsConcurrencyToken();
                 entry.Property(e => e.Kind).HasConversion<string>().HasMaxLength(20);
                 entry.Property(e => e.PremiumRequests).HasPrecision(18, 4);
                 entry.HasIndex(e => e.Status);
                 entry.HasIndex(e => e.WorkItemId);
+                // At most one active task per work item, also when two starts race (AgentRunStore.StartTaskAsync).
+                entry.HasIndex(e => new { e.RepositoryFullName, e.WorkItemId })
+                    .IsUnique()
+                    .HasFilter("[Status] IN ('Pending', 'Queued', 'Running')")
+                    .HasDatabaseName("IX_AgentRuns_RepositoryFullName_WorkItemId_Active");
             });
             modelBuilder.Entity<AgentRunAttempt>(attempt =>
             {

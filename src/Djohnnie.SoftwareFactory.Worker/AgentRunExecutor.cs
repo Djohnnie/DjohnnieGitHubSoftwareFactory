@@ -51,7 +51,7 @@ public sealed class AgentRunExecutor(
         {
             var item = await workItems.GetAsync(run.RepositoryFullName, run.WorkItemId, stop.Token)
                 ?? throw new DomainRuleException("The work item no longer exists.");
-            if (item.IssueNumber is null || item.Status == WorkItemStatus.Done)
+            if (item.IssueNumber is null || item.Status.IsClosed)
             {
                 throw new DomainRuleException("The work item has no open GitHub issue to implement.");
             }
@@ -200,9 +200,17 @@ public sealed class AgentRunExecutor(
         var until = timeProvider.GetUtcNow();
         var since = PullRequestDiscussion.HandledUntil(await runs.GetForWorkItemAsync(run.RepositoryFullName, run.WorkItemId, cancellationToken), number);
         var discussion = await PullRequestDiscussion.LoadAsync(gitHub, run.RepositoryFullName, number, since, until, cancellationToken);
+        if (discussion.IgnoredFeedback > 0)
+        {
+            logger.LogWarning("Run {Run}: left out {Count} comments or reviews on pull request #{PullRequest} by people without write access to the repository.",
+                run.Id, discussion.IgnoredFeedback, number);
+        }
         if (discussion.Feedback.Count == 0)
         {
-            throw new DomainRuleException($"There is no new feedback on pull request #{number} since the agent's last run on it.");
+            throw new DomainRuleException(discussion.IgnoredFeedback > 0
+                ? $"There is no new feedback on pull request #{number} since the agent's last run on it from people who may change the repository " +
+                  $"({discussion.IgnoredFeedback} comments or reviews by others were left out)."
+                : $"There is no new feedback on pull request #{number} since the agent's last run on it.");
         }
 
         var repository = Path.Combine(folder, "repo");

@@ -71,6 +71,7 @@ public static class WorkItemBacklog
             WorkItemStatus.Generated => "generated draft",
             WorkItemStatus.Accepted => "accepted",
             WorkItemStatus.InProgress => "in progress",
+            WorkItemStatus.NotPlanned => "not planned",
             _ => "done"
         };
     }

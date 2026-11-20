@@ -1,0 +1,117 @@
+@* The work item editor's Assignment box for stories, bugs and tasks: which agent implements the issue, and how. *@
+
+<MudPaper Class="pa-4" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h6">Assignment</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+        @(IsWorker
+            ? "On accept, the DGHSF agent worker implements the issue with these settings and opens the pull request."
+            : "On accept, the issue is assigned to the Copilot cloud agent with these settings.")
+    </MudText>
+    <MudSelect T="AgentExecutor" Variant="Variant.Outlined" Value="Item.Executor" ValueChanged="ChangeExecutorAsync" Label="Runs on" ReadOnly="!Item.CanEditAssignment"
+               HelperText="@Item.Executor.Description" AnchorOrigin="Origin.BottomCenter" aria-label="Runs on">
+        @foreach (var executor in AgentExecutors.All)
+        {
+            <MudSelectItem T="AgentExecutor" Value="executor">
+                <MudIcon Icon="@WorkItemRoutes.Icon(executor)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-2" />
+                @executor.DisplayName
+            </MudSelectItem>
+        }
+    </MudSelect>
+    <AgentPicker @bind-Value="Item.CustomAgent" ReadOnly="!Item.CanEditAssignment"
+                 HelperText="A custom agent from .github/agents, or the default Copilot agent." />
+    <ModelPicker @bind-Value="Item.Model" ReadOnly="!Item.CanEditAssignment" DefaultText="Auto (Copilot picks the model)"
+                 HelperText="The model the cloud agent uses." />
+    @if (ModelSuggestions.IsActive && Item.CanEditAssignment && (ModelSuggestions.IsSuggesting || ModelSuggestions.Suggestion is not null))
+    {
+        <div class="mb-2 model-suggestion" aria-label="Model suggestion" aria-live="polite">
+            @if (ModelSuggestions.IsSuggesting)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">The Model Selector is reading the description…</MudText>
+                </MudStack>
+            }
+            else if (ModelSuggestions.Suggestion is { } suggestion)
+            {
+                var applied = string.Equals(Item.Model, suggestion.ModelId, StringComparison.OrdinalIgnoreCase);
+                <MudTooltip Text="@($"{Capitalize(suggestion.Complexity)} complexity. {suggestion.Reason}")">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                             Icon="@(applied ? Icons.Material.Filled.Check : Icons.Material.Filled.AutoAwesome)"
+                             OnClick="ApplyModelSuggestion" Disabled="applied">
+                        @(applied ? "Suggested" : "Suggestion"): @ModelSuggestions.ModelName(suggestion.ModelId) · @suggestion.Complexity
+                    </MudChip>
+                </MudTooltip>
+            }
+        </div>
+    }
+    <MudTextField Variant="Variant.Outlined" @bind-Value="Item.BaseBranch" Label="Base branch" ReadOnly="!Item.CanEditAssignment"
+                  Placeholder="@DefaultBranch" MaxLength="250"
+                  HelperText="The branch Copilot starts from. Empty for the default branch." />
+    <DictationTextField @bind-Value="Item.CustomInstructions" Label="Custom instructions" ReadOnly="!Item.CanEditAssignment"
+                        Lines="3" MaxLength="10000"
+                        HelperText="Extra guidance for Copilot on top of the issue." />
+    @if (IsWorker)
+    {
+        <MudSwitch T="bool" @bind-Value="Item.IncludeScreenshots" Label="Include UI screenshots" Color="Color.Primary"
+                   ReadOnly="!Item.CanEditAssignment" aria-label="Include UI screenshots" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            When the change has a user interface, the agent runs the app and adds screenshots of what it changed to the pull request.
+        </MudText>
+    }
+    <MudSwitch T="bool" @bind-Value="Item.ReviseOnCopilotReview" Label="Revise after Copilot code review" Color="Color.Primary"
+               ReadOnly="!Item.CanEditAssignment" aria-label="Revise after Copilot code review" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary">
+        @if (IsWorker)
+        {
+            <text>When Copilot code review leaves remarks on the agent's pull request, the sync starts a revision on them by itself, for at most
+            @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
+        }
+        else
+        {
+            <text>When Copilot code review leaves remarks on Copilot's pull request, the sync asks Copilot to address them with a comment in the
+            pull request's discussion, for at most @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
+        }
+    </MudText>
+    <MudSwitch T="bool" @bind-Value="Item.FixMergeConflicts" Label="Fix merge conflicts automatically" Color="Color.Primary"
+               ReadOnly="!Item.CanEditAssignment" aria-label="Fix merge conflicts automatically" Class="fix-merge-conflicts" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary">
+        When the pull request conflicts with its base branch, the sync asks @(IsWorker ? "the agent" : "Copilot") to fix it with a
+        comment in the pull request's discussion, once per conflict.
+    </MudText>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
+
+    [Parameter, EditorRequired] public WorkItemModelSuggestions ModelSuggestions { get; set; } = null!;
+
+    /// <summary>The repository's default branch, shown while the base branch is empty.</summary>
+    [Parameter] public string? DefaultBranch { get; set; }
+
+    /// <summary>The agent changed: the page shows other things for the DGHSF agent worker than for the Copilot cloud agent.</summary>
+    [Parameter] public EventCallback<AgentExecutor> ExecutorChanged { get; set; }
+
+    private bool IsWorker
+    {
+        get
+        {
+            return Item.Type.CanBeAssigned && Item.Executor == AgentExecutor.DghsfWorker;
+        }
+    }
+
+    private async Task ChangeExecutorAsync(AgentExecutor executor)
+    {
+        Item.Executor = executor;
+        await ExecutorChanged.InvokeAsync(executor);
+    }
+
+    private void ApplyModelSuggestion()
+    {
+        ModelSuggestions.Apply(Item);
+    }
+
+    private static string Capitalize(string value)
+    {
+        return value.Length == 0 ? value : string.Concat(value[..1].ToUpperInvariant(), value[1..]);
+    }
+}

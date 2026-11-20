@@ -43,9 +43,10 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
                 g.Key,
                 g.Count(e => e.Status == WorkItemStatus.Draft || e.Status == WorkItemStatus.Generated),
                 g.Count(e => e.Status == WorkItemStatus.Accepted || e.Status == WorkItemStatus.InProgress),
-                g.Count(e => e.Status == WorkItemStatus.Done)))
+                g.Count(e => e.Status == WorkItemStatus.Done),
+                g.Count(e => e.Status == WorkItemStatus.NotPlanned)))
             .ToDictionaryAsync(c => c.Type, cancellationToken);
-        return WorkItemTypeRules.All.Select(type => counts.GetValueOrDefault(type) ?? new WorkItemCounts(type, 0, 0, 0)).ToList();
+        return WorkItemTypeRules.All.Select(type => counts.GetValueOrDefault(type) ?? new WorkItemCounts(type, 0, 0, 0, 0)).ToList();
     }
 
     public async Task<WorkItem> SaveAsync(WorkItem item, CancellationToken cancellationToken = default)
@@ -289,7 +290,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.IssueId = issue.IssueId;
         entity.IssueUrl = issue.IssueUrl;
         entity.Status = issue.IsClosed
-            ? WorkItemStatus.Done
+            ? issue.IsNotPlanned ? WorkItemStatus.NotPlanned : WorkItemStatus.Done
             : entity.Type.CanBeAssigned && issue.IsAssignedToCopilot ? WorkItemStatus.InProgress : WorkItemStatus.Accepted;
         entity.AssignedAt = entity.Status switch
         {

@@ -103,7 +103,7 @@ public sealed class ProjectAgentTools(IProjectAgentData data, IReadOnlyList<AITo
     [Description("Gets the work items of the repository as an outline (children indented under their parent) with type, status, issue number, title and id, plus the number of items per type and status. Descriptions are left out; use get_work_item for those.")]
     public async Task<string> GetWorkItemsAsync(
         [Description("Only items of this type: epic, feature, story, bug or task. Empty for all types.")] string? type = null,
-        [Description("Only items with this status: draft, accepted, in progress or done. Empty for every status.")] string? status = null,
+        [Description("Only items with this status: draft, accepted, in progress, done, not planned (closed as not planned or as a duplicate) or closed (done or not planned). Empty for every status.")] string? status = null,
         CancellationToken cancellationToken = default)
     {
         WorkItemType? typeFilter = null;
@@ -122,7 +122,7 @@ public sealed class ProjectAgentTools(IProjectAgentData data, IReadOnlyList<AITo
             statusFilter = ParseStatus(status);
             if (statusFilter is null)
             {
-                return $"'{status}' is not a status; use draft, accepted, in progress or done.";
+                return $"'{status}' is not a status; use draft, accepted, in progress, done, not planned or closed.";
             }
         }
 
@@ -433,7 +433,9 @@ public sealed class ProjectAgentTools(IProjectAgentData data, IReadOnlyList<AITo
             "accepted" => s => s == WorkItemStatus.Accepted,
             "inprogress" => s => s == WorkItemStatus.InProgress,
             "open" => s => s is WorkItemStatus.Accepted or WorkItemStatus.InProgress,
-            "done" or "closed" => s => s == WorkItemStatus.Done,
+            "done" => s => s == WorkItemStatus.Done,
+            "notplanned" => s => s == WorkItemStatus.NotPlanned,
+            "closed" => s => s.IsClosed,
             _ => null
         };
     }

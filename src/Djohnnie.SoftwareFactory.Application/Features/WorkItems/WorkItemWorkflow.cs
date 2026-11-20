@@ -214,7 +214,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
             throw new DomainRuleException(item.Status switch
             {
                 WorkItemStatus.Accepted => "Assign the agent first.",
-                WorkItemStatus.Done => $"GitHub issue #{item.IssueNumber} is closed, so the agent worker can't start another run on it.",
+                WorkItemStatus.Done or WorkItemStatus.NotPlanned => $"GitHub issue #{item.IssueNumber} is closed, so the agent worker can't start another run on it.",
                 _ => "Only an item that is in progress can start another worker run."
             });
         }
@@ -257,7 +257,7 @@ public sealed partial class WorkItemWorkflow(IWorkItemStore store, GitHubApiClie
                 : await GetProgressAsync(repositoryFullName, number, issue.IsClosed, assignedToCopilot, cancellationToken);
 
         var refreshed = await store.ApplyIssueAsync(repositoryFullName, id,
-            new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, assignedToCopilot, progress),
+            new WorkItemIssueSnapshot(issue.Id, issue.HtmlUrl, issue.Title.Trim(), description, issue.IsClosed, assignedToCopilot, progress, issue.IsNotPlanned),
             cancellationToken);
         return new(refreshed, refreshed != item, progressWarning);
     }

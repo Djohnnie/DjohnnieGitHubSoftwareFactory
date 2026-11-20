@@ -78,7 +78,7 @@
                                || words.Count > 0 && words.All(word => item.Title.Contains(word, StringComparison.CurrentCultureIgnoreCase)))
                 .OrderByDescending(item => item.Id == Current)
                 .ThenByDescending(item => words.Count(word => item.Title.Contains(word, StringComparison.CurrentCultureIgnoreCase)))
-                .ThenBy(item => item.Status == WorkItemStatus.Done)
+                .ThenBy(item => item.Status.IsClosed)
                 .ThenBy(item => item.Type)
                 .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
                 .Take(MaxShown)

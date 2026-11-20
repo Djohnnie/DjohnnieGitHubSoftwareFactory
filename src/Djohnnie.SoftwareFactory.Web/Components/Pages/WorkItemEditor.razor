@@ -138,21 +138,9 @@ else if (_item is not null)
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudStack Spacing="4">
-                    @if (IsNew && _idea is not null)
+                    @if (IsNew)
                     {
-                        <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Icon="@Icons.Material.Filled.BubbleChart" Class="mindmap-origin">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
-                                <span>
-                                    For the idea <b>@_idea.Text</b> of the mindmap <MudLink Href="@MindmapRoutes.MapPath(_mindmap!.Id)">@_mindmap.Title</MudLink>.
-                                    @(_writing ? $"The Mindmap Work Item Writer is writing the {Name} from the whole mindmap…" : $"Saving links this {Name} to the idea; closing it marks the idea done.")
-                                </span>
-                                @if (_writerActive && !_writing)
-                                {
-                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
-                                               OnClick="WriteAgainAsync" Disabled="_busy">Write again</MudButton>
-                                }
-                            </MudStack>
-                        </MudAlert>
+                        <WorkItemMindmapOriginAlert Origin="_mindmapOrigin" Name="@Name" Busy="_busy" WriteAgain="WriteFromMindmapAsync" />
                     }
                     @if (IsNew && _templates.Count > 0)
                     {
@@ -235,243 +223,23 @@ else if (_item is not null)
 
                     @if (!IsNew && _type.ChildTypes.Count > 0)
                     {
-                        <MudPaper Class="pa-4" Outlined="true" Elevation="0" aria-label="Children">
-                            <MudText Typo="Typo.h6">Part of this @Name</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                                Accepted children become sub-issues of this @Name's issue on GitHub.
-                            </MudText>
-                            @if (_children.Count == 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="mb-2">Nothing yet.</MudText>
-                            }
-                            else
-                            {
-                                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-2">
-                                    <tbody>
-                                        @foreach (var child in _children)
-                                        {
-                                            <tr>
-                                                <td style="width:1%; white-space:nowrap"><WorkItemTypeChip Type="child.Type" /></td>
-                                                <td><MudLink Href="@WorkItemRoutes.ItemPath(child.Type, child.Id)">@child.Title</MudLink></td>
-                                                <td style="width:1%; white-space:nowrap"><WorkItemStatusChip Status="child.Status" /></td>
-                                                <td style="width:1%; white-space:nowrap">
-                                                    @if (child.IssueNumber is { } childNumber)
-                                                    {
-                                                        <GitHubLink Href="@child.IssueUrl">#@childNumber</GitHubLink>
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </MudSimpleTable>
-                            }
-                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
-                                @foreach (var childType in _type.ChildTypes)
-                                {
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                                               Href="@WorkItemRoutes.NewPath(childType, parentId: _item.Id)">Add @WorkItemActions.Name(childType)</MudButton>
-                                }
-                                @if (_generatorActive && _type.GeneratedChildType is { } generatedType)
-                                {
-                                    <MudSpacer />
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
-                                               OnClick="GenerateChildrenAsync" Disabled="_busy"
-                                               title="@($"Saves your changes, then lets an agent propose {generatedType.PluralName.ToLowerInvariant()} for you to review.")">Generate @generatedType.PluralName.ToLowerInvariant()</MudButton>
-                                }
-                            </MudStack>
-                        </MudPaper>
+                        <WorkItemChildrenPanel Item="_item" Children="_children" GeneratorActive="_generatorActive" Busy="_busy" Generate="GenerateChildrenAsync" />
                     }
                 </MudStack>
             </MudItem>
 
             <MudItem xs="12" md="4">
                 <MudStack Spacing="4" Class="sticky-side">
-                    <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                        <MudText Typo="Typo.h6" GutterBottom="true">Status</MudText>
-                        <WorkItemStatusChip Status="_item.Status" Executor="_item.Executor" />
-                        @if (_item.IssueNumber is { } number)
-                        {
-                            <MudText Typo="Typo.body2" Class="mt-2">
-                                GitHub issue <GitHubLink Href="@_item.IssueUrl">#@number</GitHubLink>
-                            </MudText>
-                        }
-                        @if (_item.AcceptedAt is { } accepted)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Accepted <TimeAgo At="accepted" /></MudText>
-                        }
-                        @if (_item.AssignedAt is { } assigned)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                                @(IsWorker ? "Handed to the DGHSF agent worker" : "Assigned to Copilot") <TimeAgo At="assigned" />
-                            </MudText>
-                        }
-                        @if (_item.Progress != CopilotProgress.None)
-                        {
-                            <div class="mt-2"><CopilotProgressChip Item="_item" /></div>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@CopilotProgressChip.DescriptionOf(_item.Progress)</MudText>
-                            @if (_item.AgentRunUrl is not null)
-                            {
-                                <GitHubLink Href="@_item.AgentRunUrl" Typo="Typo.caption">Copilot session log</GitHubLink>
-                            }
-                        }
-                        @if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
-                        {
-                            <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
-                                @(IsWorker
-                                    ? "The issue exists but the DGHSF agent worker has no run for it. Check the assignment and try again."
-                                    : "The issue exists but is not assigned to Copilot yet. Check the assignment and try again.")
-                            </MudAlert>
-                        }
-                        @if (!_type.CanBeAssigned)
-                        {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-                                @_type.PluralName give structure and are not assigned to an agent; their user stories, bugs and tasks are.
-                            </MudText>
-                        }
-                    </MudPaper>
+                    <WorkItemStatusPanel Item="_item" IsWorker="IsWorker" />
 
                     @if (_type.ParentTypes.Count > 0)
                     {
-                        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                            <MudText Typo="Typo.h6">Part of</MudText>
-                            @if (_item.IsDraft)
-                            {
-                                <MudSelect T="Guid?" Variant="Variant.Outlined" Value="_item.ParentId" ValueChanged="OnParentChanged" Label="Parent"
-                                           Required="_type.RequiresParent" RequiredError="@($"Choose the {ParentNames} this {Name} is part of.")"
-                                           Clearable="!_type.RequiresParent" ToStringFunc="ParentLabel" AnchorOrigin="Origin.BottomCenter" MaxHeight="420"
-                                           HelperText="@ParentHelp">
-                                    @if (!_type.RequiresParent)
-                                    {
-                                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Standalone (no parent)</MudSelectItem>
-                                    }
-                                    @foreach (var parent in _parents)
-                                    {
-                                        <MudSelectItem T="Guid?" Value="@parent.Id">
-                                            <MudText Typo="Typo.body2">
-                                                <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-1" />
-                                                @parent.Title
-                                                @if (parent.IssueNumber is { } parentNumber)
-                                                {
-                                                    <span class="mono"> #@parentNumber</span>
-                                                }
-                                            </MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@parent.Type.DisplayName · @WorkItemStatusChip.LabelOf(parent.Status)</MudText>
-                                        </MudSelectItem>
-                                    }
-                                </MudSelect>
-                                @if (_type.RequiresParent && _parents.Count == 0)
-                                {
-                                    <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
-                                        There is no @ParentNames yet in this repository.
-                                        <MudLink Href="@WorkItemRoutes.NewPath(_type.ParentTypes[0])">Create one first</MudLink>.
-                                    </MudAlert>
-                                }
-                                @if (SelectedParent is { IssueNumber: null } waiting)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
-                                        '@waiting.Title' isn't accepted yet: accept it before accepting this @Name.
-                                    </MudText>
-                                }
-                            }
-                            else if (SelectedParent is { } parent)
-                            {
-                                <MudText Typo="Typo.body2" Class="mt-2">
-                                    <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" />
-                                    <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)">@parent.Title</MudLink>
-                                    @if (parent.IssueNumber is { } parentNumber)
-                                    {
-                                        <span> (<GitHubLink Href="@parent.IssueUrl">#@parentNumber</GitHubLink>)</span>
-                                    }
-                                </MudText>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.body2" Class="mt-2">Standalone</MudText>
-                            }
-                        </MudPaper>
+                        <WorkItemParentPanel Item="_item" Parents="_parents" SelectedParent="SelectedParent" ParentChanged="OnParentChanged" />
                     }
 
                     @if (_type.CanBeAssigned)
                     {
-                        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                            <MudText Typo="Typo.h6">Assignment</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                                @(IsWorker
-                                    ? "On accept, the DGHSF agent worker implements the issue with these settings and opens the pull request."
-                                    : "On accept, the issue is assigned to the Copilot cloud agent with these settings.")
-                            </MudText>
-                            <MudSelect T="AgentExecutor" Variant="Variant.Outlined" @bind-Value="_item.Executor" Label="Runs on" ReadOnly="!_item.CanEditAssignment"
-                                       HelperText="@_item.Executor.Description" AnchorOrigin="Origin.BottomCenter" aria-label="Runs on">
-                                @foreach (var executor in AgentExecutors.All)
-                                {
-                                    <MudSelectItem T="AgentExecutor" Value="executor">
-                                        <MudIcon Icon="@WorkItemRoutes.Icon(executor)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-2" />
-                                        @executor.DisplayName
-                                    </MudSelectItem>
-                                }
-                            </MudSelect>
-                            <AgentPicker @bind-Value="_item.CustomAgent" ReadOnly="!_item.CanEditAssignment"
-                                         HelperText="A custom agent from .github/agents, or the default Copilot agent." />
-                            <ModelPicker @bind-Value="_item.Model" ReadOnly="!_item.CanEditAssignment" DefaultText="Auto (Copilot picks the model)"
-                                         HelperText="The model the cloud agent uses." />
-                            @if (_modelSelectorActive && _item.CanEditAssignment && (_suggestingModel || _modelSuggestion is not null))
-                            {
-                                <div class="mb-2 model-suggestion" aria-label="Model suggestion" aria-live="polite">
-                                    @if (_suggestingModel)
-                                    {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">The Model Selector is reading the description…</MudText>
-                                        </MudStack>
-                                    }
-                                    else if (_modelSuggestion is { } suggestion)
-                                    {
-                                        var applied = string.Equals(_item.Model, suggestion.ModelId, StringComparison.OrdinalIgnoreCase);
-                                        <MudTooltip Text="@($"{Capitalize(suggestion.Complexity)} complexity. {suggestion.Reason}")">
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                                     Icon="@(applied ? Icons.Material.Filled.Check : Icons.Material.Filled.AutoAwesome)"
-                                                     OnClick="ApplyModelSuggestion" Disabled="applied">
-                                                @(applied ? "Suggested" : "Suggestion"): @ModelName(suggestion.ModelId) · @suggestion.Complexity
-                                            </MudChip>
-                                        </MudTooltip>
-                                    }
-                                </div>
-                            }
-                            <MudTextField Variant="Variant.Outlined" @bind-Value="_item.BaseBranch" Label="Base branch" ReadOnly="!_item.CanEditAssignment"
-                                          Placeholder="@Repository.Current?.DefaultBranch" MaxLength="250"
-                                          HelperText="The branch Copilot starts from. Empty for the default branch." />
-                            <DictationTextField @bind-Value="_item.CustomInstructions" Label="Custom instructions" ReadOnly="!_item.CanEditAssignment"
-                                          Lines="3" MaxLength="10000"
-                                          HelperText="Extra guidance for Copilot on top of the issue." />
-                            @if (IsWorker)
-                            {
-                                <MudSwitch T="bool" @bind-Value="_item.IncludeScreenshots" Label="Include UI screenshots" Color="Color.Primary"
-                                           ReadOnly="!_item.CanEditAssignment" aria-label="Include UI screenshots" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    When the change has a user interface, the agent runs the app and adds screenshots of what it changed to the pull request.
-                                </MudText>
-                            }
-                            <MudSwitch T="bool" @bind-Value="_item.ReviseOnCopilotReview" Label="Revise after Copilot code review" Color="Color.Primary"
-                                       ReadOnly="!_item.CanEditAssignment" aria-label="Revise after Copilot code review" />
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @if (IsWorker)
-                                {
-                                    <text>When Copilot code review leaves remarks on the agent's pull request, the sync starts a revision on them by itself, for at most
-                                    @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
-                                }
-                                else
-                                {
-                                    <text>When Copilot code review leaves remarks on Copilot's pull request, the sync asks Copilot to address them with a comment in the
-                                    pull request's discussion, for at most @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
-                                }
-                            </MudText>
-                            <MudSwitch T="bool" @bind-Value="_item.FixMergeConflicts" Label="Fix merge conflicts automatically" Color="Color.Primary"
-                                       ReadOnly="!_item.CanEditAssignment" aria-label="Fix merge conflicts automatically" Class="fix-merge-conflicts" />
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                When the pull request conflicts with its base branch, the sync asks @(IsWorker ? "the agent" : "Copilot") to fix it with a
-                                comment in the pull request's discussion, once per conflict.
-                            </MudText>
-                        </MudPaper>
+                        <WorkItemAssignmentPanel Item="_item" ModelSuggestions="_modelSuggestions" DefaultBranch="@Repository.Current?.DefaultBranch" ExecutorChanged="OnExecutorChanged" />
                     }
 
                     @if (IsWorker && _item.HasIssue && !Removed)
@@ -484,23 +252,9 @@ else if (_item is not null)
         </MudGrid>
     </MudForm>;
 
-    RenderFragment agentTasksContent = @<div aria-label="Agent worker tasks">
-        @* Like the agent worker tasks on the background tasks page, but only this item's and not collapsible: they have the tab to themselves. *@
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            The tasks of the DGHSF agent worker on this @Name, newest first. A retry, a fresh start or a revision is another run of a task ·
-            @AiModel.FormatCredits(_agentTasks.Sum(t => t.Run.AiCredits ?? 0))@(_agentTasks.Any(t => t.Run.NanoAiu is not null && !t.Run.UsageComplete) ? " (at least)" : null)
-        </MudText>
-        <MudStack Spacing="3">
-            @foreach (var task in _agentTasks)
-            {
-                <AgentTaskCard @key="task.Run.Id" Overview="task" ShowWorkItem="false" Busy="_busy" OnCancel="() => CancelAgentTaskAsync(task)" />
-            }
-        </MudStack>
-    </div>;
-
     @* With a pull request or agent worker runs the page gets tabs; the pull request is loaded from GitHub in the background as soon
        as its tabs are shown (both tabs render because the panels stay alive), so their counts fill in by themselves. The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
-    @if ((_item.PullRequestNumber is not null || HasAgentTasksTab) && !Removed)
+    @if ((_item.PullRequestNumber is not null || _agentTasks.HasTasks) && !Removed)
     {
         var pullRequestNumber = _item.PullRequestNumber;
         @if (pullRequestNumber is not null && CanBeMerged)
@@ -516,14 +270,16 @@ else if (_item is not null)
             <MudTabPanel Text="@_type.DisplayName" Icon="@WorkItemRoutes.Icon(_type)">
                 <div class="tab-panel">@workItemContent</div>
             </MudTabPanel>
-            @if (HasAgentTasksTab)
+            @if (_agentTasks.HasTasks)
             {
                 <MudTabPanel Icon="@WorkItemRoutes.Icon(AgentExecutor.DghsfWorker)">
                     <TabContent>
                         Agent runs
-                        <span class="tab-count" title="Runs">@AgentRunCount</span>
+                        <span class="tab-count" title="Runs">@_agentTasks.RunCount</span>
                     </TabContent>
-                    <ChildContent><div class="tab-panel">@agentTasksContent</div></ChildContent>
+                    <ChildContent><div class="tab-panel">
+                        <WorkItemAgentTasksTab RepositoryFullName="@RepositoryName" Name="@Name" Tasks="_agentTasks.Tasks" Busy="_busy" Cancelled="RefreshAsync" />
+                    </div></ChildContent>
                 </MudTabPanel>
             }
             @if (pullRequestNumber is not null)
@@ -587,7 +343,7 @@ else if (_item is not null)
     {
         get
         {
-            return HasAgentTasksTab ? AgentTasksTab + 1 : AgentTasksTab;
+            return _agentTasks.HasTasks ? AgentTasksTab + 1 : AgentTasksTab;
         }
     }
 
@@ -606,16 +362,10 @@ else if (_item is not null)
     private AssistantChat? _chat;
     private (string Title, string Description) _suggestionsForm;
     private List<AgentSummary>? _customAgents;
-    /// <summary>How long the description must stay unchanged before the Model Selector suggests a model (a debounce).</summary>
-    private static readonly TimeSpan ModelSuggestionDelay = TimeSpan.FromSeconds(3);
 
-    private List<AiModel> _models = [];
-    private bool _modelSelectorActive;
+    /// <summary>The Model Selector's suggestion under the model picker; see <see cref="WorkItemModelSuggestions"/>.</summary>
+    private WorkItemModelSuggestions _modelSuggestions = null!;
     private bool _generatorActive;
-    private bool _suggestingModel;
-    private ModelSelection? _modelSuggestion;
-    private string? _suggestedDescription;
-    private CancellationTokenSource? _modelSuggestionCancellation;
 
     private WorkItemType _type;
     private MudForm? _form;
@@ -631,14 +381,15 @@ else if (_item is not null)
     private bool _initialized;
     private (WorkItemType Type, Guid? Id, Guid? TemplateId, Guid? ParentId, Guid? MindmapId, Guid? IdeaId) _loadedParameters;
 
-    // The mindmap idea a new item is created for, and whether the Mindmap Work Item Writer can (and is) writing it.
-    private Mindmap? _mindmap;
-    private MindmapNode? _idea;
+    /// <summary>The mindmap idea a new item is created for; see <see cref="WorkItemMindmapOrigin"/>.</summary>
+    private WorkItemMindmapOrigin _mindmapOrigin = null!;
+
+    /// <summary>The DGHSF agent worker's tasks on the item, shown in the agent runs tab.</summary>
+    private WorkItemAgentTasks _agentTasks = null!;
+    private AgentRunsPanel? _agentRuns;
 
     // The mindmap ideas a stored item is linked to.
     private List<MindmapIdeaLink> _linkedIdeas = [];
-    private bool _writerActive;
-    private bool _writing;
 
     private bool IsNew => Id is null;
     private string Name => WorkItemActions.Name(_type);
@@ -659,6 +410,11 @@ else if (_item is not null)
         }
     }
     private string ParentNames => string.Join(" or ", _type.ParentTypes.Select(WorkItemActions.Name));
+
+    /// <summary>The Runs on select changed: the agent runs panel and the status texts follow the agent (rendered by the callback).</summary>
+    private void OnExecutorChanged(AgentExecutor executor)
+    {
+    }
 
     /// <summary>The chosen parent: from the candidates while editing, otherwise as stored.</summary>
     private WorkItemReference? SelectedParent
@@ -683,8 +439,8 @@ else if (_item is not null)
         }
     }
 
-    private string BackPath => IsNew && _mindmap is not null
-        ? MindmapRoutes.MapPath(_mindmap.Id)
+    private string BackPath => IsNew && _mindmapOrigin.Mindmap is { } mindmap
+        ? MindmapRoutes.MapPath(mindmap.Id)
         : _item?.Parent is { } parent && !IsNew
         ? WorkItemRoutes.ItemPath(parent.Type, parent.Id)
         : SelectedParent is { } selected ? WorkItemRoutes.ItemPath(selected.Type, selected.Id) : WorkItemRoutes.ListPath(_type);
@@ -703,10 +459,6 @@ else if (_item is not null)
     }
 
     private string BreadcrumbCurrent => _item is not null && _item.Id != Guid.Empty ? _item.Title : IsNew ? "New" : "…";
-
-    private string ParentHelp => _type.RequiresParent
-        ? $"Every {Name} is part of {(_type.ParentTypes[0] == WorkItemType.Epic ? "an" : "a")} {ParentNames}; its issue becomes a sub-issue of the parent's issue."
-        : $"Optional: an {ParentNames} this {Name} belongs to; its issue then becomes a sub-issue of the parent's issue.";
 
     private string DescriptionHelp => _type switch
     {
@@ -729,6 +481,13 @@ else if (_item is not null)
     {
         _pullRequest = new WorkItemPullRequestState(WorkItemService);
         _pullRequest.Changed += OnPullRequestChanged;
+        _modelSuggestions = new WorkItemModelSuggestions(WorkItemService, Logger, change => InvokeAsync(() =>
+        {
+            change();
+            StateHasChanged();
+        }));
+        _agentTasks = new WorkItemAgentTasks(AgentRunService, Snackbar, reload => InvokeAsync(reload), OnAgentTasksReloadedAsync);
+        _mindmapOrigin = new WorkItemMindmapOrigin(Mindmaps, Assistant, InternalAgents, Snackbar, StateHasChanged);
     }
 
     /// <summary>The tabs (and their badges) follow what either pull request tab changes.</summary>
@@ -791,8 +550,7 @@ else if (_item is not null)
         // Another work item: start on its own tab, with nothing of the previous pull request.
         _tab = 0;
         _pullRequest.Follow(null);
-        _agentTasks = [];
-        StopAgentTasksRefresh();
+        _agentTasks.Clear();
         _loading = true;
         _error = null;
         _templates = [];
@@ -800,8 +558,7 @@ else if (_item is not null)
         _children = [];
         _selectedTemplateId = Guid.Empty;
         _templateChoiceId = Guid.Empty;
-        _mindmap = null;
-        _idea = null;
+        _mindmapOrigin.Clear();
         _linkedIdeas = [];
         try
         {
@@ -825,14 +582,14 @@ else if (_item is not null)
                 if (IsNew)
                 {
                     await LoadTemplatesAsync();
-                    await LoadMindmapIdeaAsync();
+                    await _mindmapOrigin.LoadAsync(RepositoryName, MindmapId, IdeaId);
                 }
                 await LoadAgentTasksAsync();
                 _generatorActive = !IsNew && _type.GeneratedChildType is not null && Assistant.IsConfigured
                     && (await InternalAgents.GetAsync(InternalAgentKeys.WorkItemBreakdown)).IsEnabled;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             _error = $"Could not load the {Name}: {ex.Message}";
         }
@@ -842,16 +599,11 @@ else if (_item is not null)
         }
 
         // The suggestion only follows changes made to the description from here on.
-        CancelModelSuggestion();
-        _modelSuggestion = null;
-        _suggestedDescription = _item?.Description;
+        _modelSuggestions.Reset(_item);
         _suggestionsForm = (_item?.Title ?? string.Empty, _item?.Description ?? string.Empty);
         await CreateAssistantToolsAsync();
-        SuggestModelOnOpen();
-        if (_idea is not null && _item is not null)
-        {
-            await WriteFromMindmapAsync();
-        }
+        _modelSuggestions.SuggestOnOpen(_item);
+        await WriteFromMindmapAsync();
     }
 
     private async Task LoadHierarchyAsync()
@@ -889,7 +641,7 @@ else if (_item is not null)
             _templateChoiceId = _selectedTemplateId;
             _item!.Description = template?.Description ?? string.Empty;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not load the {Name} templates: {ex.Message}", Severity.Warning);
         }
@@ -912,103 +664,60 @@ else if (_item is not null)
         }
     }
 
-    /// <summary>The idea a new item is created for (from the mindmap page); a removed idea or map only gives a warning.</summary>
-    private async Task LoadMindmapIdeaAsync()
-    {
-        if (MindmapId is not { } mindmapId || IdeaId is not { } ideaId)
-        {
-            return;
-        }
-        try
-        {
-            _mindmap = await Mindmaps.GetAsync(RepositoryName, mindmapId);
-            _idea = _mindmap?.Find(ideaId);
-            if (_idea is null)
-            {
-                Snackbar.Add("The mindmap idea no longer exists, so this item won't be linked to it.", Severity.Warning);
-                return;
-            }
-            _writerActive = Assistant.IsConfigured && (await InternalAgents.GetAsync(InternalAgentKeys.MindmapWorkItemWriter)).IsEnabled;
-        }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-        {
-            Snackbar.Add($"Could not load the mindmap: {ex.Message}", Severity.Warning);
-        }
-    }
-
     /// <summary>
-    /// Lets the Mindmap Work Item Writer fill in the title and description from the whole map, following the chosen template.
-    /// Without the agent (or when it fails) the idea becomes the title and the template stays the description.
+    /// Lets the Mindmap Work Item Writer fill in the title and description from the whole map, following the chosen template
+    /// (on opening the new item and on Write again); see <see cref="WorkItemMindmapOrigin.WriteAsync"/>.
     /// </summary>
     private async Task WriteFromMindmapAsync()
     {
-        if (_idea is null || _mindmap is null || _item is null)
+        if (_item is null || !_mindmapOrigin.HasIdea)
         {
-            return;
-        }
-        if (!_writerActive)
-        {
-            if (string.IsNullOrWhiteSpace(_item.Title))
-            {
-                _item.Title = _idea.Text.Length <= 256 ? _idea.Text : _idea.Text[..256];
-            }
             return;
         }
 
-        _writing = true;
         _busy = true;
-        StateHasChanged();
         try
         {
-            var written = await Mindmaps.GenerateWorkItemAsync(new(RepositoryName, _mindmap.Id, _idea.Id, _type,
-                _selectedTemplateId == Guid.Empty ? null : _selectedTemplateId, _item.ParentId));
-            _item.Title = written.Title;
-            _item.Description = written.Description;
-            _suggestionsForm = (_item.Title, _item.Description);
-        }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-        {
-            Snackbar.Add(ex.Message, Severity.Warning);
-            if (string.IsNullOrWhiteSpace(_item.Title))
+            if (await _mindmapOrigin.WriteAsync(_item, _selectedTemplateId == Guid.Empty ? null : _selectedTemplateId))
             {
-                _item.Title = _idea.Text.Length <= 256 ? _idea.Text : _idea.Text[..256];
+                _suggestionsForm = (_item.Title, _item.Description);
             }
         }
         finally
         {
-            _writing = false;
             _busy = false;
         }
     }
 
-    private async Task WriteAgainAsync()
+    /// <summary>
+    /// Reads the agent worker's tasks on the item (only for a stored item on the worker with an issue), and keeps the open tab
+    /// when the agent runs tab appears or disappears before it.
+    /// </summary>
+    private async Task LoadAgentTasksAsync()
     {
-        if (await Dialogs.ShowMessageBoxAsync("Write again?",
-                $"The Mindmap Work Item Writer replaces the title and description with a new {Name}, following the chosen template and parent.",
-                yesText: "Write again", cancelText: "Cancel") == true)
-        {
-            await WriteFromMindmapAsync();
-        }
+        var workItemId = _item is { HasIssue: true } item && item.Id != Guid.Empty && IsWorker && !Removed ? item.Id : (Guid?)null;
+        KeepTab(await _agentTasks.LoadAsync(RepositoryName, workItemId));
     }
 
-    /// <summary>Links a new item that was created for a mindmap idea to that idea.</summary>
-    private async Task LinkToMindmapIdeaAsync()
+    /// <summary>A background reload of the agent tasks: keeps the tab, and the runs panel follows a task that ended.</summary>
+    private async Task OnAgentTasksReloadedAsync(WorkItemAgentTasksChange change)
     {
-        if (_mindmap is null || _idea is null || _item is null)
+        KeepTab(change);
+        if (change.Ended && _agentRuns is not null)
         {
-            return;
+            await _agentRuns.ReloadAsync();
         }
-        try
+        StateHasChanged();
+    }
+
+    private void KeepTab(WorkItemAgentTasksChange change)
+    {
+        if (change.HadTasks != change.HasTasks && _tab >= AgentTasksTab)
         {
-            await Mindmaps.LinkAsync(RepositoryName, _mindmap.Id, _idea.Id, _item.Id);
-            Snackbar.Add($"Linked to the idea '{_idea.Text}' of the mindmap '{_mindmap.Title}'.", Severity.Info);
+            // The tab was removed: back to the item from it, or the pull request's tabs move one to the left; it was added: they
+            // move one to the right.
+            _tab = change.HadTasks ? (_tab == AgentTasksTab ? 0 : _tab - 1) : _tab + 1;
         }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-        {
-            Snackbar.Add($"Saved, but could not link it to the mindmap idea: {ex.Message}", Severity.Warning);
-        }
-        _mindmap = null;
-        _idea = null;
     }
 
     private async Task ChangeTemplateAsync(Guid templateId)
@@ -1043,28 +752,29 @@ else if (_item is not null)
         }
 
         List<AiModel> models = [];
+        var modelSelectorActive = false;
         if (_type.CanBeAssigned)
         {
             try
             {
                 models = await ModelService.GetEnabledAsync();
-                _modelSelectorActive = Assistant.IsConfigured && models.Count > 0
+                modelSelectorActive = Assistant.IsConfigured && models.Count > 0
                     && (await InternalAgents.GetAsync(InternalAgentKeys.ModelSelector)).IsEnabled;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (WorkItemActions.IsExpected(ex))
             {
                 Snackbar.Add($"Could not load the managed models for DGHSF Agent: {ex.Message}", Severity.Warning);
             }
         }
 
-        _models = models;
+        _modelSuggestions.Configure(modelSelectorActive, models);
         _assistantTools = AssistantForms.ForWorkItem(
             () => _item!,
             () => SelectedTemplate,
             models,
             // A repository removed from GitHub has no custom agents to read anymore.
             async cancellationToken => _customAgents ??= Removed ? [] : await GitHub.GetCustomAgentsAsync(RepositoryName, cancellationToken),
-            change => InvokeAsync(() => { change(); ScheduleModelSuggestion(); StateHasChanged(); }),
+            change => InvokeAsync(() => { change(); _modelSuggestions.Schedule(_item); StateHasChanged(); }),
             (parentId, cancellationToken) => WorkItemService.GetAncestorsAsync(RepositoryName, parentId, cancellationToken),
             Knowledge.IsSearchEnabled ? SearchKnowledgeBaseAsync : null);
     }
@@ -1115,126 +825,14 @@ else if (_item is not null)
     private void OnDescriptionChanged(string description)
     {
         _item!.Description = description;
-        ScheduleModelSuggestion();
-    }
-
-    /// <summary>
-    /// Debounces the Model Selector: every change to the description restarts the delay, and only when the description
-    /// stays unchanged for <see cref="ModelSuggestionDelay"/> is a model suggested. Other fields don't trigger it.
-    /// </summary>
-    private void ScheduleModelSuggestion()
-    {
-        if (_item is null || !_modelSelectorActive || !_item.CanEditAssignment
-            || string.Equals(_item.Description, _suggestedDescription, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        CancelModelSuggestion();
-        _suggestedDescription = _item.Description;
-        if (string.IsNullOrWhiteSpace(_item.Description))
-        {
-            _modelSuggestion = null;
-            return;
-        }
-
-        _modelSuggestionCancellation = new CancellationTokenSource();
-        _ = SuggestModelAsync(_item.Copy(), ModelSuggestionDelay, _modelSuggestionCancellation.Token);
-    }
-
-    /// <summary>An existing draft with a description gets a suggestion right away; new items only after their description changes.</summary>
-    private void SuggestModelOnOpen()
-    {
-        if (IsNew || _item is null || !_modelSelectorActive || !_item.CanEditAssignment || string.IsNullOrWhiteSpace(_item.Description))
-        {
-            return;
-        }
-
-        _modelSuggestionCancellation = new CancellationTokenSource();
-        _ = SuggestModelAsync(_item.Copy(), TimeSpan.Zero, _modelSuggestionCancellation.Token);
-    }
-
-    private async Task SuggestModelAsync(WorkItem item, TimeSpan delay, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (delay > TimeSpan.Zero)
-            {
-                await Task.Delay(delay, cancellationToken);
-            }
-            await InvokeAsync(() =>
-            {
-                _suggestingModel = true;
-                StateHasChanged();
-            });
-            var suggestion = await WorkItemService.SelectModelAsync(item, cancellationToken);
-            await InvokeAsync(() =>
-            {
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    _modelSuggestion = suggestion;
-                    _suggestingModel = false;
-                    StateHasChanged();
-                }
-            });
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            // Fire and forget: nothing else observes this task, so a failure must not leave the spinner running.
-            Logger.LogWarning(ex, "Suggesting a model for work item {Id} failed.", item.Id);
-            await InvokeAsync(() =>
-            {
-                _suggestingModel = false;
-                StateHasChanged();
-            });
-        }
-    }
-
-    private void CancelModelSuggestion()
-    {
-        _modelSuggestionCancellation?.Cancel();
-        _modelSuggestionCancellation?.Dispose();
-        _modelSuggestionCancellation = null;
-        _suggestingModel = false;
-    }
-
-    private void ApplyModelSuggestion()
-    {
-        if (_modelSuggestion is { } suggestion && _item is { CanEditAssignment: true })
-        {
-            _item.Model = suggestion.ModelId;
-        }
-    }
-
-    private string ModelName(string modelId)
-    {
-        return _models.FirstOrDefault(m => string.Equals(m.ModelId, modelId, StringComparison.OrdinalIgnoreCase))?.Name ?? modelId;
-    }
-
-    private static string Capitalize(string value)
-    {
-        return value.Length == 0 ? value : string.Concat(value[..1].ToUpperInvariant(), value[1..]);
+        _modelSuggestions.Schedule(_item);
     }
 
     public void Dispose()
     {
         _pullRequest.Changed -= OnPullRequestChanged;
-        CancelModelSuggestion();
-        StopAgentTasksRefresh();
-    }
-
-    private string ParentLabel(Guid? parentId)
-    {
-        if (parentId is null)
-        {
-            return _type.RequiresParent ? string.Empty : "Standalone (no parent)";
-        }
-        return _parents.FirstOrDefault(p => p.Id == parentId) is { } parent
-            ? $"{parent.Type.DisplayName}: {parent.Title}"
-            : _item?.Parent?.Title ?? $"#{parentId}";
+        _modelSuggestions.Dispose();
+        _agentTasks.Dispose();
     }
 
     private async Task<bool> SaveCoreAsync()
@@ -1249,7 +847,7 @@ else if (_item is not null)
         _item = await WorkItemService.SaveAsync(_item);
         if (wasNew)
         {
-            await LinkToMindmapIdeaAsync();
+            await _mindmapOrigin.LinkAsync(RepositoryName, _item.Id);
             if (_chat is not null)
             {
                 await _chat.AttachAsync(ChatOwner.ForWorkItem(RepositoryName, _item.Id));
@@ -1324,11 +922,9 @@ else if (_item is not null)
             await _form!.ResetValidationAsync();
 
             // Like opening the item: the suggestions follow the stored title and description.
-            CancelModelSuggestion();
-            _modelSuggestion = null;
-            _suggestedDescription = _item.Description;
+            _modelSuggestions.Reset(_item);
             OnFieldBlur();
-            SuggestModelOnOpen();
+            _modelSuggestions.SuggestOnOpen(_item);
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
@@ -1376,113 +972,6 @@ else if (_item is not null)
         {
             _busy = false;
         }
-    }
-
-    private AgentRunsPanel? _agentRuns;
-
-    /// <summary>How often the agent runs reload while one of them is active.</summary>
-    private static readonly TimeSpan AgentTasksRefreshInterval = TimeSpan.FromSeconds(5);
-
-    /// <summary>The agent worker's tasks on the item, newest first, each with its runs.</summary>
-    private IReadOnlyList<AgentRunOverview> _agentTasks = [];
-    private Timer? _agentTasksTimer;
-
-    private bool HasAgentTasksTab
-    {
-        get
-        {
-            return _agentTasks.Count > 0;
-        }
-    }
-
-    /// <summary>The runs of the item's tasks, counting the run a task waits to start.</summary>
-    private int AgentRunCount
-    {
-        get
-        {
-            return _agentTasks.Sum(t => t.Run.Attempts + (t.Run.Status is AgentRunStatus.Pending or AgentRunStatus.Queued ? 1 : 0));
-        }
-    }
-
-    /// <summary>
-    /// Reads the agent worker's tasks on the item, and keeps the open tab when the agent runs tab appears or disappears before
-    /// it. Reloads by itself while a task is active.
-    /// </summary>
-    private async Task LoadAgentTasksAsync()
-    {
-        var hadTab = HasAgentTasksTab;
-        if (_item is null || _item.Id == Guid.Empty || !IsWorker || !_item.HasIssue || Removed)
-        {
-            _agentTasks = [];
-        }
-        else
-        {
-            try
-            {
-                _agentTasks = await AgentRunService.GetWorkItemTasksAsync(RepositoryName, _item.Id);
-            }
-            catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-            {
-                Snackbar.Add($"Could not load the agent worker's runs: {ex.Message}", Severity.Error);
-            }
-        }
-
-        if (hadTab != HasAgentTasksTab && _tab >= AgentTasksTab)
-        {
-            // The tab was removed: back to the item from it, or the pull request's tabs move one to the left; it was added: they
-            // move one to the right.
-            _tab = hadTab ? (_tab == AgentTasksTab ? 0 : _tab - 1) : _tab + 1;
-        }
-        ScheduleAgentTasksRefresh();
-    }
-
-    /// <summary>Reloads once after <see cref="AgentTasksRefreshInterval"/> while a task is active; each reload schedules the next.</summary>
-    private void ScheduleAgentTasksRefresh()
-    {
-        StopAgentTasksRefresh();
-        if (_agentTasks.Any(t => t.Run.IsActive))
-        {
-            _agentTasksTimer = new Timer(_ =>
-            {
-                _ = InvokeAsync(async () =>
-                {
-                    await LoadAgentTasksAsync();
-                    if (!_agentTasks.Any(t => t.Run.IsActive) && _agentRuns is not null)
-                    {
-                        // The task ended: the panel's status and actions follow.
-                        await _agentRuns.ReloadAsync();
-                    }
-                    StateHasChanged();
-                });
-            }, null, AgentTasksRefreshInterval, Timeout.InfiniteTimeSpan);
-        }
-    }
-
-    private void StopAgentTasksRefresh()
-    {
-        _agentTasksTimer?.Dispose();
-        _agentTasksTimer = null;
-    }
-
-    private async Task CancelAgentTaskAsync(AgentRunOverview task)
-    {
-        if (await Dialogs.ShowMessageBoxAsync("Cancel agent task",
-                "Cancel the agent worker's task? A worker that is running it stops within a few minutes and pushes nothing, and it isn't retried.",
-                yesText: "Cancel task", cancelText: "Keep running") != true)
-        {
-            return;
-        }
-
-        try
-        {
-            await AgentRunService.CancelRunAsync(RepositoryName, task.Run.Id);
-            Snackbar.Add("The agent task is cancelled.", Severity.Info);
-        }
-        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
-        {
-            Snackbar.Add($"Could not cancel the task: {ex.Message}", Severity.Error);
-        }
-        await RefreshAsync();
     }
 
     /// <summary>Whether the item's agent is the DGHSF agent worker instead of the Copilot cloud agent.</summary>
@@ -1555,7 +1044,7 @@ else if (_item is not null)
                 _item.FixMergeConflicts = form.FixMergeConflicts;
             }
             WorkItemActions.Report(Snackbar, result);
-            ScheduleModelSuggestion();
+            _modelSuggestions.Schedule(_item);
             if (_agentRuns is not null)
             {
                 await _agentRuns.ReloadAsync();
@@ -1586,7 +1075,7 @@ else if (_item is not null)
             Snackbar.Add($"Deleted '{_item.Title}'.", Severity.Success);
             Navigation.NavigateTo(back);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
             Snackbar.Add($"Could not delete: {ex.Message}", Severity.Error);
         }

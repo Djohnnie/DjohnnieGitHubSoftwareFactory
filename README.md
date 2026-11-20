@@ -34,7 +34,7 @@ See [`IDEAS.md`](IDEAS.md) for the vision and roadmap. It mixes implemented and 
 | `Djohnnie.SoftwareFactory.Agents` | DGHSF's internal agents and their form tools |
 | `Djohnnie.SoftwareFactory.Contracts` | Records shared by all projects |
 
-[`.github/copilot-instructions.md`](.github/copilot-instructions.md) describes the architecture and conventions in detail.
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md) describes the architecture, conventions and invariants; [`docs/features.md`](docs/features.md) describes how each feature works.
 
 ## Running it locally
 
@@ -54,7 +54,7 @@ Create `src/Djohnnie.SoftwareFactory.Web/appsettings.Development.json`. It is gi
   "GitHub": {
     "ClientId": "<OAuth app client id>",
     "ClientSecret": "<OAuth app client secret>",
-    "AllowedLogin": "<your GitHub login>"
+    "AllowedUserId": <the numeric id of your GitHub account, from https://api.github.com/users/<your login>>
   },
   "OpenAI": {
     "Endpoint": "<empty for OpenAI, or an Azure OpenAI / Foundry resource URL>",

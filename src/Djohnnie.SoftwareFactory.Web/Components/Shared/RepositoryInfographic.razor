@@ -62,6 +62,8 @@
                         <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-existing"></span>Draft</th>
                         <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-accepted"></span>Accepted</th>
                         <th scope="col" class="infographic-number"><span class="infographic-swatch infographic-finished"></span>Closed</th>
+                        @* Closed as not planned or as a duplicate: not finished work, so left out of the bar. *@
+                        <th scope="col" class="infographic-number" title="Closed as not planned or as a duplicate; not part of the bar">Not planned</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -95,6 +97,7 @@
                             <td class="infographic-number">@row.Draft</td>
                             <td class="infographic-number">@row.Accepted</td>
                             <td class="infographic-number">@row.Closed</td>
+                            <td class="infographic-number">@row.NotPlanned</td>
                         </tr>
                     }
                 </tbody>

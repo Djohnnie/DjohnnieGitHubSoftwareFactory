@@ -206,6 +206,20 @@ public class WorkItemMapTests : BunitContext
     }
 
     [Fact]
+    public void Progress_LeavesOutWhatWasClosedAsNotPlanned_ButCountsWhatIsBelowIt()
+    {
+        var epic = Item(WorkItemType.Epic, "Passkeys", status: WorkItemStatus.Accepted);
+        var dropped = Item(WorkItemType.Feature, "Passkey recovery", epic, WorkItemStatus.NotPlanned);
+        var story = Item(WorkItemType.Story, "Recover by email", dropped, WorkItemStatus.Done);
+        var bug = Item(WorkItemType.Bug, "Duplicate of another bug", epic, WorkItemStatus.NotPlanned);
+
+        var progress = WorkItemMapLayout.Create([epic, dropped, story, bug], epic.Id).Progress(epic.Id);
+
+        Assert.Equal(new WorkItemMapProgress(0, 0, 1), progress);
+        Assert.Equal(100, progress.PercentDone);
+    }
+
+    [Fact]
     public async Task Page_ShowsTheProgressOfTheExpandedEpicOnly()
     {
         await SelectRepositoryAsync();

@@ -36,8 +36,31 @@ public sealed record PullRequestDiscussionEntry(
 /// A pull request's discussion as a revision run of the DGHSF agent worker sees it: the feedback written since the agent's
 /// last run, and what was said before as context. What the worker itself posted carries <see cref="Marker"/> and is left out.
 /// </summary>
-public sealed record PullRequestDiscussion(IReadOnlyList<PullRequestDiscussionEntry> Feedback, IReadOnlyList<PullRequestDiscussionEntry> Earlier)
+/// <remarks>
+/// The agent runs every tool without asking and pushes to the branch, so only people who may change the repository (and
+/// Copilot) can steer it: comments and reviews of anyone else (<see cref="IsTrustedAuthor"/>) are left out and counted in
+/// <paramref name="IgnoredFeedback"/>. On a public repository anyone can comment on a pull request.
+/// </remarks>
+/// <param name="IgnoredFeedback">New comments and reviews left out because their author isn't trusted.</param>
+public sealed record PullRequestDiscussion(IReadOnlyList<PullRequestDiscussionEntry> Feedback, IReadOnlyList<PullRequestDiscussionEntry> Earlier,
+    int IgnoredFeedback = 0)
 {
+    /// <summary>GitHub's author associations of people who may push to the repository.</summary>
+    private static readonly HashSet<string> TrustedAssociations = new(["OWNER", "MEMBER", "COLLABORATOR"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the agent may act on what this author wrote: the repository's owner, members of its organization and
+    /// collaborators, or Copilot (its code review and cloud agent, which are bots without such an association).
+    /// </summary>
+    public static bool IsTrustedAuthor(GitHubOwner? user, string? authorAssociation)
+    {
+        if (user is null)
+        {
+            return false;
+        }
+        return user.IsCopilot || (authorAssociation is not null && TrustedAssociations.Contains(authorAssociation));
+    }
+
     /// <summary>How many earlier comments are kept as context, the most recent ones.</summary>
     public const int MaxEarlier = 40;
 
@@ -69,18 +92,30 @@ public sealed record PullRequestDiscussion(IReadOnlyList<PullRequestDiscussionEn
         return Split(conversation, lineComments, reviews, since, until);
     }
 
-    /// <summary>Orders the discussion by time, leaves out the worker's own comments and empty reviews, and numbers the new feedback.</summary>
+    /// <summary>
+    /// Orders the discussion by time, leaves out the worker's own comments, empty reviews and what untrusted authors wrote
+    /// (<see cref="IsTrustedAuthor"/>), and numbers the new feedback.
+    /// </summary>
     public static PullRequestDiscussion Split(IEnumerable<GitHubComment> conversation, IEnumerable<GitHubComment> lineComments,
         IEnumerable<GitHubPullRequestReview> reviews, DateTimeOffset since, DateTimeOffset until)
     {
-        var entries = conversation
-            .Select(c => new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.Comment, c.User?.Login, c.Body ?? string.Empty, c.CreatedAt, c.HtmlUrl))
-            .Concat(lineComments.Select(c => new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.LineComment, c.User?.Login, c.Body ?? string.Empty,
-                c.CreatedAt, c.HtmlUrl, c.Path, c.Line ?? c.OriginalLine, c.InReplyToId ?? c.Id)))
+        var written = conversation
+            .Select(c => (Trusted: IsTrustedAuthor(c.User, c.AuthorAssociation),
+                Entry: new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.Comment, c.User?.Login, c.Body ?? string.Empty, c.CreatedAt, c.HtmlUrl)))
+            .Concat(lineComments.Select(c => (Trusted: IsTrustedAuthor(c.User, c.AuthorAssociation),
+                Entry: new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.LineComment, c.User?.Login, c.Body ?? string.Empty,
+                    c.CreatedAt, c.HtmlUrl, c.Path, c.Line ?? c.OriginalLine, c.InReplyToId ?? c.Id))))
             .Concat(reviews
                 .Where(r => r.SubmittedAt is not null && r.State != "PENDING")
-                .Select(r => new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.Review, r.User?.Login, ReviewText(r), r.SubmittedAt!.Value, r.HtmlUrl ?? string.Empty)))
-            .Where(e => !string.IsNullOrWhiteSpace(e.Body) && !IsFromWorker(e.Body))
+                .Select(r => (Trusted: IsTrustedAuthor(r.User, r.AuthorAssociation),
+                    Entry: new PullRequestDiscussionEntry(null, PullRequestDiscussionKind.Review, r.User?.Login, ReviewText(r), r.SubmittedAt!.Value,
+                        r.HtmlUrl ?? string.Empty))))
+            .Where(w => !string.IsNullOrWhiteSpace(w.Entry.Body) && !IsFromWorker(w.Entry.Body))
+            .ToList();
+        var ignored = written.Count(w => !w.Trusted && w.Entry.CreatedAt > since && w.Entry.CreatedAt <= until);
+        var entries = written
+            .Where(w => w.Trusted)
+            .Select(w => w.Entry)
             .OrderBy(e => e.CreatedAt)
             .ToList();
 
@@ -93,7 +128,7 @@ public sealed record PullRequestDiscussion(IReadOnlyList<PullRequestDiscussionEn
             .TakeLast(MaxEarlier)
             .Select(e => e with { Body = Shorten(e.Body, MaxEarlierLength) })
             .ToList();
-        return new(feedback, earlier);
+        return new(feedback, earlier, ignored);
     }
 
     /// <summary>

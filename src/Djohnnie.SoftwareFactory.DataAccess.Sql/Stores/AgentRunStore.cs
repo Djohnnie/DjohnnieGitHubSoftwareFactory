@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,12 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
     /// Adds the work item's task, or when it already has one, reopens it: every run on the item (a retry, a fresh start or a
     /// revision on its pull request's feedback) is a run of that one task, which gets <paramref name="maxAttempts"/> more runs.
     /// </summary>
+    /// <remarks>
+    /// Safe against concurrent starts (e.g. the sync starting a revision while the user clicks Revise): <c>Status</c> is a
+    /// concurrency token, so reopening only saves while the task still has the ended status it was read with, and the first
+    /// task of an item is protected by the filtered unique index on active tasks (<c>AgentRunConfiguration</c>). The start
+    /// that loses either race is refused like any start on an active task.
+    /// </remarks>
     private async Task<AgentRun> StartTaskAsync(string repositoryFullName, Guid workItemId, string? requestedModel, int maxAttempts, AgentRunKind kind,
         string? branch, int? pullRequestNumber, string? pullRequestUrl, CancellationToken cancellationToken)
     {
@@ -29,8 +36,7 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         var normalized = Entities.Repository.Normalize(repositoryFullName);
         var model = Truncate(requestedModel, 100);
         var budget = Math.Max(1, maxAttempts);
-        if (await db.AgentRuns.AnyAsync(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized
-                && r.Status != AgentRunStatus.Succeeded && r.Status != AgentRunStatus.Failed && r.Status != AgentRunStatus.Cancelled, cancellationToken))
+        if (await db.AgentRuns.Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized).AnyAsync(IsActive, cancellationToken))
         {
             throw AlreadyWorking();
         }
@@ -41,15 +47,12 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is null)
         {
-            existing = new Entities.AgentRun
-            {
-                Id = Guid.NewGuid(),
-                WorkItemId = workItemId,
-                RepositoryFullName = normalized,
-                UsageComplete = true,
-                CreatedAt = timeProvider.GetUtcNow()
-            };
-            db.AgentRuns.Add(existing);
+            return await AddTaskAsync(db, normalized, workItemId, model, budget, kind, branch, pullRequestNumber, pullRequestUrl, cancellationToken);
+        }
+        if (existing.Status is not (AgentRunStatus.Succeeded or AgentRunStatus.Failed or AgentRunStatus.Cancelled))
+        {
+            // Another start reopened it after the check above.
+            throw AlreadyWorking();
         }
 
         // A task that ran before keeps its runs, totals and the time it started; it gets maxAttempts more runs. A fresh
@@ -66,9 +69,57 @@ public sealed class AgentRunStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         existing.QueuedAt = null;
         existing.LeaseUntil = null;
         existing.CompletedAt = null;
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceException ex) when (ex.InnerException is DbUpdateConcurrencyException)
+        {
+            // The status changed since it was read: a concurrent start reopened the task first.
+            throw AlreadyWorking();
+        }
         return existing.ToContract();
     }
+
+    /// <summary>The item's first task. When a concurrent start added one first, the unique index on active tasks refuses this one.</summary>
+    private async Task<AgentRun> AddTaskAsync(AppDbContext db, string normalized, Guid workItemId, string? model, int budget, AgentRunKind kind,
+        string? branch, int? pullRequestNumber, string? pullRequestUrl, CancellationToken cancellationToken)
+    {
+        var task = new Entities.AgentRun
+        {
+            Id = Guid.NewGuid(),
+            WorkItemId = workItemId,
+            RepositoryFullName = normalized,
+            UsageComplete = true,
+            CreatedAt = timeProvider.GetUtcNow(),
+            Status = AgentRunStatus.Pending,
+            Kind = kind,
+            MaxAttempts = budget,
+            RequestedModel = model,
+            Branch = branch,
+            PullRequestNumber = pullRequestNumber,
+            PullRequestUrl = pullRequestUrl
+        };
+        db.AgentRuns.Add(task);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceException ex) when (ex.InnerException is DbUpdateException)
+        {
+            db.Entry(task).State = EntityState.Detached;
+            if (await db.AgentRuns.Where(r => r.WorkItemId == workItemId && r.RepositoryFullName == normalized).AnyAsync(IsActive, cancellationToken))
+            {
+                throw AlreadyWorking();
+            }
+            throw;
+        }
+        return task.ToContract();
+    }
+
+    /// <summary>A task that hasn't ended (pending, queued or running); the filter of the unique index on active tasks.</summary>
+    private static readonly Expression<Func<Entities.AgentRun, bool>> IsActive = r =>
+        r.Status != AgentRunStatus.Succeeded && r.Status != AgentRunStatus.Failed && r.Status != AgentRunStatus.Cancelled;
 
     private static DomainRuleException AlreadyWorking()
     {

@@ -38,7 +38,7 @@ builder.Services.AddSoftwareFactory(builder.Configuration);
 
 builder.Services.AddOptions<GitHubAuthOptions>()
     .Bind(builder.Configuration.GetSection(GitHubAuthOptions.SectionName))
-    .Validate(o => !string.IsNullOrWhiteSpace(o.AllowedLogin), "GitHub:AllowedLogin must be configured.")
+    .Validate(o => o.AllowedUserId > 0, "GitHub:AllowedUserId must be configured: the numeric id of the GitHub account that may sign in.")
     .ValidateOnStart();
 
 var gitHub = builder.Configuration.GetSection(GitHubAuthOptions.SectionName).Get<GitHubAuthOptions>() ?? new();
@@ -84,10 +84,9 @@ builder.Services
             OnCreatingTicket = context =>
             {
                 var allowed = context.HttpContext.RequestServices.GetRequiredService<IOptions<GitHubAuthOptions>>().Value;
-                var login = context.Identity?.FindFirst(ClaimTypes.Name)?.Value;
-
-                if (!string.Equals(login, allowed.AllowedLogin, StringComparison.OrdinalIgnoreCase))
+                if (!allowed.IsAllowed(context.Identity))
                 {
+                    var login = context.Identity?.FindFirst(ClaimTypes.Name)?.Value;
                     throw new UnauthorizedAccessException($"GitHub user '{login}' is not allowed.");
                 }
 

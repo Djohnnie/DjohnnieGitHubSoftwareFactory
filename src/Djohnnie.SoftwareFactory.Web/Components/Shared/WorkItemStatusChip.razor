@@ -17,7 +17,7 @@ else
 
     /// <summary>The statuses in the order of a work item's life, for filters.</summary>
     public static IReadOnlyList<WorkItemStatus> Ordered { get; } =
-        [WorkItemStatus.Generated, WorkItemStatus.Draft, WorkItemStatus.Accepted, WorkItemStatus.InProgress, WorkItemStatus.Done];
+        [WorkItemStatus.Generated, WorkItemStatus.Draft, WorkItemStatus.Accepted, WorkItemStatus.InProgress, WorkItemStatus.Done, WorkItemStatus.NotPlanned];
 
     public static string LabelOf(WorkItemStatus status)
     {
@@ -28,6 +28,7 @@ else
             WorkItemStatus.Accepted => "Accepted",
             WorkItemStatus.InProgress => "In progress",
             WorkItemStatus.Done => "Closed",
+            WorkItemStatus.NotPlanned => "Not planned",
             _ => status.ToString()
         };
     }
@@ -38,6 +39,7 @@ else
         {
             WorkItemStatus.Generated => "A draft the background agents generated from the repository. Review it like any draft before accepting it.",
             WorkItemStatus.InProgress => $"The {executor.DisplayName} works on it.",
+            WorkItemStatus.NotPlanned => "The GitHub issue was closed as not planned or as a duplicate, so it doesn't count as finished work.",
             _ => null
         };
     }
@@ -63,6 +65,7 @@ else
             WorkItemStatus.Accepted => Icons.Material.Filled.TaskAlt,
             WorkItemStatus.InProgress => WorkItemRoutes.Icon(executor),
             WorkItemStatus.Done => Icons.Material.Filled.Done,
+            WorkItemStatus.NotPlanned => Icons.Material.Filled.DoNotDisturb,
             _ => Icons.Material.Filled.EditNote
         };
     }

@@ -61,7 +61,7 @@
             {
                 var count = Counts.GetValueOrDefault(epic.Id);
                 options.Add(new Option(epic.Id, epic.Title, WorkItemRoutes.Icon(WorkItemType.Epic), count == 1 ? "1 item" : $"{count} items",
-                    epic.Status == WorkItemStatus.Done));
+                    epic.Status.IsClosed));
             }
             return options;
         }

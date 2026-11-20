@@ -1,0 +1,41 @@
+@inject IDialogService Dialogs
+
+@* On a new work item created for a mindmap idea: where it comes from, and Write again for the Mindmap Work Item Writer. *@
+@if (Origin is { Mindmap: { } mindmap, Idea: { } idea })
+{
+    <MudAlert Variant="Variant.Outlined" Severity="Severity.Info" Icon="@Icons.Material.Filled.BubbleChart" Class="mindmap-origin">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <span>
+                For the idea <b>@idea.Text</b> of the mindmap <MudLink Href="@MindmapRoutes.MapPath(mindmap.Id)">@mindmap.Title</MudLink>.
+                @(Origin.Writing ? $"The Mindmap Work Item Writer is writing the {Name} from the whole mindmap…" : $"Saving links this {Name} to the idea; closing it marks the idea done.")
+            </span>
+            @if (Origin.WriterActive && !Origin.Writing)
+            {
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                           OnClick="ConfirmWriteAgainAsync" Disabled="Busy">Write again</MudButton>
+            }
+        </MudStack>
+    </MudAlert>
+}
+
+@code {
+    [Parameter, EditorRequired] public WorkItemMindmapOrigin Origin { get; set; } = null!;
+
+    /// <summary>The item's type in lowercase, e.g. "user story".</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>The user confirmed Write again; the page lets the writer replace the title and description.</summary>
+    [Parameter] public EventCallback WriteAgain { get; set; }
+
+    private async Task ConfirmWriteAgainAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Write again?",
+                $"The Mindmap Work Item Writer replaces the title and description with a new {Name}, following the chosen template and parent.",
+                yesText: "Write again", cancelText: "Cancel") == true)
+        {
+            await WriteAgain.InvokeAsync();
+        }
+    }
+}

@@ -1,0 +1,117 @@
+@* The work item editor's "Part of" box: a draft picks its parent, an accepted item shows it. *@
+
+<MudPaper Class="pa-4" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h6">Part of</MudText>
+    @if (Item.IsDraft)
+    {
+        <MudSelect T="Guid?" Variant="Variant.Outlined" Value="Item.ParentId" ValueChanged="ParentChanged" Label="Parent"
+                   Required="Type.RequiresParent" RequiredError="@($"Choose the {ParentNames} this {Name} is part of.")"
+                   Clearable="!Type.RequiresParent" ToStringFunc="ParentLabel" AnchorOrigin="Origin.BottomCenter" MaxHeight="420"
+                   HelperText="@ParentHelp">
+            @if (!Type.RequiresParent)
+            {
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Standalone (no parent)</MudSelectItem>
+            }
+            @foreach (var parent in Parents)
+            {
+                <MudSelectItem T="Guid?" Value="@parent.Id">
+                    <MudText Typo="Typo.body2">
+                        <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" Class="mr-1" />
+                        @parent.Title
+                        @if (parent.IssueNumber is { } parentNumber)
+                        {
+                            <span class="mono"> #@parentNumber</span>
+                        }
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@parent.Type.DisplayName · @WorkItemStatusChip.LabelOf(parent.Status)</MudText>
+                </MudSelectItem>
+            }
+        </MudSelect>
+        @if (Type.RequiresParent && Parents.Count == 0)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Class="mt-2">
+                There is no @ParentNames yet in this repository.
+                <MudLink Href="@WorkItemRoutes.NewPath(Type.ParentTypes[0])">Create one first</MudLink>.
+            </MudAlert>
+        }
+        @if (SelectedParent is { IssueNumber: null } waiting)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                '@waiting.Title' isn't accepted yet: accept it before accepting this @Name.
+            </MudText>
+        }
+    }
+    else if (SelectedParent is { } parent)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">
+            <MudIcon Icon="@WorkItemRoutes.Icon(parent.Type)" Size="Size.Small" Style="vertical-align:text-bottom" />
+            <MudLink Href="@WorkItemRoutes.ItemPath(parent.Type, parent.Id)">@parent.Title</MudLink>
+            @if (parent.IssueNumber is { } parentNumber)
+            {
+                <span> (<GitHubLink Href="@parent.IssueUrl">#@parentNumber</GitHubLink>)</span>
+            }
+        </MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">Standalone</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
+
+    /// <summary>The items this one can be part of (for a draft), sorted for the select.</summary>
+    [Parameter] public IReadOnlyList<WorkItem> Parents { get; set; } = [];
+
+    /// <summary>The chosen parent: from <see cref="Parents"/> while editing, otherwise as stored.</summary>
+    [Parameter] public WorkItemReference? SelectedParent { get; set; }
+
+    /// <summary>The user picked another parent; the page stores it on the item.</summary>
+    [Parameter] public EventCallback<Guid?> ParentChanged { get; set; }
+
+    private WorkItemType Type
+    {
+        get
+        {
+            return Item.Type;
+        }
+    }
+
+    private string Name
+    {
+        get
+        {
+            return WorkItemActions.Name(Type);
+        }
+    }
+
+    private string ParentNames
+    {
+        get
+        {
+            return string.Join(" or ", Type.ParentTypes.Select(WorkItemActions.Name));
+        }
+    }
+
+    private string ParentHelp
+    {
+        get
+        {
+            return Type.RequiresParent
+                ? $"Every {Name} is part of {(Type.ParentTypes[0] == WorkItemType.Epic ? "an" : "a")} {ParentNames}; its issue becomes a sub-issue of the parent's issue."
+                : $"Optional: an {ParentNames} this {Name} belongs to; its issue then becomes a sub-issue of the parent's issue.";
+        }
+    }
+
+    private string ParentLabel(Guid? parentId)
+    {
+        if (parentId is null)
+        {
+            return Type.RequiresParent ? string.Empty : "Standalone (no parent)";
+        }
+        return Parents.FirstOrDefault(p => p.Id == parentId) is { } parent
+            ? $"{parent.Type.DisplayName}: {parent.Title}"
+            : Item.Parent?.Title ?? $"#{parentId}";
+    }
+}

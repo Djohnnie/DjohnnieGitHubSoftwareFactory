@@ -1,0 +1,55 @@
+@using Djohnnie.SoftwareFactory.Application.Features.AgentRuns
+@using Djohnnie.SoftwareFactory.Contracts.AgentRuns
+@inject AgentRunService AgentRunService
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+@* The work item editor's agent runs tab. Like the agent worker tasks on the background tasks page, but only this item's and not
+   collapsible: they have the tab to themselves. *@
+<div aria-label="Agent worker tasks">
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        The tasks of the DGHSF agent worker on this @Name, newest first. A retry, a fresh start or a revision is another run of a task ·
+        @AiModel.FormatCredits(Tasks.Sum(t => t.Run.AiCredits ?? 0))@(Tasks.Any(t => t.Run.NanoAiu is not null && !t.Run.UsageComplete) ? " (at least)" : null)
+    </MudText>
+    <MudStack Spacing="3">
+        @foreach (var task in Tasks)
+        {
+            <AgentTaskCard @key="task.Run.Id" Overview="task" ShowWorkItem="false" Busy="Busy" OnCancel="() => CancelAsync(task)" />
+        }
+    </MudStack>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string RepositoryFullName { get; set; } = string.Empty;
+
+    /// <summary>The item's type in lowercase, e.g. "user story".</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+
+    [Parameter] public IReadOnlyList<AgentRunOverview> Tasks { get; set; } = [];
+
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>A task was cancelled (or cancelling it failed); the page refreshes the item and its tasks.</summary>
+    [Parameter] public EventCallback Cancelled { get; set; }
+
+    private async Task CancelAsync(AgentRunOverview task)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Cancel agent task",
+                "Cancel the agent worker's task? A worker that is running it stops within a few minutes and pushes nothing, and it isn't retried.",
+                yesText: "Cancel task", cancelText: "Keep running") != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await AgentRunService.CancelRunAsync(RepositoryFullName, task.Run.Id);
+            Snackbar.Add("The agent task is cancelled.", Severity.Info);
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not cancel the task: {ex.Message}", Severity.Error);
+        }
+        await Cancelled.InvokeAsync();
+    }
+}

@@ -19,7 +19,13 @@ public enum WorkItemStatus
     /// A draft that the background agents generated from the repository ("Generate from repository"); nobody wrote it.
     /// It behaves exactly like <see cref="Draft"/>: it can be edited, accepted and deleted.
     /// </summary>
-    Generated = 4
+    Generated = 4,
+
+    /// <summary>
+    /// The issue was closed without the work being done: as "not planned" or as a duplicate. It doesn't count as finished
+    /// work (in the counts, the map's progress and the linked mindmap ideas), and no agent works on it any more.
+    /// </summary>
+    NotPlanned = 5
 }
 
 public static class WorkItemStatuses
@@ -32,6 +38,15 @@ public static class WorkItemStatuses
             get
             {
                 return status is WorkItemStatus.Draft or WorkItemStatus.Generated;
+            }
+        }
+
+        /// <summary>The GitHub issue is closed, done or not: <see cref="WorkItemStatus.Done"/> or <see cref="WorkItemStatus.NotPlanned"/>.</summary>
+        public bool IsClosed
+        {
+            get
+            {
+                return status is WorkItemStatus.Done or WorkItemStatus.NotPlanned;
             }
         }
     }

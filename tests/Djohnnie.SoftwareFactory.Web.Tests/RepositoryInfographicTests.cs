@@ -63,8 +63,8 @@ public class RepositoryInfographicTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Available", cut.Markup));
         Assert.Equal("2", Stat(cut, "Custom agents"));
         Assert.Equal("2", Stat(cut, "Skills"));
-        Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
-        Assert.Equal(["0", "0", "0"], Numbers(cut, "Epics"));
+        Assert.Equal(["1", "2", "1", "1"], Numbers(cut, "Bugs"));
+        Assert.Equal(["0", "0", "0", "0"], Numbers(cut, "Epics"));
         Assert.Equal(WorkItemTypeRules.All.Count, cut.FindAll("tbody tr").Count);
         // The counts come from the listings alone, not from reading every agent or skill file.
         Assert.Equal(3, _gitHub.Requests.Count);
@@ -98,10 +98,10 @@ public class RepositoryInfographicTests : BunitContext
         // The agents and skills share one box, so the boxes stay the same.
         Assert.Equal(2, cut.FindAll(".infographic-stat").Count);
         Assert.DoesNotContain("Not available", cut.Markup);
-        Assert.Equal(["1", "2", "1"], Numbers(cut, "Bugs"));
+        Assert.Equal(["1", "2", "1", "1"], Numbers(cut, "Bugs"));
     }
 
-    /// <summary>One bug per status.</summary>
+    /// <summary>One bug per status, plus one closed as not planned.</summary>
     private async Task SeedBugsAsync(string repository)
     {
         var store = Services.GetRequiredService<IWorkItemStore>();
@@ -118,6 +118,11 @@ public class RepositoryInfographicTests : BunitContext
         var done = await SaveBugAsync(store, repository, "Done");
         await store.MarkAcceptedAsync(repository, done.Id, 3, 3, "https://example.com/3", _cancellationToken);
         await store.ApplyIssueAsync(repository, done.Id, new WorkItemIssueSnapshot(3, "https://example.com/3", "Done", string.Empty, true, false), _cancellationToken);
+
+        var notPlanned = await SaveBugAsync(store, repository, "Not planned");
+        await store.MarkAcceptedAsync(repository, notPlanned.Id, 4, 4, "https://example.com/4", _cancellationToken);
+        await store.ApplyIssueAsync(repository, notPlanned.Id,
+            new WorkItemIssueSnapshot(4, "https://example.com/4", "Not planned", string.Empty, true, false, IsNotPlanned: true), _cancellationToken);
     }
 
     private Task<WorkItem> SaveBugAsync(IWorkItemStore store, string repository, string title)
