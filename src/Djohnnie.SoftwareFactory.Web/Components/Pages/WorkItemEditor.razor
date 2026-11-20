@@ -38,6 +38,13 @@
     {
         @* Follows _item, which every action on the page replaces with the stored item. *@
         <WorkItemStatusChip Status="_item.Status" Executor="_item.Executor" />
+        @if (_item.Progress == CopilotProgress.CopilotReviewing)
+        {
+            <MudTooltip Text="@CopilotProgressChip.DescriptionOf(_item.Progress)">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@CopilotProgressChip.ColorOf(_item.Progress)"
+                         Icon="@CopilotProgressChip.IconOf(_item.Progress, _item.Executor)" Class="heading-copilot-reviewing">@CopilotProgressChip.LabelOf(_item.Progress, _item.Executor)</MudChip>
+            </MudTooltip>
+        }
     }
     @foreach (var link in _linkedIdeas)
     {
@@ -78,7 +85,7 @@
             var acceptBlocked = Removed ? GitHubLink.RemovedTitle : AcceptBlockedByParent;
             <MudTooltip Text="@(acceptBlocked ?? string.Empty)" Disabled="acceptBlocked is null">
                 <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="AcceptAsync" Disabled="@(_busy || acceptBlocked is not null)"
-                           StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.AcceptText(_type)</MudButton>
+                           StartIcon="@Icons.Material.Filled.RocketLaunch">@WorkItemActions.SaveAndAcceptText(_type)</MudButton>
             </MudTooltip>
         }
         else if (_item.Status == WorkItemStatus.Accepted && _type.CanBeAssigned)
@@ -718,12 +725,16 @@ else if (_item is not null)
     {
         get
         {
+            // Like the merge button: not while the agent runs or a requested Copilot code review is still coming.
+            if (_item?.Progress is CopilotProgress.Queued or CopilotProgress.Working or CopilotProgress.CopilotReviewing)
+            {
+                return false;
+            }
             if (_pullRequest.Changes is { } changes)
             {
-                return changes.IsOpen && !changes.IsDraft;
+                return changes.IsOpen && !changes.IsDraft && !changes.Review.CopilotReviewRequested;
             }
-            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped
-                or CopilotProgress.CopilotReviewing;
+            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped;
         }
     }
 

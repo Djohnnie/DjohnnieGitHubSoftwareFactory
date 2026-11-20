@@ -255,7 +255,7 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Assert.Equal(feature.Id, parent.Instance.GetState(x => x.Value));
         Assert.True(parent.Instance.Required);
         Assert.Single(cut.FindComponents<AgentPicker>());
-        Assert.Contains("Accept &amp; assign", cut.Markup);
+        Assert.Contains("Save, Accept &amp; Assign", cut.Markup);
         Assert.Contains("isn't accepted yet", cut.Markup);
 
         cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Title").Find("input").Input("Sign in with a passkey");
@@ -740,15 +740,53 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         Render<MudPopoverProvider>();
         var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
 
-        // The work item's status says Copilot is reviewing, and the pull request still counts as one that can be merged.
-        cut.WaitForAssertion(() => Assert.Contains("Copilot reviewing", cut.Markup));
-        await cut.InvokeAsync(() => cut.Find(".pr-mergeable-link").Click());
+        // The heading shows that Copilot is reviewing next to the status, and the pull request doesn't count as one that can be merged yet.
+        cut.WaitForAssertion(() => Assert.Equal("Copilot reviewing", cut.Find(".heading-copilot-reviewing").TextContent.Trim()));
+        Assert.Empty(cut.FindAll(".pr-mergeable"));
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
 
-        // The discussion tab says to wait for its review, instead of "ready to merge".
+        // The discussion tab says to wait for its review, instead of "ready to merge", and doesn't let you merge yet.
         cut.WaitForAssertion(() => Assert.Equal("Copilot reviewing", cut.Find(".pr-copilot-reviewing").TextContent.Trim()));
         Assert.Contains("hasn't submitted its review yet", cut.Find(".pr-merge-readiness").TextContent);
+        Assert.True(cut.Find("button.pr-merge").HasAttribute("disabled"));
         Assert.Contains("still working on it", cut.Find(".pr-copilot-review-pending").TextContent);
         Assert.DoesNotContain("Nobody reviewed this pull request yet", cut.Markup);
+    }
+
+    [Fact]
+    public async Task PullRequest_WhileTheAgentIsWorking_CannotBeMerged()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.Working;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = """
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":false,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":1,"deletions":1,"changed_files":0,"mergeable_state":"clean",
+             "requested_reviewers":[]}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = "[]";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Discussion")));
+        Assert.Empty(cut.FindAll(".heading-copilot-reviewing"));
+        Assert.Empty(cut.FindAll(".pr-mergeable"));
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("still working on this pull request", cut.Find(".pr-merge-readiness").TextContent));
+        Assert.True(cut.Find("button.pr-merge").HasAttribute("disabled"));
     }
 
     [Fact]

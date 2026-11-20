@@ -187,7 +187,8 @@
     {
         @if (State.CanSendFeedback)
         {
-            var readiness = MergeReadiness(Changes);
+            var readiness = MergeReadiness(Item, Changes);
+            var mergeBlocked = MergeBlocked(Item, Changes);
             @* First on the tab: the "can be merged" banner at the top of the work item links here. *@
             <MudPaper Class="pa-4 mt-3 pr-merge-card" Outlined="true" Elevation="0">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -201,14 +202,14 @@
                 <MudAlert Variant="Variant.Text" Severity="readiness.Severity" Dense="true" Class="mt-2 pr-merge-readiness">@readiness.Text</MudAlert>
                 <MudStack Row="true" AlignItems="AlignItems.End" Wrap="Wrap.Wrap" Spacing="3" Class="mt-2">
                     <MudSelect T="PullRequestMergeMethod" Value="State.MergeMethod" ValueChanged="ChangeMergeMethod" Label="How to merge" Dense="true" Variant="Variant.Outlined"
-                               Disabled="@(State.Sending || Changes.IsDraft)" Class="pr-merge-method" Style="min-width: 260px; max-width: 320px"
+                               Disabled="@(State.Sending || mergeBlocked)" Class="pr-merge-method" Style="min-width: 260px; max-width: 320px"
                                HelperText="@MergeMethodHelp(State.MergeMethod)">
                         <MudSelectItem Value="PullRequestMergeMethod.Merge">Create a merge commit</MudSelectItem>
                         <MudSelectItem Value="PullRequestMergeMethod.Squash">Squash and merge</MudSelectItem>
                         <MudSelectItem Value="PullRequestMergeMethod.Rebase">Rebase and merge</MudSelectItem>
                     </MudSelect>
                     <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.MergeType" OnClick="MergeAsync"
-                               Disabled="@(State.Sending || Changes.IsDraft)" Class="pr-merge mb-5">Merge and close</MudButton>
+                               Disabled="@(State.Sending || mergeBlocked)" Class="pr-merge mb-5">Merge and close</MudButton>
                     @if (State.Sending)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mb-6" />
@@ -740,13 +741,34 @@
     /// <summary>Whether GitHub would merge the pull request now, in a sentence for the merge card.</summary>
     private const string CopilotReviewingHint = "Copilot code review was asked to review this pull request and is still working on it.";
 
-    private static (Severity Severity, string Text) MergeReadiness(PullRequestChanges changes)
+    private static bool AgentRunning(WorkItem item)
+    {
+        return item.Progress is CopilotProgress.Queued or CopilotProgress.Working;
+    }
+
+    private static bool CopilotReviewing(WorkItem item, PullRequestChanges changes)
+    {
+        return changes.Review.CopilotReviewRequested || item.Progress == CopilotProgress.CopilotReviewing;
+    }
+
+    /// <summary>Merging waits for a draft to be marked ready, a running agent to finish and a requested Copilot code review to come in.</summary>
+    private static bool MergeBlocked(WorkItem item, PullRequestChanges changes)
+    {
+        return changes.IsDraft || AgentRunning(item) || CopilotReviewing(item, changes);
+    }
+
+    private static (Severity Severity, string Text) MergeReadiness(WorkItem item, PullRequestChanges changes)
     {
         if (changes.IsDraft)
         {
             return (Severity.Warning, "This is a draft. Mark it as ready for review on GitHub before you can merge it.");
         }
-        if (changes.Review.CopilotReviewRequested)
+        if (AgentRunning(item))
+        {
+            var agent = item.Executor == AgentExecutor.DghsfWorker ? "The agent" : "Copilot";
+            return (Severity.Warning, $"{agent} is still working on this pull request. Wait until it's done before you merge it.");
+        }
+        if (CopilotReviewing(item, changes))
         {
             return (Severity.Warning, "Copilot code review hasn't submitted its review yet. Wait for it before you merge, so you can still act on what it finds.");
         }

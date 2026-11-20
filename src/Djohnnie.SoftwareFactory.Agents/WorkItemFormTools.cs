@@ -62,7 +62,7 @@ public sealed class WorkItemFormTools(
                  set a model only when the user asks for one (pick an id from `list_models`); set a base branch or custom
                  instructions only when the user mentions them.
               5. After updating, briefly summarize what you filled in and suggest what could still be refined, then remind the
-                 user to review the form and click "Save draft" or "Accept & assign".
+                 user to review the form and click "Save draft" or "Save, Accept & Assign".
               """
             : """
               4. After updating, briefly summarize what you filled in and suggest what could still be refined, then remind the

@@ -23,6 +23,12 @@ internal static class WorkItemActions
         return type.CanBeAssigned ? "Accept & assign" : "Accept & create issue";
     }
 
+    /// <summary>The editor's accept button, which saves the form before accepting.</summary>
+    public static string SaveAndAcceptText(WorkItemType type)
+    {
+        return type.CanBeAssigned ? "Save, Accept & Assign" : AcceptText(type);
+    }
+
     /// <summary>Why the item can't be accepted yet because of its parent, or <c>null</c> when the parent doesn't stand in the way.</summary>
     public static string? AcceptBlockedByParent(WorkItemType type, WorkItemReference? parent)
     {
