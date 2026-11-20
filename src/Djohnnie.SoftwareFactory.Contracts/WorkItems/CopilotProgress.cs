@@ -49,13 +49,18 @@ public enum PullRequestChecks
 /// <summary>What a work item stores about Copilot's work on it when it is refreshed.</summary>
 /// <param name="AgentRunUrl">The Actions run of Copilot's latest agent session, when the token may read Actions.</param>
 /// <param name="PullRequestBranch">The pull request's head branch, where Copilot pushes its commits.</param>
+/// <param name="HasConflicts">
+/// Whether the open pull request's branch conflicts with its base branch; <c>null</c> while GitHub is still working it out,
+/// so the stored value stays. Always false without an open pull request.
+/// </param>
 public sealed record WorkItemProgressSnapshot(
     CopilotProgress Progress,
     int? PullRequestNumber = null,
     string? PullRequestUrl = null,
     PullRequestChecks Checks = PullRequestChecks.None,
     string? AgentRunUrl = null,
-    string? PullRequestBranch = null)
+    string? PullRequestBranch = null,
+    bool? HasConflicts = false)
 {
     public static WorkItemProgressSnapshot None { get; } = new(CopilotProgress.None);
 }

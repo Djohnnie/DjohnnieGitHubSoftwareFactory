@@ -14,12 +14,22 @@ public enum PullRequestSection
 /// <summary>
 /// The pull request of a work item as loaded from GitHub, with the feedback being written for Copilot. The changes and the
 /// discussion tabs share it, so line comments written on the diff are sent with the feedback from the discussion. It is
-/// loaded the first time one of those tabs is shown, not with the page.
+/// loaded in the background as soon as the page shows the pull request's tabs, so their counts fill in by themselves; opening
+/// a tab while that load runs waits for it instead of loading again (<see cref="EnsureLoadedAsync"/>).
 /// </summary>
 public sealed class WorkItemPullRequestState(WorkItemService workItemService)
 {
     /// <summary>Above this many diff lines in total, files start collapsed so the page stays responsive.</summary>
     private const int ExpandAllLimit = 2000;
+
+    /// <summary>The load that runs now, which opening a tab waits for; see <see cref="Loading"/>.</summary>
+    private Task? _load;
+
+    /// <summary>
+    /// Goes up with every load and when the state follows another pull request, so a load that was overtaken (by a newer
+    /// one, or because the page moved on to another pull request) leaves the state alone when it ends.
+    /// </summary>
+    private int _version;
 
     /// <summary>Raised when the state changes, so every view of it (the tabs and their badges) renders again.</summary>
     public event Action? Changed;
@@ -68,6 +78,9 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
             return;
         }
         Number = pullRequestNumber;
+        _version++;
+        _load = null;
+        Loading = false;
         Changes = null;
         Patches = new Dictionary<string, IReadOnlyList<DiffLine>>();
         Expanded.Clear();
@@ -78,7 +91,30 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
         Error = null;
     }
 
-    public async Task LoadAsync(string repositoryName, Guid workItemId)
+    /// <summary>
+    /// Makes sure the pull request is loaded without loading it twice: waits for the load that runs (e.g. the one started in
+    /// the background), starts one when nothing was loaded yet, and does nothing once it is loaded or loading failed (the
+    /// reload button tries again).
+    /// </summary>
+    public Task EnsureLoadedAsync(string repositoryName, Guid workItemId)
+    {
+        if (Loading && _load is { } running)
+        {
+            return running;
+        }
+        return NeedsLoading ? LoadAsync(repositoryName, workItemId) : Task.CompletedTask;
+    }
+
+    /// <summary>Loads the pull request again, e.g. after feedback was sent; a load that still runs is overtaken.</summary>
+    public Task LoadAsync(string repositoryName, Guid workItemId)
+    {
+        var load = FetchAsync(repositoryName, workItemId, ++_version);
+        // A load that ended right away (it failed before reaching GitHub) has nothing to wait for any more.
+        _load = Loading ? load : null;
+        return load;
+    }
+
+    private async Task FetchAsync(string repositoryName, Guid workItemId, int version)
     {
         Loading = true;
         Error = null;
@@ -86,6 +122,10 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
         try
         {
             var changes = await workItemService.GetPullRequestChangesAsync(repositoryName, workItemId);
+            if (version != _version)
+            {
+                return;
+            }
             var patches = changes.Files.ToDictionary(f => f.FileName, f => DiffPatch.Parse(f.Patch));
             var firstLoad = Changes is null;
             Changes = changes;
@@ -99,12 +139,19 @@ public sealed class WorkItemPullRequestState(WorkItemService workItemService)
         }
         catch (Exception ex) when (WorkItemActions.IsExpected(ex))
         {
-            Error = $"Could not load the pull request: {ex.Message}";
+            if (version == _version)
+            {
+                Error = $"Could not load the pull request: {ex.Message}";
+            }
         }
         finally
         {
-            Loading = false;
-            NotifyChanged();
+            if (version == _version)
+            {
+                Loading = false;
+                _load = null;
+                NotifyChanged();
+            }
         }
     }
 

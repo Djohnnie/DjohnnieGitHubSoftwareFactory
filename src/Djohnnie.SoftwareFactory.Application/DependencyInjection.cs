@@ -51,6 +51,7 @@ public static class DependencyInjection
             services.AddScoped<WorkItemPullRequests>();
             services.AddScoped<CopilotRevisionReviews>();
             services.AddScoped<CopilotReviewRevisions>();
+            services.AddScoped<MergeConflictFixes>();
             services.AddScoped<AgentTemplateWorkflow>();
             services.AddScoped<SkillWorkflow>();
             services.AddScoped<AiModelService>();

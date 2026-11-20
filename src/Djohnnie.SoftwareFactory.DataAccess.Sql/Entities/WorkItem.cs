@@ -54,6 +54,9 @@ public class WorkItem : Entity
     /// <summary>Whether the sync starts a revision run of the DGHSF agent worker when Copilot code review left remarks.</summary>
     public bool ReviseOnCopilotReview { get; set; }
 
+    /// <summary>Whether the sync asks the agent to fix the pull request's merge conflicts by itself.</summary>
+    public bool FixMergeConflicts { get; set; } = true;
+
     public int? IssueNumber { get; set; }
 
     /// <summary>GitHub's issue id (not the number); the sub-issues API needs it.</summary>
@@ -89,6 +92,8 @@ public class WorkItem : Entity
 
     public PullRequestChecks PullRequestChecks { get; set; }
 
+    public bool PullRequestHasConflicts { get; set; }
+
     [MaxLength(500)]
     public string? AgentRunUrl { get; set; }
 
@@ -109,4 +114,7 @@ public class WorkItem : Entity
 
     /// <summary>When the latest Copilot code review was submitted that the sync acted on for <see cref="ReviseOnCopilotReview"/>.</summary>
     public DateTimeOffset? CopilotReviewHandledAt { get; set; }
+
+    /// <summary>When the agent was last asked to fix the pull request's merge conflicts; cleared once it no longer conflicts.</summary>
+    public DateTimeOffset? MergeConflictFixRequestedAt { get; set; }
 }

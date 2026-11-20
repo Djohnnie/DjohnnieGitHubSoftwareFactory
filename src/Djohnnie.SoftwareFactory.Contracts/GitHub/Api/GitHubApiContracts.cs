@@ -134,7 +134,8 @@ public sealed record LinkedPullRequestNode(
     [property: JsonPropertyName("reviewDecision")] string? ReviewDecision,
     [property: JsonPropertyName("latestReviews")] GraphQlNodes<ReviewStateNode>? LatestReviews,
     [property: JsonPropertyName("commits")] GraphQlNodes<PullRequestCommitNode>? Commits,
-    [property: JsonPropertyName("reviewRequests")] GraphQlNodes<ReviewRequestNode>? ReviewRequests = null);
+    [property: JsonPropertyName("reviewRequests")] GraphQlNodes<ReviewRequestNode>? ReviewRequests = null,
+    [property: JsonPropertyName("mergeable")] string? Mergeable = null);
 
 public sealed record ReviewStateNode([property: JsonPropertyName("state")] string? State);
 

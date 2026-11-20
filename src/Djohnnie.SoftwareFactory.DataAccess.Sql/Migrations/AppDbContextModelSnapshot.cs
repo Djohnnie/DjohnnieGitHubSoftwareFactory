@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261120091423_AddWorkItemReviseOnCopilotReview";
+    public override string LastMigrationId => "20261120135952_AddWorkItemMergeConflictFix";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -1466,6 +1466,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Executor")
                     .HasColumnType("int");
 
+                b.Property<bool>("FixMergeConflicts")
+                    .HasColumnType("bit");
+
                 b.Property<Guid?>("GeneratedByTaskId")
                     .HasColumnType("uniqueidentifier");
 
@@ -1481,6 +1484,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.Property<string>("IssueUrl")
                     .HasMaxLength(500)
                     .HasColumnType("nvarchar(500)");
+
+                b.Property<DateTimeOffset?>("MergeConflictFixRequestedAt")
+                    .HasColumnType("datetimeoffset");
 
                 b.Property<string>("Model")
                     .HasMaxLength(100)
@@ -1498,6 +1504,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<int>("PullRequestChecks")
                     .HasColumnType("int");
+
+                b.Property<bool>("PullRequestHasConflicts")
+                    .HasColumnType("bit");
 
                 b.Property<int?>("PullRequestNumber")
                     .HasColumnType("int");

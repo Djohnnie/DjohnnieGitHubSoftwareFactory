@@ -84,6 +84,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.IncludeScreenshots = !assignable || item.IncludeScreenshots;
         // Only the DGHSF agent worker revises its pull request on Copilot code review's remarks.
         entity.ReviseOnCopilotReview = assignable && entity.Executor == AgentExecutor.DghsfWorker && item.ReviseOnCopilotReview;
+        entity.FixMergeConflicts = assignable && item.FixMergeConflicts;
         entity.UpdatedAt = now;
         if (item.Id == Guid.Empty)
         {
@@ -302,6 +303,14 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         if (!entity.Type.CanBeAssigned || issue.Progress is not null)
         {
             var progress = entity.Type.CanBeAssigned ? issue.Progress! : WorkItemProgressSnapshot.None;
+            // While GitHub still computes whether the branch conflicts, the stored answer stays, but only for the same pull request.
+            entity.PullRequestHasConflicts = progress.HasConflicts
+                ?? (entity.PullRequestNumber == progress.PullRequestNumber && entity.PullRequestHasConflicts);
+            // Once the conflicts are gone, the agent may be asked again when the pull request conflicts the next time.
+            if (!entity.PullRequestHasConflicts)
+            {
+                entity.MergeConflictFixRequestedAt = null;
+            }
             entity.Progress = progress.Progress;
             entity.PullRequestNumber = progress.PullRequestNumber;
             entity.PullRequestUrl = progress.PullRequestUrl;
@@ -324,6 +333,14 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
         entity.CopilotRevisionRequestedAt = requestedAt;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetMergeConflictFixRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset requestedAt, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindAsync(db, repositoryFullName, id, cancellationToken);
+        entity.MergeConflictFixRequestedAt = requestedAt;
         await db.SaveChangesAsync(cancellationToken);
     }
 

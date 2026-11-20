@@ -35,7 +35,26 @@ public static class CopilotProgressEvaluator
             { IsOpen: false } => CopilotProgress.Closed,
             _ => OpenProgress(pullRequest, run)
         };
-        return new(progress, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), run?.HtmlUrl, pullRequest.HeadRefName);
+        return new(progress, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), run?.HtmlUrl, pullRequest.HeadRefName,
+            ConflictsOf(pullRequest));
+    }
+
+    /// <summary>
+    /// Whether the pull request's branch conflicts with its base branch: only an open one can, and <c>null</c> while GitHub
+    /// is still computing it.
+    /// </summary>
+    public static bool? ConflictsOf(GitHubLinkedPullRequest pullRequest)
+    {
+        if (!pullRequest.IsOpen)
+        {
+            return false;
+        }
+        return pullRequest.Mergeable switch
+        {
+            "CONFLICTING" => true,
+            "MERGEABLE" => false,
+            _ => null
+        };
     }
 
     /// <summary>
@@ -62,7 +81,8 @@ public static class CopilotProgressEvaluator
         {
             return pullRequest is null
                 ? new(working)
-                : new(working, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), null, pullRequest.HeadRefName);
+                : new(working, pullRequest.Number, pullRequest.Url, ChecksOf(pullRequest.ChecksState), null, pullRequest.HeadRefName,
+                    ConflictsOf(pullRequest));
         }
         return pullRequest is null
             ? new(CopilotProgress.ReadyForReview, run.PullRequestNumber, run.PullRequestUrl, PullRequestChecks.None, null, run.Branch)

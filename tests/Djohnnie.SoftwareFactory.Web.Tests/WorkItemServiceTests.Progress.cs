@@ -43,6 +43,26 @@ public partial class WorkItemServiceTests
     }
 
     [Fact]
+    public async Task Refresh_StoresMergeConflicts_AndKeepsThemWhileGitHubIsStillComputing()
+    {
+        var task = await AcceptAsync(WorkItemType.Task, "Task");
+        _gitHub.LinkedPullRequests[42] = [new(7, "Task", "OPEN", "copilot/fix-42", Mergeable: "CONFLICTING")];
+        Assert.True((await RefreshAssignedTaskAsync(task)).PullRequestHasConflicts);
+
+        _gitHub.LinkedPullRequests[42] = [new(7, "Task", "OPEN", "copilot/fix-42", Mergeable: "UNKNOWN")];
+        Assert.True((await RefreshAssignedTaskAsync(task)).PullRequestHasConflicts);
+
+        _gitHub.LinkedPullRequests[42] = [new(8, "Task", "OPEN", "copilot/fix-42-again", Mergeable: "UNKNOWN")];
+        Assert.False((await RefreshAssignedTaskAsync(task)).PullRequestHasConflicts);
+
+        _gitHub.LinkedPullRequests[42] = [new(8, "Task", "OPEN", "copilot/fix-42-again", Mergeable: "CONFLICTING")];
+        Assert.True((await RefreshAssignedTaskAsync(task)).PullRequestHasConflicts);
+
+        _gitHub.LinkedPullRequests[42] = [new(8, "Task", "OPEN", "copilot/fix-42-again", Mergeable: "MERGEABLE")];
+        Assert.False((await RefreshAssignedTaskAsync(task)).PullRequestHasConflicts);
+    }
+
+    [Fact]
     public async Task Refresh_IgnoresRunsOfTheRepositorysOwnWorkflows()
     {
         var task = await AcceptAsync(WorkItemType.Task, "Task");

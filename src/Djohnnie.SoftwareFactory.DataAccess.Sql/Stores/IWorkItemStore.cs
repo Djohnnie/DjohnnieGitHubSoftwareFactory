@@ -72,6 +72,12 @@ public interface IWorkItemStore
     /// </summary>
     Task SetCopilotReviewHandledAsync(string repositoryFullName, Guid id, DateTimeOffset submittedAt, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Sets <see cref="WorkItem.MergeConflictFixRequestedAt"/>: the agent was asked to fix the pull request's merge conflicts,
+    /// so the sync doesn't ask again for the same conflict. <see cref="WorkItem.UpdatedAt"/> doesn't change.
+    /// </summary>
+    Task SetMergeConflictFixRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset requestedAt, CancellationToken cancellationToken);
+
     /// <summary>Remembers GitHub's issue id of an item that was accepted before the id was stored.</summary>
     Task SetIssueIdAsync(string repositoryFullName, Guid id, long issueId, CancellationToken cancellationToken);
 }

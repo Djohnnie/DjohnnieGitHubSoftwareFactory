@@ -16,10 +16,21 @@
             <MudIcon Icon="@ChecksIconOf(Item.PullRequestChecks)" Color="@ChecksColorOf(Item.PullRequestChecks)" Size="Size.Small"
                      Style="vertical-align:text-bottom" title="@ChecksLabelOf(Item.PullRequestChecks)" />
         }
+        @if (Item.PullRequestHasConflicts)
+        {
+            <MudTooltip Text="@ConflictsDescription">
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" Icon="@ConflictsIcon"
+                         Class="merge-conflicts-chip">@ConflictsLabel</MudChip>
+            </MudTooltip>
+        }
     </span>
 }
 
 @code {
+    public const string ConflictsLabel = "Merge conflicts";
+    public const string ConflictsDescription = "The pull request's branch conflicts with its base branch; resolve the conflicts before it can be merged.";
+    public const string ConflictsIcon = Icons.Material.Filled.CallSplit;
+
     [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
 
     /// <summary>The agent's state; a working or stopped agent is named (the DGHSF agent worker or Copilot).</summary>

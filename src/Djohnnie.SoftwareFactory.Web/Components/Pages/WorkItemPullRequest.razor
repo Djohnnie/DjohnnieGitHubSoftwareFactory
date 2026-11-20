@@ -200,6 +200,14 @@
                     so it also works on a pull request you opened yourself.
                 </MudText>
                 <MudAlert Variant="Variant.Text" Severity="readiness.Severity" Dense="true" Class="mt-2 pr-merge-readiness">@readiness.Text</MudAlert>
+                @if (HasConflicts(Item, Changes))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2" Class="mt-2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoFixHigh" OnClick="AskToFixAsync"
+                                   Disabled="@(State.Sending || AgentRunning(Item))" Class="pr-ask-fix">Ask to fix</MudButton>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pr-ask-fix-hint">@AskToFixHint(Item)</MudText>
+                    </MudStack>
+                }
                 <MudStack Row="true" AlignItems="AlignItems.End" Wrap="Wrap.Wrap" Spacing="3" Class="mt-2">
                     <MudSelect T="PullRequestMergeMethod" Value="State.MergeMethod" ValueChanged="ChangeMergeMethod" Label="How to merge" Dense="true" Variant="Variant.Outlined"
                                Disabled="@(State.Sending || mergeBlocked)" Class="pr-merge-method" Style="min-width: 260px; max-width: 320px"
@@ -460,9 +468,12 @@
             _draftNumber = State.Number;
             CancelComment();
         }
-        if (Active && State.NeedsLoading)
+        // Loaded in the background as soon as the page shows the pull request's tabs, so their counts fill in by themselves;
+        // both tabs share the load, and the one that is shown waits for it rather than loading again.
+        var load = State.EnsureLoadedAsync(RepositoryName, Item.Id);
+        if (Active)
         {
-            await LoadAsync();
+            await load;
         }
     }
 
@@ -677,6 +688,55 @@
         }
     }
 
+    private static string AskToFixHint(WorkItem item)
+    {
+        var agent = item.Executor == AgentExecutor.DghsfWorker ? "the agent" : "Copilot";
+        if (item.MergeConflictFixRequestedAt is { } requestedAt)
+        {
+            return $"Posts a comment that asks {agent} to merge the base branch and resolve the conflicts. {Capitalize(agent)} was asked already on {requestedAt.ToLocalTime():g}.";
+        }
+        return $"Posts a comment that asks {agent} to merge the base branch and resolve the conflicts.";
+    }
+
+    private static string Capitalize(string text)
+    {
+        return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+    }
+
+    private async Task AskToFixAsync()
+    {
+        State.Sending = true;
+        State.NotifyChanged();
+        try
+        {
+            var result = await WorkItemService.RequestMergeConflictFixAsync(RepositoryName, Item.Id);
+            if (result.Warning is not null)
+            {
+                Snackbar.Add(result.Warning, Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(result.AgentRunStarted
+                    ? $"Asked the agent to fix the merge conflicts of pull request #{Changes!.Number}; it starts a revision run shortly."
+                    : $"Asked Copilot to fix the merge conflicts of pull request #{Changes!.Number}.", Severity.Success);
+            }
+            State.SentUrl = result.Url;
+        }
+        catch (Exception ex) when (WorkItemActions.IsExpected(ex))
+        {
+            Snackbar.Add($"Could not ask to fix the merge conflicts: {ex.Message}", Severity.Error);
+            return;
+        }
+        finally
+        {
+            State.Sending = false;
+            State.NotifyChanged();
+        }
+        await LoadAsync();
+        // Also for Copilot: the item now remembers when it was asked, which the page shows once the item is refreshed.
+        await OnAgentRunStarted.InvokeAsync();
+    }
+
     private void ChangeMergeMethod(PullRequestMergeMethod method)
     {
         State.MergeMethod = method;
@@ -751,10 +811,27 @@
         return changes.Review.CopilotReviewRequested || item.Progress == CopilotProgress.CopilotReviewing;
     }
 
-    /// <summary>Merging waits for a draft to be marked ready, a running agent to finish and a requested Copilot code review to come in.</summary>
+    /// <summary>
+    /// Merging waits for a draft to be marked ready, a running agent to finish, a requested Copilot code review to come in and
+    /// merge conflicts to be resolved.
+    /// </summary>
     private static bool MergeBlocked(WorkItem item, PullRequestChanges changes)
     {
-        return changes.IsDraft || AgentRunning(item) || CopilotReviewing(item, changes);
+        return changes.IsDraft || AgentRunning(item) || CopilotReviewing(item, changes) || HasConflicts(item, changes);
+    }
+
+    /// <summary>
+    /// Whether the branch conflicts with the base branch: GitHub's live merge state decides, and while GitHub is still
+    /// computing it, what the last sync stored.
+    /// </summary>
+    public static bool HasConflicts(WorkItem item, PullRequestChanges changes)
+    {
+        return changes.Review.MergeState switch
+        {
+            "dirty" => true,
+            null or "unknown" => item.PullRequestHasConflicts,
+            _ => false
+        };
     }
 
     private static (Severity Severity, string Text) MergeReadiness(WorkItem item, PullRequestChanges changes)
@@ -772,13 +849,16 @@
         {
             return (Severity.Warning, "Copilot code review hasn't submitted its review yet. Wait for it before you merge, so you can still act on what it finds.");
         }
+        if (HasConflicts(item, changes))
+        {
+            return (Severity.Error, "The branch conflicts with the base branch. Resolve the conflicts before you can merge it.");
+        }
         return changes.Review.MergeState switch
         {
             "clean" or "has_hooks" => (Severity.Success, "Ready to merge: the required reviews and checks are in."),
             "unstable" => (Severity.Info, "It can be merged, but some checks that aren't required fail."),
             "blocked" => (Severity.Warning, "A branch rule blocks merging, e.g. a required approval or required checks. GitHub refuses the merge until that's resolved."),
             "behind" => (Severity.Warning, "The base branch moved on; the branch has to be updated on GitHub before it can be merged."),
-            "dirty" => (Severity.Error, "The branch conflicts with the base branch. Resolve the conflicts before merging."),
             _ => (Severity.Info, "GitHub is still checking whether it can be merged. You can try; GitHub refuses if something blocks it.")
         };
     }

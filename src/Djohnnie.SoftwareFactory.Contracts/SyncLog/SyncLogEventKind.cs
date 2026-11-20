@@ -64,5 +64,14 @@ public enum SyncLogEventKind
     /// Copilot code review left remarks on a pull request of the DGHSF agent worker, but the sync didn't start a revision run,
     /// e.g. because enough rounds were revised automatically already or the revision was refused.
     /// </summary>
-    CopilotReviewRevisionSkipped = 14
+    CopilotReviewRevisionSkipped = 14,
+
+    /// <summary>
+    /// A work item's pull request conflicts with its base branch, so the sync asked its agent to fix it with a comment in the
+    /// pull request's discussion (<see cref="WorkItems.WorkItem.FixMergeConflicts"/>).
+    /// </summary>
+    MergeConflictFixRequested = 15,
+
+    /// <summary>A work item's pull request conflicts with its base branch, but the sync couldn't ask its agent to fix it.</summary>
+    MergeConflictFixSkipped = 16
 }

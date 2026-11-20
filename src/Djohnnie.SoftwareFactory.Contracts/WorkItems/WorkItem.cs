@@ -75,6 +75,12 @@ public sealed record WorkItem
     /// </summary>
     public bool ReviseOnCopilotReview { get; set; }
 
+    /// <summary>
+    /// Whether the sync asks the agent (the DGHSF agent worker or the Copilot cloud agent) by itself to fix the pull request
+    /// once it conflicts with its base branch, with a comment in its discussion. On by default.
+    /// </summary>
+    public bool FixMergeConflicts { get; set; } = true;
+
     public int? IssueNumber { get; set; }
 
     /// <summary>GitHub's issue id (not the number); the sub-issues API needs it.</summary>
@@ -98,6 +104,9 @@ public sealed record WorkItem
     public string? PullRequestUrl { get; set; }
 
     public PullRequestChecks PullRequestChecks { get; set; }
+
+    /// <summary>Whether the open pull request's branch conflicts with its base branch, as of the last refresh from GitHub.</summary>
+    public bool PullRequestHasConflicts { get; set; }
 
     /// <summary>The Actions run of Copilot's latest agent session (its logs).</summary>
     [MaxLength(500)]
@@ -123,6 +132,13 @@ public sealed record WorkItem
     /// changes it; saving the item leaves it as it is.
     /// </summary>
     public DateTimeOffset? CopilotReviewHandledAt { get; set; }
+
+    /// <summary>
+    /// When the agent was last asked to fix the merge conflicts of the pull request (by the sync or with the button), so the
+    /// sync asks once per conflict; <c>null</c> otherwise. A refresh clears it once the pull request no longer conflicts.
+    /// Saving the item leaves it as it is.
+    /// </summary>
+    public DateTimeOffset? MergeConflictFixRequestedAt { get; set; }
 
     /// <summary>A draft, also one the background agents generated (<see cref="WorkItemStatus.Generated"/>).</summary>
     public bool IsDraft => Status.IsDraft;

@@ -140,6 +140,11 @@ public sealed class WorkItemSyncService(
                     var revision = await WithRetriesAsync(() => workItems.StartCopilotReviewRevisionAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
                     AddRevisionEvent(run, result.WorkItem, revision);
                 }
+                if (result.WorkItem is { FixMergeConflicts: true, PullRequestHasConflicts: true, MergeConflictFixRequestedAt: null, Status: WorkItemStatus.InProgress })
+                {
+                    var fix = await WithRetriesAsync(() => workItems.FixMergeConflictsAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
+                    AddMergeConflictFixEvent(run, result.WorkItem, fix);
+                }
             }
             catch (GitHubApiException ex) when (StopsTheRun(ex))
             {
@@ -412,6 +417,35 @@ public sealed class WorkItemSyncService(
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
         }
+    }
+
+    private static void AddMergeConflictFixEvent(Run run, WorkItem item, MergeConflictFixResult fix)
+    {
+        var where = $"pull request #{fix.PullRequestNumber} of {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}'";
+        var agent = item.Executor == AgentExecutor.DghsfWorker ? "the DGHSF agent worker" : "Copilot";
+        switch (fix.Outcome)
+        {
+            case MergeConflictFixOutcome.Requested when fix.Reason is null:
+                run.Add(SyncLogLevel.Information, SyncLogEventKind.MergeConflictFixRequested,
+                    $"{Capitalize(where)} has merge conflicts, so {agent} was asked to fix them.",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+            case MergeConflictFixOutcome.Requested:
+                run.Add(SyncLogLevel.Warning, SyncLogEventKind.MergeConflictFixRequested,
+                    $"{Capitalize(where)} has merge conflicts, so {agent} was asked to fix them, but: {fix.Reason}",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+            case MergeConflictFixOutcome.Skipped:
+                run.Add(SyncLogLevel.Warning, SyncLogEventKind.MergeConflictFixSkipped,
+                    $"{Capitalize(where)} has merge conflicts, but {agent} couldn't be asked to fix them: {fix.Reason}",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+        }
+    }
+
+    private static string Capitalize(string text)
+    {
+        return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
     }
 
     /// <summary>One warning per repository and reason, listing its items, rather than one per item.</summary>

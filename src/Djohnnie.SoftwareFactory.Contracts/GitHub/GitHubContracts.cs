@@ -118,6 +118,10 @@ public sealed record CopilotCodeReviewSettingsUpdate(
 /// <param name="LatestReviewStates">The latest review state of each reviewer, e.g. <c>APPROVED</c> or <c>CHANGES_REQUESTED</c>.</param>
 /// <param name="ChecksState">The status check rollup of the last commit (<c>SUCCESS</c>, <c>FAILURE</c>, <c>ERROR</c>, <c>PENDING</c> or <c>EXPECTED</c>), or <c>null</c> without checks.</param>
 /// <param name="CopilotReviewRequested">Copilot code review was asked to review and hasn't submitted its review yet.</param>
+/// <param name="Mergeable">
+/// GraphQL's <c>MERGEABLE</c>, <c>CONFLICTING</c> (the branch conflicts with the base branch) or <c>UNKNOWN</c> (GitHub
+/// computes it in the background, e.g. right after the base branch moved; asking for it starts that).
+/// </param>
 public sealed record GitHubLinkedPullRequest(
     int Number,
     string Url,
@@ -129,7 +133,8 @@ public sealed record GitHubLinkedPullRequest(
     string? ReviewDecision,
     IReadOnlyList<string> LatestReviewStates,
     string? ChecksState,
-    bool CopilotReviewRequested = false)
+    bool CopilotReviewRequested = false,
+    string? Mergeable = null)
 {
     public bool IsOpen => State == "OPEN";
     public bool IsMerged => State == "MERGED";

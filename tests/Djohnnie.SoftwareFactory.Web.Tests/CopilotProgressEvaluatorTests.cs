@@ -7,10 +7,11 @@ namespace Djohnnie.SoftwareFactory.Web.Tests;
 public class CopilotProgressEvaluatorTests
 {
     private static GitHubLinkedPullRequest PullRequest(string state = "OPEN", string title = "Fix it", string? reviewDecision = null,
-        string[]? latestReviews = null, string? checks = null, int number = 7, int updatedDay = 0, bool copilotReviewRequested = false)
+        string[]? latestReviews = null, string? checks = null, int number = 7, int updatedDay = 0, bool copilotReviewRequested = false,
+        string? mergeable = null)
     {
         return new(number, $"https://github.com/o/r/pull/{number}", title, state, state == "OPEN", "copilot/fix", DateTimeOffset.UnixEpoch.AddDays(updatedDay),
-            reviewDecision, latestReviews ?? [], checks, copilotReviewRequested);
+            reviewDecision, latestReviews ?? [], checks, copilotReviewRequested, mergeable);
     }
 
     private static GitHubWorkflowRun Run(string status, string? conclusion = null)
@@ -102,5 +103,23 @@ public class CopilotProgressEvaluatorTests
     public void Checks_FollowTheRollup(string? state, PullRequestChecks expected)
     {
         Assert.Equal(expected, CopilotProgressEvaluator.ChecksOf(state));
+    }
+
+    [Theory]
+    [InlineData("OPEN", "CONFLICTING", true)]
+    [InlineData("OPEN", "MERGEABLE", false)]
+    [InlineData("OPEN", "UNKNOWN", null)]
+    [InlineData("OPEN", null, null)]
+    [InlineData("MERGED", "CONFLICTING", false)]
+    [InlineData("CLOSED", "CONFLICTING", false)]
+    public void Conflicts_OnlyForAnOpenPullRequest_AndUnknownWhileGitHubComputesThem(string state, string? mergeable, bool? expected)
+    {
+        Assert.Equal(expected, CopilotProgressEvaluator.Evaluate(false, true, PullRequest(state, mergeable: mergeable), null).HasConflicts);
+    }
+
+    [Fact]
+    public void WithoutPullRequest_ThereAreNoConflicts()
+    {
+        Assert.False(CopilotProgressEvaluator.Evaluate(false, true, null, null).HasConflicts);
     }
 }

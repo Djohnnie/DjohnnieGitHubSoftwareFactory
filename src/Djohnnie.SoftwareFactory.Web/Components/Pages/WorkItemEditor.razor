@@ -45,6 +45,13 @@
                          Icon="@CopilotProgressChip.IconOf(_item.Progress, _item.Executor)" Class="heading-copilot-reviewing">@CopilotProgressChip.LabelOf(_item.Progress, _item.Executor)</MudChip>
             </MudTooltip>
         }
+        @if (_item.PullRequestHasConflicts)
+        {
+            <MudTooltip Text="@CopilotProgressChip.ConflictsDescription">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Icon="@CopilotProgressChip.ConflictsIcon"
+                         Class="heading-merge-conflicts">@CopilotProgressChip.ConflictsLabel</MudChip>
+            </MudTooltip>
+        }
     }
     @foreach (var link in _linkedIdeas)
     {
@@ -450,6 +457,12 @@ else if (_item is not null)
                                     @CopilotReviewRevisions.MaxRounds rounds of remarks.
                                 </MudText>
                             }
+                            <MudSwitch T="bool" @bind-Value="_item.FixMergeConflicts" Label="Fix merge conflicts automatically" Color="Color.Primary"
+                                       ReadOnly="!_item.CanEditAssignment" aria-label="Fix merge conflicts automatically" Class="fix-merge-conflicts" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                When the pull request conflicts with its base branch, the sync asks @(IsWorker ? "the agent" : "Copilot") to fix it with a
+                                comment in the pull request's discussion, once per conflict.
+                            </MudText>
                         </MudPaper>
                     }
 
@@ -477,8 +490,8 @@ else if (_item is not null)
         </MudStack>
     </div>;
 
-    @* With a pull request or agent worker runs the page gets tabs; the pull request is only loaded from GitHub when one of its
-       tabs is opened. The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
+    @* With a pull request or agent worker runs the page gets tabs; the pull request is loaded from GitHub in the background as soon
+       as its tabs are shown (both tabs render because the panels stay alive), so their counts fill in by themselves. The panels stay alive, so unsaved changes in the form and pending line comments survive switching tabs. *@
     @if ((_item.PullRequestNumber is not null || HasAgentTasksTab) && !Removed)
     {
         var pullRequestNumber = _item.PullRequestNumber;
@@ -510,6 +523,10 @@ else if (_item is not null)
             <MudTabPanel Icon="@Icons.Material.Filled.Difference">
                 <TabContent>
                     Pull request #@pullRequestNumber
+                    @if (_pullRequest.Changes is { } prChanges)
+                    {
+                        <span class="tab-count pr-files-count" title="Files changed">@(prChanges.Files.Count)@(prChanges.FilesTruncated ? "+" : "")</span>
+                    }
                     @if (_pullRequest.Pending.Count > 0)
                     {
                         <span class="tab-count" title="Pending line comments">@_pullRequest.Pending.Count</span>
@@ -725,16 +742,20 @@ else if (_item is not null)
     {
         get
         {
-            // Like the merge button: not while the agent runs or a requested Copilot code review is still coming.
-            if (_item?.Progress is CopilotProgress.Queued or CopilotProgress.Working or CopilotProgress.CopilotReviewing)
+            // Like the merge button: not while the agent runs, a requested Copilot code review is still coming or the branch conflicts.
+            if (_item is null || _item.Progress is CopilotProgress.Queued or CopilotProgress.Working or CopilotProgress.CopilotReviewing)
             {
                 return false;
             }
             if (_pullRequest.Changes is { } changes)
             {
-                return changes.IsOpen && !changes.IsDraft && !changes.Review.CopilotReviewRequested;
+                return changes.IsOpen && !changes.IsDraft && !changes.Review.CopilotReviewRequested && !WorkItemPullRequest.HasConflicts(_item, changes);
             }
-            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped;
+            if (_item.PullRequestHasConflicts)
+            {
+                return false;
+            }
+            return _item.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped;
         }
     }
 
@@ -1523,6 +1544,7 @@ else if (_item is not null)
                 _item.CustomInstructions = form.CustomInstructions;
                 _item.IncludeScreenshots = form.IncludeScreenshots;
                 _item.ReviseOnCopilotReview = form.ReviseOnCopilotReview;
+                _item.FixMergeConflicts = form.FixMergeConflicts;
             }
             WorkItemActions.Report(Snackbar, result);
             ScheduleModelSuggestion();

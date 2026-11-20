@@ -24,6 +24,10 @@ public static class WorkItemChanges
         {
             changes.Add($"checks {before.PullRequestChecks} → {after.PullRequestChecks}");
         }
+        if (before.PullRequestHasConflicts != after.PullRequestHasConflicts)
+        {
+            changes.Add(after.PullRequestHasConflicts ? "merge conflicts" : "no merge conflicts any more");
+        }
         if (before.AgentRunUrl != after.AgentRunUrl && after.AgentRunUrl is not null)
         {
             changes.Add("new agent run");

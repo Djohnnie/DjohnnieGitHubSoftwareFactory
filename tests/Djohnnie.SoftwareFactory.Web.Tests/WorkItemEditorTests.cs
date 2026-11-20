@@ -648,12 +648,12 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
         cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Pull request #12")));
         Assert.Contains("Ready for review", cut.Markup);
-        // The pull request is only loaded when its tab is opened.
-        Assert.DoesNotContain(_gitHub.Bodies.Keys, k => k.StartsWith("GET /repos/owner/repo/pulls/12"));
-        Assert.DoesNotContain("var renamed = 1;", cut.Markup);
+        // The pull request is loaded in the background, once; opening its tab uses that load.
+        cut.WaitForAssertion(() => Assert.Contains("GET /repos/owner/repo/pulls/12/files", _gitHub.Bodies.Keys));
 
         await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Pull request #12")).Click());
         cut.WaitForAssertion(() => Assert.Contains("var renamed = 1;", cut.Markup));
+        Assert.Equal(1, _gitHub.Counts.GetValueOrDefault("GET /repos/owner/repo/pulls/12/files"));
 
         await cut.InvokeAsync(() => cut.Find("button[aria-label='Comment on line 1'].pr-add").Click());
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Comment on line 1").Find("textarea").Input("Use a clearer name"));
@@ -711,6 +711,123 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
 
         cut.WaitForAssertion(() => Assert.Contains("Accepted task", cut.Markup));
         Assert.Empty(cut.FindAll(".pr-branch"));
+    }
+
+    [Fact]
+    public async Task Heading_ShowsMergeConflicts_FromTheLastSync()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.ReadyForReview;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            entity.PullRequestHasConflicts = true;
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Equal("Merge conflicts", cut.Find(".heading-merge-conflicts").TextContent.Trim()));
+        Assert.Equal("Merge conflicts", cut.Find(".merge-conflicts-chip").TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData("dirty", false)]
+    [InlineData("unknown", true)]
+    public async Task PullRequest_WithMergeConflicts_CantBeMerged(string mergeState, bool conflictsFromSync)
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.Approved;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            entity.PullRequestHasConflicts = conflictsFromSync;
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = $$"""
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":false,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":2,"deletions":2,"changed_files":2,"mergeable_state":"{{mergeState}}",
+             "requested_reviewers":[]}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = """
+            [{"filename":"src/App.cs","status":"modified","additions":1,"deletions":1,"patch":"@@ -1 +1 @@"},
+             {"filename":"src/Other.cs","status":"modified","additions":1,"deletions":1,"patch":"@@ -1 +1 @@"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = "[]";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".mud-tab"), t => t.TextContent.Contains("Discussion")));
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+
+        cut.WaitForAssertion(() => Assert.Contains("conflicts with the base branch", cut.Find(".pr-merge-readiness").TextContent));
+        Assert.True(cut.Find("button.pr-merge").HasAttribute("disabled"));
+        Assert.Empty(cut.FindAll(".pr-mergeable"));
+        Assert.Equal("2", cut.Find(".pr-files-count").TextContent.Trim());
+        // Instead, the agent can be asked to fix the conflicts.
+        Assert.False(cut.Find("button.pr-ask-fix").HasAttribute("disabled"));
+        Assert.Contains("asks the agent to merge the base branch", cut.Find(".pr-ask-fix-hint").TextContent);
+    }
+
+    [Fact]
+    public async Task PullRequest_IsLoadedInTheBackground_AndOpeningATabWaitsForThatLoad()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.ReadyForReview;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = """
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":false,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":1,"deletions":1,"changed_files":1,"mergeable_state":"clean",
+             "requested_reviewers":[]}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = """
+            [{"filename":"src/App.cs","status":"modified","additions":1,"deletions":1,"patch":"@@ -1 +1 @@"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = """
+            [{"id":1,"user":{"login":"reviewer"},"body":"Looks good.","created_at":"2026-11-20T10:00:00Z","html_url":"https://github.com/owner/repo/pull/12#issuecomment-1"}]
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = "[]";
+        const string files = "GET /repos/owner/repo/pulls/12/files";
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _gitHub.Gates[files] = gate;
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        // Without opening a tab, the pull request is being loaded already.
+        cut.WaitForAssertion(() => Assert.Equal(1, _gitHub.Counts.GetValueOrDefault(files)));
+        Assert.Empty(cut.FindAll(".pr-files-count"));
+
+        // Opening a tab while that load runs waits for it instead of loading again.
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Discussion")).Click());
+        gate.SetResult();
+
+        cut.WaitForAssertion(() => Assert.Equal("1", cut.Find(".pr-files-count").TextContent.Trim()));
+        cut.WaitForAssertion(() => Assert.Contains("Looks good.", cut.Markup));
+        await cut.InvokeAsync(() => cut.FindAll(".mud-tab").Single(t => t.TextContent.Contains("Pull request #12")).Click());
+        cut.WaitForAssertion(() => Assert.Contains("src/App.cs", cut.Markup));
+        Assert.Equal(1, _gitHub.Counts.GetValueOrDefault(files));
     }
 
     [Fact]
@@ -1488,9 +1605,20 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         /// <summary>What changes on GitHub when a request is answered, by "METHOD /path", e.g. a merge closes the pull request.</summary>
         public Dictionary<string, Action> Effects { get; } = [];
 
+        /// <summary>How often each request was sent, by "METHOD /path".</summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, int> Counts { get; } = [];
+
+        /// <summary>Requests that are only answered once their gate opens, by "METHOD /path", to catch them while they run.</summary>
+        public Dictionary<string, TaskCompletionSource> Gates { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var key = $"{request.Method.Method} {request.RequestUri!.AbsolutePath}";
+            Counts.AddOrUpdate(key, 1, (_, count) => count + 1);
+            if (Gates.TryGetValue(key, out var gate))
+            {
+                await gate.Task.WaitAsync(cancellationToken);
+            }
             if (Responses.TryGetValue(key, out var json))
             {
                 Bodies[key] = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);

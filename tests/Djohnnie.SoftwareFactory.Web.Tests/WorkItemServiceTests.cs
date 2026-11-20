@@ -483,7 +483,8 @@ public partial class WorkItemServiceTests : IDisposable
     /// <param name="State">GraphQL's OPEN, CLOSED or MERGED.</param>
     /// <param name="ReviewRequests">The pending review requests: each reviewer's GraphQL type (User, Bot, Team) and login.</param>
     private sealed record PullRequestOnGitHub(int Number, string Title, string State, string Branch, string? ReviewDecision = null,
-        string[]? LatestReviews = null, string? Checks = null, (string Type, string? Login)[]? ReviewRequests = null);
+        string[]? LatestReviews = null, string? Checks = null, (string Type, string? Login)[]? ReviewRequests = null,
+        string? Mergeable = null);
 
     /// <param name="CreatedAt">When the run was created; by default a day earlier per run, starting at 1970.</param>
     private sealed record RunOnGitHub(string Status, string? Conclusion, string Event = "dynamic", string Path = "dynamic/copilot-swe-agent/copilot",
@@ -784,7 +785,8 @@ public partial class WorkItemServiceTests : IDisposable
                 reviewDecision = pr.ReviewDecision,
                 latestReviews = new { nodes = (pr.LatestReviews ?? []).Select(state => new { state }) },
                 reviewRequests = new { nodes = (pr.ReviewRequests ?? []).Select(r => new { requestedReviewer = new { __typename = r.Type, login = r.Login } }) },
-                commits = new { nodes = new[] { new { commit = new { statusCheckRollup = pr.Checks is null ? null : new { state = pr.Checks } } } } }
+                commits = new { nodes = new[] { new { commit = new { statusCheckRollup = pr.Checks is null ? null : new { state = pr.Checks } } } } },
+                mergeable = pr.Mergeable
             });
             return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
             {

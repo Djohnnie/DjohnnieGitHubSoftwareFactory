@@ -304,7 +304,7 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             issue(number: $number) {
               closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {
                 nodes {
-                  number url title state isDraft headRefName updatedAt reviewDecision
+                  number url title state isDraft headRefName updatedAt reviewDecision mergeable
                   latestReviews(first: 20) { nodes { state } }
                   reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on Bot { login } ... on User { login } } } }
                   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
@@ -348,7 +348,8 @@ public sealed partial class GitHubApiClient(HttpClient httpClient, IGitHubTokenP
             (pr.LatestReviews?.Nodes ?? []).Select(r => r?.State).OfType<string>().ToList(),
             pr.Commits?.Nodes?.LastOrDefault()?.Commit?.StatusCheckRollup?.State,
             (pr.ReviewRequests?.Nodes ?? []).Any(r => r?.RequestedReviewer is { } reviewer
-                && new GitHubOwner(reviewer.Login ?? string.Empty, null, reviewer.TypeName).IsCopilot))).ToList();
+                && new GitHubOwner(reviewer.Login ?? string.Empty, null, reviewer.TypeName).IsCopilot),
+            pr.Mergeable)).ToList();
     }
 
     /// <summary>

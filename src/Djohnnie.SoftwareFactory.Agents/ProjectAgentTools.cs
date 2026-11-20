@@ -211,7 +211,7 @@ public sealed class ProjectAgentTools(IProjectAgentData data, IReadOnlyList<AITo
         }
         if (item.PullRequestUrl is not null)
         {
-            builder.AppendLine($"Pull request: {item.PullRequestUrl} (checks: {item.PullRequestChecks}; branch: {item.PullRequestBranch ?? "unknown"})");
+            builder.AppendLine($"Pull request: {item.PullRequestUrl} (checks: {item.PullRequestChecks}; branch: {item.PullRequestBranch ?? "unknown"}{(item.PullRequestHasConflicts ? "; conflicts with the base branch" : "")})");
         }
         if (item.AgentRunUrl is not null)
         {

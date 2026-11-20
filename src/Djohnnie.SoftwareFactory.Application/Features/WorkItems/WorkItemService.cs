@@ -113,4 +113,19 @@ public sealed class WorkItemService(ISender mediator)
     {
         return (await mediator.Send(new StartCopilotReviewRevisionCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
     }
+
+    /// <summary>
+    /// Asks the item's agent to fix the merge conflicts of its pull request when it conflicts and the item asks for it
+    /// (<see cref="WorkItem.FixMergeConflicts"/>), once per conflict.
+    /// </summary>
+    public async Task<MergeConflictFixResult> FixMergeConflictsAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new FixMergeConflictsCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
+
+    /// <summary>Asks the item's agent to fix the merge conflicts of its pull request now, with a comment as the signed-in user.</summary>
+    public async Task<PullRequestFeedbackResult> RequestMergeConflictFixAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
+    {
+        return (await mediator.Send(new RequestMergeConflictFixCommand(new(repositoryFullName, id)), cancellationToken)).Dto;
+    }
 }
