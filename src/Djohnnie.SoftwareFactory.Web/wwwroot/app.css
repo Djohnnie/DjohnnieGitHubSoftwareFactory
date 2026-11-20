@@ -95,6 +95,36 @@ h1:focus {
     padding-top: 24px;
 }
 
+/* Page content width: MudBlazor's Large (1280px) up to a Full HD screen, then it grows along with
+   the xl (1920px) and xxl (2560px) breakpoints and beyond, so large and 4K screens are put to use. */
+.app-container {
+    max-width: 1280px;
+}
+
+@media (min-width: 1920px) {
+    .app-container {
+        max-width: 1760px;
+    }
+}
+
+@media (min-width: 2560px) {
+    .app-container {
+        max-width: 2360px;
+    }
+}
+
+@media (min-width: 3200px) {
+    .app-container {
+        max-width: 2960px;
+    }
+}
+
+@media (min-width: 3840px) {
+    .app-container {
+        max-width: 3520px;
+    }
+}
+
 /* Mobile navigation panel */
 .app-drawer {
     --mud-drawer-width-left: min(300px, 85vw);
