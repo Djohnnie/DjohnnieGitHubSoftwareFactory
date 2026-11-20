@@ -1,4 +1,5 @@
 using System.Text;
+using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.GitHub;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.AgentRuns;
@@ -38,7 +39,36 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             comments,
             ReviewStatus(reviews, pullRequest.MergeableState),
             (await WorkerRunsOnAsync(item, number, cancellationToken)) is not null,
-            string.IsNullOrWhiteSpace(pullRequest.Body) ? null : new PullRequestComment(pullRequest.User?.Login, pullRequest.Body, pullRequest.CreatedAt, pullRequest.HtmlUrl));
+            string.IsNullOrWhiteSpace(pullRequest.Body) ? null : Description(pullRequest));
+    }
+
+    private static PullRequestComment Description(GitHubPullRequestDetails pullRequest)
+    {
+        var kind = AuthorKind(pullRequest.User, pullRequest.Body);
+        return new(pullRequest.User?.Login, BodyOf(kind, pullRequest.Body), pullRequest.CreatedAt, pullRequest.HtmlUrl, AuthorKind: kind);
+    }
+
+    /// <summary>
+    /// Who wrote a comment: the DGHSF agent worker posts as the account it acts for, so its header (or mark) tells it apart
+    /// from that person; Copilot and other bots are GitHub accounts of the type <c>Bot</c>.
+    /// </summary>
+    public static PullRequestAuthorKind AuthorKind(GitHubOwner? author, string? body)
+    {
+        if (DghsfHeader.IsFromDghsf(body))
+        {
+            return PullRequestAuthorKind.Dghsf;
+        }
+        if (author?.IsCopilot == true)
+        {
+            return PullRequestAuthorKind.Copilot;
+        }
+        return string.Equals(author?.Type, "Bot", StringComparison.OrdinalIgnoreCase) ? PullRequestAuthorKind.Bot : PullRequestAuthorKind.Person;
+    }
+
+    private static string BodyOf(PullRequestAuthorKind kind, string? body)
+    {
+        var text = body ?? string.Empty;
+        return kind == PullRequestAuthorKind.Dghsf ? DghsfHeader.Strip(text) : text;
     }
 
     /// <summary>
@@ -52,7 +82,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             .Where(r => r.User is not null && r.State is not null && r.State != "PENDING")
             .GroupBy(r => r.User!.Login, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.LastOrDefault(r => r.State != "COMMENTED") ?? g.Last())
-            .Select(r => new PullRequestReviewer(r.User!.Login, r.State!, r.SubmittedAt, r.HtmlUrl))
+            .Select(r => new PullRequestReviewer(r.User!.Login, r.State!, r.SubmittedAt, r.HtmlUrl, AuthorKind(r.User, r.Body)))
             .OrderByDescending(r => r.SubmittedAt)
             .ToList();
 
@@ -100,10 +130,23 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         };
     }
 
+    /// <summary>
+    /// A conversation comment, or a line comment with its thread: GitHub points every answer in a thread at the comment that
+    /// started it (<c>in_reply_to_id</c>), so that is the thread's id.
+    /// </summary>
     private static PullRequestComment ToComment(GitHubComment comment, bool onLine)
     {
-        return new(comment.User?.Login, comment.Body ?? string.Empty, comment.CreatedAt, comment.HtmlUrl,
-            onLine ? comment.Path : null, onLine ? comment.Line ?? comment.OriginalLine : null);
+        var kind = AuthorKind(comment.User, comment.Body);
+        if (!onLine)
+        {
+            return new(comment.User?.Login, BodyOf(kind, comment.Body), comment.CreatedAt, comment.HtmlUrl, Id: comment.Id, AuthorKind: kind);
+        }
+        // The current lines while the comment is still on the diff, otherwise the ones it was written on (as the diff hunk is).
+        var current = comment.Line is not null;
+        return new(comment.User?.Login, BodyOf(kind, comment.Body), comment.CreatedAt, comment.HtmlUrl,
+            comment.Path, current ? comment.Line : comment.OriginalLine,
+            comment.Id, comment.InReplyToId ?? comment.Id, kind,
+            comment.DiffHunk, current ? comment.StartLine : comment.OriginalStartLine);
     }
 
     /// <summary>

@@ -1,0 +1,78 @@
+@* Who wrote a pull request comment, told apart at a glance: a person, DGHSF (which posts as the account it acts for, so
+   GitHub alone would show that person), Copilot, or another bot. *@
+<span class="pr-author pr-author-@Kind.ToString().ToLowerInvariant()" title="@Tooltip">
+    <MudIcon Icon="@Icon" Size="Size.Small" Class="pr-author-icon" />
+    <span class="pr-author-name">@Name</span>
+    @if (Detail is not null)
+    {
+        <span class="pr-author-detail">@Detail</span>
+    }
+</span>
+
+@code {
+    [Parameter] public string? Login { get; set; }
+
+    [Parameter] public PullRequestAuthorKind Kind { get; set; }
+
+    /// <summary>How a comment of this author is named in a sentence, e.g. "replying to Copilot".</summary>
+    public static string NameOf(string? login, PullRequestAuthorKind kind)
+    {
+        return kind switch
+        {
+            PullRequestAuthorKind.Dghsf => "DGHSF",
+            PullRequestAuthorKind.Copilot => "Copilot",
+            _ => login ?? "someone"
+        };
+    }
+
+    private string Name
+    {
+        get
+        {
+            return NameOf(Login, Kind);
+        }
+    }
+
+    private string? Detail
+    {
+        get
+        {
+            return Kind switch
+            {
+                PullRequestAuthorKind.Dghsf when Login is not null => $"on behalf of @{Login}",
+                PullRequestAuthorKind.Copilot when Login?.Contains("review", StringComparison.OrdinalIgnoreCase) == true => "code review",
+                PullRequestAuthorKind.Copilot => "coding agent",
+                PullRequestAuthorKind.Bot => "bot",
+                _ => null
+            };
+        }
+    }
+
+    private string Icon
+    {
+        get
+        {
+            return Kind switch
+            {
+                PullRequestAuthorKind.Dghsf => Icons.Material.Filled.PrecisionManufacturing,
+                PullRequestAuthorKind.Copilot => Icons.Material.Filled.AutoAwesome,
+                PullRequestAuthorKind.Bot => Icons.Material.Outlined.SmartToy,
+                _ => Icons.Material.Filled.Person
+            };
+        }
+    }
+
+    private string Tooltip
+    {
+        get
+        {
+            return Kind switch
+            {
+                PullRequestAuthorKind.Dghsf => $"Posted by the DGHSF agent worker with the GitHub account {Login ?? "of its token"}",
+                PullRequestAuthorKind.Copilot => $"GitHub Copilot ({Login})",
+                PullRequestAuthorKind.Bot => $"The bot {Login}",
+                _ => $"{Login ?? "Someone"} on GitHub"
+            };
+        }
+    }
+}

@@ -125,8 +125,12 @@
                                         {
                                             <tr class="pr-thread">
                                                 <td colspan="4">
-                                                    <div class="pr-comment">
-                                                        <b>@(existing.AuthorLogin ?? "someone")</b>
+                                                    <div class="pr-comment @CommentClass(existing)">
+                                                        @if (existing.IsReply)
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Class="pr-reply-icon" />
+                                                        }
+                                                        <PullRequestAuthor Login="@existing.AuthorLogin" Kind="existing.AuthorKind" />
                                                         <MudLink Href="@existing.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="existing.CreatedAt" /></MudLink>
                                                         <div class="pr-comment-body pr-markdown">@CommentHtml(existing)</div>
                                                     </div>
@@ -209,8 +213,8 @@
         @if (Changes.Description is { } description)
         {
             @* The opening post, as on GitHub: the DGHSF agent worker writes its summary and screenshots there. *@
-            <div class="pr-comment pr-description mt-2">
-                <b>@(description.AuthorLogin ?? "someone")</b> opened the pull request
+            <div class="pr-comment pr-description mt-2 @CommentClass(description)">
+                <PullRequestAuthor Login="@description.AuthorLogin" Kind="description.AuthorKind" /> opened the pull request
                 · <MudLink Href="@description.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="description.CreatedAt" /></MudLink>
                 <div class="pr-comment-body pr-markdown">@CommentHtml(description)</div>
             </div>
@@ -219,17 +223,68 @@
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">No comments yet.</MudText>
         }
-        @foreach (var comment in Changes.Comments)
+        @* As on GitHub: conversation comments on their own, and each line comment with its answers in one thread. *@
+        @foreach (var entry in Timeline(Changes.Comments))
         {
-            <div class="pr-comment mt-2">
-                <b>@(comment.AuthorLogin ?? "someone")</b>
-                @if (comment.Path is not null)
-                {
-                    <span class="mono"> on @comment.Path@(comment.Line is { } line ? $":{line}" : string.Empty)</span>
-                }
-                · <MudLink Href="@comment.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="comment.CreatedAt" /></MudLink>
-                <div class="pr-comment-body pr-markdown">@CommentHtml(comment)</div>
-            </div>
+            var first = entry[0];
+            if (first.Path is null)
+            {
+                <div class="pr-comment mt-2 @CommentClass(first)">
+                    <PullRequestAuthor Login="@first.AuthorLogin" Kind="first.AuthorKind" />
+                    · <MudLink Href="@first.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="first.CreatedAt" /></MudLink>
+                    <div class="pr-comment-body pr-markdown">@CommentHtml(first)</div>
+                </div>
+            }
+            else
+            {
+                var root = entry.FirstOrDefault(c => !c.IsReply);
+                var replies = entry.Count(c => c.IsReply);
+                var code = CodeOf(root ?? first);
+                <div class="pr-thread-card mt-2">
+                    <div class="pr-thread-location">
+                        <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" />
+                        <span class="mono">@first.Path@LinesOf(root ?? first)</span>
+                        @if (replies > 0)
+                        {
+                            <span class="pr-thread-count">· @replies @(replies == 1 ? "reply" : "replies")</span>
+                        }
+                    </div>
+                    @if (code.Count > 0)
+                    {
+                        @* The lines the thread is about, as they were when it started (GitHub's diff hunk). *@
+                        <div class="pr-thread-code">
+                            <table class="pr-diff">
+                                <tbody>
+                                    @foreach (var codeLine in code)
+                                    {
+                                        <tr class="@RowClass(codeLine)">
+                                            <td class="pr-num">@codeLine.OldLine</td>
+                                            <td class="pr-num">@codeLine.NewLine</td>
+                                            <td class="pr-code"><span class="pr-sign">@Sign(codeLine)</span>@codeLine.Text</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    @foreach (var comment in entry)
+                    {
+                        <div class="pr-comment @CommentClass(comment)">
+                            @if (comment.IsReply)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Class="pr-reply-icon" />
+                            }
+                            <PullRequestAuthor Login="@comment.AuthorLogin" Kind="comment.AuthorKind" />
+                            @if (comment.IsReply && root is not null)
+                            {
+                                <span class="pr-reply-to">replied to @PullRequestAuthor.NameOf(root.AuthorLogin, root.AuthorKind)</span>
+                            }
+                            · <MudLink Href="@comment.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="comment.CreatedAt" /></MudLink>
+                            <div class="pr-comment-body pr-markdown">@CommentHtml(comment)</div>
+                        </div>
+                    }
+                </div>
+            }
         }
 
         <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Reviews</b></MudText>
@@ -243,7 +298,7 @@
                 @foreach (var reviewer in Changes.Review.Reviewers)
                 {
                     <li>
-                        <b>@reviewer.Login</b> @ReviewerVerdict(reviewer.State)
+                        <PullRequestAuthor Login="@reviewer.Login" Kind="reviewer.Kind" /> @ReviewerVerdict(reviewer.State)
                         @if (reviewer.SubmittedAt is { } submitted)
                         {
                             <span> · </span>
@@ -491,14 +546,67 @@
         return State.Pending.Count(c => c.Path == path);
     }
 
-    /// <summary>GitHub's line comments that are on this line of the new file (where comments usually are).</summary>
+    /// <summary>GitHub's line comments that are on this line of the new file (where comments usually are), each thread's answers under it.</summary>
     private IEnumerable<PullRequestComment> ExistingOn(string path, DiffLine line)
     {
         if (Changes is null || line.Kind is not (DiffLineKind.Added or DiffLineKind.Context))
         {
             return [];
         }
-        return Changes.Comments.Where(c => c.Path == path && c.Line == line.NewLine);
+        return Changes.Comments
+            .Where(c => c.Path == path && c.Line == line.NewLine)
+            .GroupBy(c => c.ThreadId)
+            .SelectMany(thread => thread.OrderBy(c => c.CreatedAt));
+    }
+
+    /// <summary>
+    /// The discussion in the order it happened: each conversation comment on its own, and each line comment thread as one entry
+    /// with its answers (oldest first), placed where the thread started.
+    /// </summary>
+    private static List<List<PullRequestComment>> Timeline(IReadOnlyList<PullRequestComment> comments)
+    {
+        var conversation = comments.Where(c => c.ThreadId is null).Select(c => new List<PullRequestComment> { c });
+        var threads = comments.Where(c => c.ThreadId is not null)
+            .GroupBy(c => c.ThreadId)
+            .Select(thread => thread.OrderBy(c => c.CreatedAt).ToList());
+        return conversation.Concat(threads).OrderBy(entry => entry[0].CreatedAt).ToList();
+    }
+
+    /// <summary>Lines of context GitHub shows above a thread on one line.</summary>
+    private const int ThreadContextLines = 4;
+
+    /// <summary>The most lines shown above a thread on a range, so a long range doesn't push the discussion away.</summary>
+    private const int MaxThreadCodeLines = 15;
+
+    /// <summary>
+    /// The end of the comment's diff hunk, which ends at the line it is on, as GitHub shows it above the thread: the commented
+    /// range, or a few lines of context for a comment on one line.
+    /// </summary>
+    private static IReadOnlyList<DiffLine> CodeOf(PullRequestComment comment)
+    {
+        var lines = DiffPatch.Parse(comment.DiffHunk).Where(l => l.Kind != DiffLineKind.Hunk).ToList();
+        var count = comment is { StartLine: { } start, Line: { } end } && end > start
+            ? Math.Min(end - start + 1, MaxThreadCodeLines)
+            : ThreadContextLines;
+        return lines.Count <= count ? lines : lines[^count..];
+    }
+
+    /// <summary>The line or range a line comment is on, e.g. <c>:12</c> or <c>:10-14</c>.</summary>
+    private static string LinesOf(PullRequestComment comment)
+    {
+        return comment switch
+        {
+            { StartLine: { } start, Line: { } end } when end > start => $":{start}-{end}",
+            { Line: { } line } => $":{line}",
+            _ => string.Empty
+        };
+    }
+
+    /// <summary>The comment's frame: colored by who wrote it, and indented when it answers an earlier one.</summary>
+    private static string CommentClass(PullRequestComment comment)
+    {
+        var by = $"pr-by-{comment.AuthorKind.ToString().ToLowerInvariant()}";
+        return comment.IsReply ? $"{by} pr-comment-reply" : by;
     }
 
     private async Task SendAsync()

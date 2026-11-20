@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Djohnnie.SoftwareFactory.Application.Features.AgentRuns;
 using Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.WorkItems;
@@ -37,6 +38,54 @@ public partial class WorkItemServiceTests
         Assert.Collection(changes.Comments,
             first => Assert.Equal(("Looks good so far", (string?)null), (first.Body, first.Path)),
             second => Assert.Equal(("Rename this", "src/App.cs", (int?)1), (second.Body, second.Path, second.Line)));
+    }
+
+    [Fact]
+    public async Task PullRequestChanges_TellCopilot_DghsfAndPeopleApart_AndKeepAnswersInTheirThread()
+    {
+        var task = await TaskWithPullRequestAsync();
+        var at = DateTimeOffset.UnixEpoch.AddDays(1);
+        _gitHub.ThreadedLineComments.Add(new(500, new("copilot-pull-request-reviewer[bot]", null, "Bot"), "Null check missing", at, "u500", "src/App.cs", 3));
+        _gitHub.ThreadedLineComments.Add(new(501, new("alice", null, "User"), "Agreed", at.AddMinutes(1), "u501", "src/App.cs", 3, InReplyToId: 500));
+        _gitHub.ThreadedLineComments.Add(new(502, new("alice", null, "User"),
+            $"{DghsfHeader.For("alice")}Added the check.\n\n{PullRequestDiscussion.Marker(Guid.NewGuid())}", at.AddMinutes(2), "u502", "src/App.cs", 3, InReplyToId: 500));
+
+        var changes = await _service.GetPullRequestChangesAsync(Repo, task.Id, _cancellationToken);
+
+        var thread = changes.Comments.Where(c => c.ThreadId == 500).ToList();
+        Assert.Equal([PullRequestAuthorKind.Copilot, PullRequestAuthorKind.Person, PullRequestAuthorKind.Dghsf], thread.Select(c => c.AuthorKind));
+        Assert.Equal([false, true, true], thread.Select(c => c.IsReply));
+        Assert.Equal("alice", thread[2].AuthorLogin);
+        Assert.StartsWith("Added the check.", thread[2].Body);
+        Assert.DoesNotContain("DGHSF", thread[2].Body);
+    }
+
+    [Fact]
+    public async Task PullRequestChanges_KeepTheCodeALineCommentIsAbout()
+    {
+        var task = await TaskWithPullRequestAsync();
+        const string hunk = "@@ -8,3 +8,4 @@\n a\n-b\n+c\n+d";
+        _gitHub.ThreadedLineComments.Add(new(600, new("copilot-pull-request-reviewer[bot]", null, "Bot"), "Simplify", DateTimeOffset.UnixEpoch, "u600",
+            "src/App.cs", 10, DiffHunk: hunk, StartLine: 9));
+        _gitHub.ThreadedLineComments.Add(new(601, new("bob", null, "User"), "Outdated", DateTimeOffset.UnixEpoch, "u601",
+            "src/App.cs", Line: null, OriginalLine: 4, DiffHunk: hunk, StartLine: 9, OriginalStartLine: 2));
+
+        var changes = await _service.GetPullRequestChangesAsync(Repo, task.Id, _cancellationToken);
+
+        var current = Assert.Single(changes.Comments, c => c.Id == 600);
+        Assert.Equal((hunk, (int?)9, (int?)10), (current.DiffHunk, current.StartLine, current.Line));
+        var outdated = Assert.Single(changes.Comments, c => c.Id == 601);
+        Assert.Equal(((int?)2, (int?)4), (outdated.StartLine, outdated.Line));
+    }
+
+    [Fact]
+    public void DghsfHeader_IsStrippedOnlyFromDghsfComments()
+    {
+        Assert.Equal("Done.", DghsfHeader.Strip($"{DghsfHeader.For("bob")}Done."));
+        Assert.Equal("Done.", DghsfHeader.Strip($"{DghsfHeader.For(null)}Done."));
+        Assert.Equal("<sub>note</sub> Done.", DghsfHeader.Strip("<sub>note</sub> Done."));
+        Assert.True(DghsfHeader.IsFromDghsf(DghsfHeader.For("bob")));
+        Assert.False(DghsfHeader.IsFromDghsf("Plain comment by bob"));
     }
 
     [Fact]

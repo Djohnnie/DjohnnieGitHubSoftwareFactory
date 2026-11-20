@@ -138,6 +138,74 @@
     border-color: var(--mud-palette-primary);
 }
 
+/* Who wrote a comment, in the left edge of its frame (the badge in its header says it in words). */
+.pr-by-person {
+    border-left: 3px solid var(--mud-palette-text-disabled);
+}
+
+.pr-by-dghsf {
+    border-left: 3px solid var(--mud-palette-primary);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 6%, var(--mud-palette-surface));
+}
+
+.pr-by-copilot {
+    border-left: 3px solid #8250df;
+    background-color: color-mix(in srgb, #8250df 6%, var(--mud-palette-surface));
+}
+
+.pr-by-bot {
+    border-left: 3px solid var(--mud-palette-lines-default);
+}
+
+/* A line comment thread: where it is, then the comment that started it with its answers indented under it. */
+.pr-thread-card {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pr-thread-location {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.pr-thread-count {
+    white-space: nowrap;
+}
+
+/* The code above a thread: the diff's own styling, framed and scrolling sideways for long lines. */
+.pr-thread-code {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.pr-thread-code .pr-diff {
+    margin: 0;
+}
+
+.pr-comment-reply {
+    margin-left: 28px;
+}
+
+.pr-comment ::deep .pr-reply-icon {
+    vertical-align: middle;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-reply-to {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
 .pr-comment-body {
     white-space: pre-wrap;
     overflow-wrap: anywhere;

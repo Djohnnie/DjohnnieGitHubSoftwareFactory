@@ -51,7 +51,8 @@ public enum PullRequestReviewDecision
 }
 
 /// <param name="State">The reviewer's verdict: <c>APPROVED</c>, <c>CHANGES_REQUESTED</c>, <c>DISMISSED</c>, or <c>COMMENTED</c> when they only commented.</param>
-public sealed record PullRequestReviewer(string Login, string State, DateTimeOffset? SubmittedAt, string? Url);
+public sealed record PullRequestReviewer(string Login, string State, DateTimeOffset? SubmittedAt, string? Url,
+    PullRequestAuthorKind Kind = PullRequestAuthorKind.Person);
 
 /// <summary>
 /// Merges a work item's pull request as the signed-in user, which also closes it. GitHub lets you merge a pull request you
@@ -88,13 +89,49 @@ public sealed record PullRequestFileChange(
     string? BlobUrl);
 
 /// <summary>A comment in the pull request's conversation, or on a line of its diff when <see cref="Path"/> is set.</summary>
+/// <param name="AuthorLogin">The GitHub account that posted it; for <see cref="PullRequestAuthorKind.Dghsf"/> the account DGHSF acted for.</param>
+/// <param name="Body">The Markdown; without DGHSF's header for <see cref="PullRequestAuthorKind.Dghsf"/>, which pages show as the author.</param>
+/// <param name="ThreadId">For a line comment: the id of the comment that started its thread (its own id when it did).</param>
+/// <param name="DiffHunk">For a line comment: the diff as it was when it was written, ending at <see cref="Line"/>, as GitHub shows it above the thread.</param>
+/// <param name="StartLine">For a line comment on several lines: the first of them, up to <see cref="Line"/>.</param>
 public sealed record PullRequestComment(
     string? AuthorLogin,
     string Body,
     DateTimeOffset CreatedAt,
     string Url,
     string? Path = null,
-    int? Line = null);
+    int? Line = null,
+    long? Id = null,
+    long? ThreadId = null,
+    PullRequestAuthorKind AuthorKind = PullRequestAuthorKind.Person,
+    string? DiffHunk = null,
+    int? StartLine = null)
+{
+    /// <summary>A line comment that answers an earlier one in its thread.</summary>
+    public bool IsReply
+    {
+        get
+        {
+            return ThreadId is not null && ThreadId != Id;
+        }
+    }
+}
+
+/// <summary>Who wrote a comment, which GitHub's author alone doesn't tell: DGHSF posts as the account it acts for.</summary>
+public enum PullRequestAuthorKind
+{
+    /// <summary>A person, e.g. you on GitHub or through DGHSF's feedback form.</summary>
+    Person = 0,
+
+    /// <summary>The DGHSF agent worker, on behalf of <see cref="PullRequestComment.AuthorLogin"/>.</summary>
+    Dghsf = 1,
+
+    /// <summary>The Copilot cloud agent or Copilot code review.</summary>
+    Copilot = 2,
+
+    /// <summary>Another bot or app, e.g. a CI integration.</summary>
+    Bot = 3
+}
 
 /// <summary>
 /// Feedback on a work item's pull request. For a pull request of Copilot, DGHSF adds the <c>@copilot</c> mention; for one

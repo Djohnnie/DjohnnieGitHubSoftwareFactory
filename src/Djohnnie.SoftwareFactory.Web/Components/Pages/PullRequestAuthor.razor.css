@@ -1,0 +1,49 @@
+.pr-author {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px 1px 5px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.pr-author ::deep .pr-author-icon {
+    font-size: 1rem;
+}
+
+.pr-author-name {
+    font-weight: 600;
+}
+
+.pr-author-detail {
+    opacity: 0.85;
+    font-size: 0.75rem;
+}
+
+/* A person: plain, like GitHub shows an account. */
+.pr-author-person {
+    border-color: var(--mud-palette-lines-default);
+    color: var(--mud-palette-text-primary);
+}
+
+/* DGHSF acting for someone: the app's own color, so it never reads as that person. */
+.pr-author-dghsf {
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+/* Copilot: GitHub's Copilot purple, readable in light and dark themes. */
+.pr-author-copilot {
+    background-color: #8250df;
+    color: #ffffff;
+}
+
+.pr-author-bot {
+    border-color: var(--mud-palette-lines-default);
+    background-color: var(--mud-palette-action-default-hover);
+    color: var(--mud-palette-text-secondary);
+}

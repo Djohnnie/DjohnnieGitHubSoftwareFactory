@@ -529,6 +529,9 @@ public partial class WorkItemServiceTests : IDisposable
         public List<string> ConversationComments { get; } = [];
         public List<(string Path, int Line, string Body)> LineComments { get; } = [];
 
+        /// <summary>Line comments as GitHub returns them, with their author and the thread they answer; listed after <see cref="LineComments"/>.</summary>
+        public List<Djohnnie.SoftwareFactory.Contracts.GitHub.GitHubComment> ThreadedLineComments { get; } = [];
+
         /// <summary>The number of next comments that fail with 502 Bad Gateway (without being posted).</summary>
         public int CommentFailures { get; set; }
 
@@ -727,11 +730,11 @@ public partial class WorkItemServiceTests : IDisposable
                     filename = f.FileName, status = "modified", additions = 1, deletions = 1, patch = f.Patch,
                     blob_url = $"https://github.com/owner/repo/blob/main/{f.FileName}"
                 }))),
-                ("GET", "/comments") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(LineComments.Select((c, index) => new
+                ("GET", "/comments") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(LineComments.Select((c, index) => (object)new
                 {
                     id = 100 + index, user = new { login = "reviewer" }, body = c.Body, path = c.Path, line = c.Line,
                     created_at = DateTimeOffset.UnixEpoch.AddMinutes(30 + index), html_url = $"https://github.com/owner/repo/pull/{number}#discussion_r{100 + index}"
-                }))),
+                }).Concat(ThreadedLineComments))),
                 ("POST", "/reviews") when ReviewFailure is { } failure => Json(failure, """{"message":"Unprocessable Entity","errors":["Line could not be resolved"]}"""),
                 ("POST", "/reviews") => Json(HttpStatusCode.OK, $$"""{"id":9,"html_url":"https://github.com/owner/repo/pull/{{number}}#pullrequestreview-9"}"""),
                 ("PUT", "/merge") when MergeFailure is { } failure => Json(failure.Status, JsonSerializer.Serialize(new { message = failure.Message })),

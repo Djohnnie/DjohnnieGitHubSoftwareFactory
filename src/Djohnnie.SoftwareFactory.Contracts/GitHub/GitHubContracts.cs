@@ -226,6 +226,8 @@ public sealed record GitHubPullRequestFile(
 
 /// <summary>An issue (conversation) comment, or a review comment on a line when <see cref="Path"/> is set.</summary>
 /// <param name="Line">For a review comment: the line in the file it is on; <c>null</c> when that line is no longer in the diff.</param>
+/// <param name="DiffHunk">For a review comment: the diff as it was when it was written, ending at its (last) line.</param>
+/// <param name="StartLine">For a review comment on several lines: the first of them.</param>
 public sealed record GitHubComment(
     [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("user")] GitHubOwner? User,
@@ -235,7 +237,10 @@ public sealed record GitHubComment(
     [property: JsonPropertyName("path")] string? Path = null,
     [property: JsonPropertyName("line")] int? Line = null,
     [property: JsonPropertyName("original_line")] int? OriginalLine = null,
-    [property: JsonPropertyName("in_reply_to_id")] long? InReplyToId = null);
+    [property: JsonPropertyName("in_reply_to_id")] long? InReplyToId = null,
+    [property: JsonPropertyName("diff_hunk")] string? DiffHunk = null,
+    [property: JsonPropertyName("start_line")] int? StartLine = null,
+    [property: JsonPropertyName("original_start_line")] int? OriginalStartLine = null);
 
 /// <summary>A line comment of a review that is being submitted.</summary>
 /// <param name="Side"><c>RIGHT</c> (new file) or <c>LEFT</c> (old file).</param>

@@ -183,9 +183,7 @@ public static partial class AgentRunPrompt
     /// </summary>
     public static string Header(string? onBehalfOf)
     {
-        return string.IsNullOrWhiteSpace(onBehalfOf)
-            ? "<sub>🤖 **DGHSF**</sub>\n\n"
-            : $"<sub>🤖 **DGHSF** on behalf of [{onBehalfOf}](https://github.com/{onBehalfOf})</sub>\n\n";
+        return DghsfHeader.For(onBehalfOf);
     }
 
     /// <summary>An answer to a line comment, posted in its thread.</summary>
