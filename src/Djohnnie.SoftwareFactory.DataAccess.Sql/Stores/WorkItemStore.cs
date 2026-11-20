@@ -82,8 +82,7 @@ public sealed class WorkItemStore(IDbContextFactory<AppDbContext> dbFactory, Tim
         entity.BaseBranch = assignable ? NullIfEmpty(item.BaseBranch) : null;
         entity.CustomInstructions = assignable ? NullIfEmpty(item.CustomInstructions) : null;
         entity.IncludeScreenshots = !assignable || item.IncludeScreenshots;
-        // Only the DGHSF agent worker revises its pull request on Copilot code review's remarks.
-        entity.ReviseOnCopilotReview = assignable && entity.Executor == AgentExecutor.DghsfWorker && item.ReviseOnCopilotReview;
+        entity.ReviseOnCopilotReview = assignable && item.ReviseOnCopilotReview;
         entity.FixMergeConflicts = assignable && item.FixMergeConflicts;
         entity.UpdatedAt = now;
         if (item.Id == Guid.Empty)

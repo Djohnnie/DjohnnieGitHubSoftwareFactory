@@ -106,8 +106,8 @@ public sealed class WorkItemService(ISender mediator)
     }
 
     /// <summary>
-    /// Starts a revision run of the DGHSF agent worker when Copilot code review has reviewed the item's pull request with
-    /// remarks since the worker's last run and the item asks for it (<see cref="WorkItem.ReviseOnCopilotReview"/>).
+    /// Asks the item's agent to revise its pull request when Copilot code review has reviewed it with remarks since the
+    /// agent's last revision and the item asks for it (<see cref="WorkItem.ReviseOnCopilotReview"/>).
     /// </summary>
     public async Task<CopilotReviewRevisionResult> StartCopilotReviewRevisionAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {

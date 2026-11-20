@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Djohnnie.SoftwareFactory.Web.Tests;
 
-/// <summary>The sync starting a revision of the DGHSF agent worker once Copilot code review left remarks on its pull request.</summary>
+/// <summary>The sync asking the item's agent to revise once Copilot code review left remarks on its pull request.</summary>
 public partial class WorkItemServiceTests
 {
     private static readonly GitHubOwner CopilotReviewer = new(GitHubApiClient.CopilotReviewerLogin, null, "Bot");
@@ -60,16 +60,117 @@ public partial class WorkItemServiceTests
         return Assert.Single(await _services.GetRequiredService<AgentRunService>().GetRunsAsync(Repo, task.Id, _cancellationToken));
     }
 
-    [Fact]
-    public async Task ReviseOnCopilotReview_IsOnlyKeptForTheWorker()
+    /// <summary>Copilot task #42 that revises on Copilot code review, with Copilot's pull request #7 ready for review.</summary>
+    private async Task<WorkItem> CopilotTaskRevisingOnCopilotReviewAsync()
     {
-        var task = await _service.SaveAsync(new WorkItem
+        var saved = await _service.SaveAsync(new WorkItem
         {
             RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Task", Description = "About Task.",
             Executor = AgentExecutor.CopilotCloudAgent, ReviseOnCopilotReview = true
         }, _cancellationToken);
+        Assert.True(saved.ReviseOnCopilotReview);
+        var task = (await _service.AcceptAsync(Repo, saved.Id, _cancellationToken)).WorkItem;
+        _gitHub.LinkedPullRequests[42] = [new(7, "Task", "OPEN", CopilotBranch)];
+        var refreshed = await RefreshAssignedTaskAsync(task);
+        Assert.Equal(7, refreshed.PullRequestNumber);
+        return refreshed;
+    }
 
-        Assert.False(task.ReviseOnCopilotReview);
+    [Fact]
+    public async Task Sync_AsksCopilotToAddressTheRemarks_WhenCopilotCodeReviewLeftRemarks()
+    {
+        var task = await CopilotTaskRevisingOnCopilotReviewAsync();
+        CopilotReviews(TimeSpan.FromMinutes(10), remarks: 2);
+
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        var posted = Assert.Single(CommentsPostedOnPullRequest7());
+        Assert.StartsWith($"@copilot {CopilotReviewRevisions.CopilotRequest}", posted);
+        Assert.Contains("- `src/App.cs` line 3 (https://github.com/owner/repo/pull/7#discussion_r", posted);
+        Assert.Contains("  > Remark 1.", posted);
+        Assert.Contains("  > Remark 2.", posted);
+        var stored = (await _service.GetAsync(Repo, task.Id, _cancellationToken))!;
+        Assert.NotNull(stored.CopilotReviewHandledAt);
+        // Remembered as feedback, so the sync asks Copilot code review to review Copilot's revision.
+        Assert.NotNull(stored.CopilotRevisionRequestedAt);
+        var logged = Assert.Single(await SyncLogAsync(), e => e.Kind == SyncLogEventKind.CopilotReviewRevisionStarted);
+        Assert.Equal((SyncLogLevel.Information, task.Id), (logged.Level, logged.WorkItemId));
+        Assert.Contains("left 2 remarks on pull request #7", logged.Message);
+        Assert.Contains("so Copilot was asked to revise it", logged.Message);
+    }
+
+    [Fact]
+    public async Task Sync_DoesntAskCopilotAgain_WhileItsRevisionIsPending()
+    {
+        await CopilotTaskRevisingOnCopilotReviewAsync();
+        CopilotReviews(TimeSpan.FromMinutes(10), remarks: 1);
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        CopilotReviews(TimeSpan.FromMinutes(5), remarks: 1);
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Single(CommentsPostedOnPullRequest7());
+    }
+
+    [Fact]
+    public async Task Sync_DoesntAskCopilot_WhenCopilotReviewedWithoutRemarks()
+    {
+        var task = await CopilotTaskRevisingOnCopilotReviewAsync();
+        CopilotReviews(TimeSpan.FromMinutes(10), remarks: 0);
+
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Empty(CommentsPostedOnPullRequest7());
+        Assert.NotNull((await _service.GetAsync(Repo, task.Id, _cancellationToken))!.CopilotReviewHandledAt);
+    }
+
+    [Fact]
+    public async Task Sync_DoesntAskCopilot_WhileCopilotIsWorking()
+    {
+        await CopilotTaskRevisingOnCopilotReviewAsync();
+        _gitHub.LinkedPullRequests[42] = [new(7, "[WIP] Task", "OPEN", CopilotBranch)];
+        CopilotReviews(TimeSpan.FromMinutes(10), remarks: 1);
+
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Empty(CommentsPostedOnPullRequest7());
+    }
+
+    [Fact]
+    public async Task Sync_StopsAskingCopilotAutomatically_AfterTheMaximumNumberOfRounds()
+    {
+        var task = await CopilotTaskRevisingOnCopilotReviewAsync();
+        for (var round = 0; round < CopilotReviewRevisions.MaxRounds; round++)
+        {
+            CopilotReviews(TimeSpan.FromHours(5 - round), remarks: 1);
+        }
+        await using (var db = await _services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(w => w.Id == task.Id, _cancellationToken);
+            entity.CopilotReviewHandledAt = DateTimeOffset.UtcNow.AddHours(-3);
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        CopilotReviews(TimeSpan.FromMinutes(10), remarks: 1);
+
+        await Sync.SyncAcceptedAsync(_cancellationToken);
+
+        Assert.Empty(CommentsPostedOnPullRequest7());
+        var logged = Assert.Single(await SyncLogAsync(), e => e.Kind == SyncLogEventKind.CopilotReviewRevisionSkipped);
+        Assert.Contains($"round {CopilotReviewRevisions.MaxRounds + 1}", logged.Message);
+        Assert.Contains("Copilot wasn't asked to revise it", logged.Message);
+    }
+
+    [Fact]
+    public void CopilotFeedback_ListsARequestForChangesWithoutLineComments_ByItsText()
+    {
+        var review = new GitHubPullRequestReview(CopilotReviewer, DateTimeOffset.UtcNow, "CHANGES_REQUESTED", "https://github.com/owner/repo/pull/7#pullrequestreview-1", 1,
+            "Handle null.\nAnd empty.");
+
+        var feedback = CopilotReviewRevisions.CopilotFeedback([review], []);
+
+        Assert.Equal($"{CopilotReviewRevisions.CopilotRequest}\n\n- The review https://github.com/owner/repo/pull/7#pullrequestreview-1 requested changes:\n  > Handle null.\n  > And empty.",
+            feedback.ReplaceLineEndings("\n"));
     }
 
     [Fact]

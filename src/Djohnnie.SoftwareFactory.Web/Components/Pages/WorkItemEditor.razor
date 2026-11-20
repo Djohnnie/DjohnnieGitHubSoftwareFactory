@@ -450,13 +450,21 @@ else if (_item is not null)
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                     When the change has a user interface, the agent runs the app and adds screenshots of what it changed to the pull request.
                                 </MudText>
-                                <MudSwitch T="bool" @bind-Value="_item.ReviseOnCopilotReview" Label="Revise after Copilot code review" Color="Color.Primary"
-                                           ReadOnly="!_item.CanEditAssignment" aria-label="Revise after Copilot code review" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    When Copilot code review leaves remarks on the agent's pull request, the sync starts a revision on them by itself, for at most
-                                    @CopilotReviewRevisions.MaxRounds rounds of remarks.
-                                </MudText>
                             }
+                            <MudSwitch T="bool" @bind-Value="_item.ReviseOnCopilotReview" Label="Revise after Copilot code review" Color="Color.Primary"
+                                       ReadOnly="!_item.CanEditAssignment" aria-label="Revise after Copilot code review" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @if (IsWorker)
+                                {
+                                    <text>When Copilot code review leaves remarks on the agent's pull request, the sync starts a revision on them by itself, for at most
+                                    @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
+                                }
+                                else
+                                {
+                                    <text>When Copilot code review leaves remarks on Copilot's pull request, the sync asks Copilot to address them with a comment in the
+                                    pull request's discussion, for at most @CopilotReviewRevisions.MaxRounds rounds of remarks.</text>
+                                }
+                            </MudText>
                             <MudSwitch T="bool" @bind-Value="_item.FixMergeConflicts" Label="Fix merge conflicts automatically" Color="Color.Primary"
                                        ReadOnly="!_item.CanEditAssignment" aria-label="Fix merge conflicts automatically" Class="fix-merge-conflicts" />
                             <MudText Typo="Typo.caption" Color="Color.Secondary">

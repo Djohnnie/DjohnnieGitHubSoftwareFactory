@@ -18,9 +18,9 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 /// Checks that every known repository still exists on GitHub (archiving the ones that don't), then refreshes every accepted
 /// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. The only thing it sends to
 /// GitHub is a request for a Copilot code review, once the Copilot cloud agent finished a revision asked from DGHSF
-/// (<see cref="WorkItemService.RequestCopilotRevisionReviewAsync"/>). The only agent work it starts is a revision run of the
-/// DGHSF agent worker once Copilot code review left remarks on its pull request, for items that ask for it
-/// (<see cref="WorkItemService.StartCopilotReviewRevisionAsync"/>). What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
+/// (<see cref="WorkItemService.RequestCopilotRevisionReviewAsync"/>). The only agent work it starts is a revision once Copilot
+/// code review left remarks on the agent's pull request, for items that ask for it (<see cref="WorkItemService.StartCopilotReviewRevisionAsync"/>),
+/// and a fix of merge conflicts (<see cref="WorkItemService.FixMergeConflictsAsync"/>). What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
 /// </summary>
 public sealed class WorkItemSyncService(
     RepositoryService repositories,
@@ -135,7 +135,7 @@ public sealed class WorkItemSyncService(
                     var review = await WithRetriesAsync(() => workItems.RequestCopilotRevisionReviewAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
                     AddReviewEvent(run, result.WorkItem, review);
                 }
-                if (result.WorkItem is { ReviseOnCopilotReview: true, Executor: AgentExecutor.DghsfWorker, Status: WorkItemStatus.InProgress })
+                if (result.WorkItem is { ReviseOnCopilotReview: true, Status: WorkItemStatus.InProgress })
                 {
                     var revision = await WithRetriesAsync(() => workItems.StartCopilotReviewRevisionAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
                     AddRevisionEvent(run, result.WorkItem, revision);
@@ -404,16 +404,22 @@ public sealed class WorkItemSyncService(
     {
         var remarks = revision.Remarks == 1 ? "1 remark" : $"{revision.Remarks} remarks";
         var where = $"pull request #{revision.PullRequestNumber} of {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}'";
+        var agent = item.Executor == AgentExecutor.DghsfWorker ? "the DGHSF agent worker" : "Copilot";
         switch (revision.Outcome)
         {
-            case CopilotReviewRevisionOutcome.Started:
+            case CopilotReviewRevisionOutcome.Started when revision.Reason is null:
                 run.Add(SyncLogLevel.Information, SyncLogEventKind.CopilotReviewRevisionStarted,
-                    $"Copilot code review left {remarks} on {where}, so the DGHSF agent worker was asked to revise it.",
+                    $"Copilot code review left {remarks} on {where}, so {agent} was asked to revise it.",
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+            case CopilotReviewRevisionOutcome.Started:
+                run.Add(SyncLogLevel.Warning, SyncLogEventKind.CopilotReviewRevisionStarted,
+                    $"Copilot code review left {remarks} on {where}, so {agent} was asked to revise it, but: {revision.Reason}",
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
             case CopilotReviewRevisionOutcome.Skipped:
                 run.Add(SyncLogLevel.Warning, SyncLogEventKind.CopilotReviewRevisionSkipped,
-                    $"Copilot code review left {remarks} on {where}, but no revision was started: {revision.Reason}",
+                    $"Copilot code review left {remarks} on {where}, but {agent} wasn't asked to revise it: {revision.Reason}",
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
         }

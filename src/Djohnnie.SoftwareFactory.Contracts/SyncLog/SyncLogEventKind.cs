@@ -55,13 +55,13 @@ public enum SyncLogEventKind
     CopilotReviewAbandoned = 12,
 
     /// <summary>
-    /// Copilot code review left remarks on a pull request of the DGHSF agent worker, so the sync started a revision run
-    /// (<see cref="WorkItems.WorkItem.ReviseOnCopilotReview"/>).
+    /// Copilot code review left remarks on an agent's pull request, so the sync asked the agent to revise it: a revision run
+    /// of the DGHSF agent worker, or feedback for the Copilot cloud agent (<see cref="WorkItems.WorkItem.ReviseOnCopilotReview"/>).
     /// </summary>
     CopilotReviewRevisionStarted = 13,
 
     /// <summary>
-    /// Copilot code review left remarks on a pull request of the DGHSF agent worker, but the sync didn't start a revision run,
+    /// Copilot code review left remarks on an agent's pull request, but the sync didn't ask the agent to revise it,
     /// e.g. because enough rounds were revised automatically already or the revision was refused.
     /// </summary>
     CopilotReviewRevisionSkipped = 14,
