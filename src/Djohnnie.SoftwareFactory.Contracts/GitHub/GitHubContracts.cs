@@ -219,7 +219,8 @@ public sealed record GitHubPullRequestDetails(
     [property: JsonPropertyName("base")] GitHubPullRequestBranch? Base = null,
     [property: JsonPropertyName("body")] string? Body = null,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt = default,
-    [property: JsonPropertyName("requested_reviewers")] IReadOnlyList<GitHubOwner>? RequestedReviewers = null)
+    [property: JsonPropertyName("requested_reviewers")] IReadOnlyList<GitHubOwner>? RequestedReviewers = null,
+    [property: JsonPropertyName("node_id")] string? NodeId = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 }

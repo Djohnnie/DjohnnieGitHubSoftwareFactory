@@ -527,6 +527,12 @@ public partial class WorkItemServiceTests : IDisposable
         /// <summary>The pull requests a Copilot code review was requested for, in order.</summary>
         public List<int> CopilotReviewRequests { get; } = [];
 
+        /// <summary>The GraphQL ids of the pull requests marked ready for review, in order.</summary>
+        public List<string> MarkedReadyForReview { get; } = [];
+
+        /// <summary>When set, marking a pull request ready for review answers this GraphQL error (type and message).</summary>
+        public (string Type, string Message)? MarkReadyFailure { get; set; }
+
         /// <summary>The answer to requesting a Copilot code review, instead of success.</summary>
         public (HttpStatusCode Status, string Message)? ReviewRequestFailure { get; set; }
 
@@ -637,7 +643,9 @@ public partial class WorkItemServiceTests : IDisposable
             {
                 return GraphQlFailure is { } refused
                     ? Json(refused.Status, JsonSerializer.Serialize(new { message = refused.Message }))
-                    : LinkedPullRequestsResponse(body!);
+                    : body!.Contains("markPullRequestReadyForReview", StringComparison.Ordinal)
+                        ? MarkReadyForReview(body)
+                        : LinkedPullRequestsResponse(body);
             }
             if (method == "GET" && RepositoryPath().Match(path) is { Success: true } repository)
             {
@@ -736,7 +744,8 @@ public partial class WorkItemServiceTests : IDisposable
                     number, title = "Fix the task", html_url = $"https://github.com/owner/repo/pull/{number}",
                     state = state switch { "merged" => "closed", "draft" => "open", _ => state }, draft = state == "draft", user = new { login = "Copilot" },
                     merged_at = state == "merged" ? DateTimeOffset.UnixEpoch : (DateTimeOffset?)null,
-                    additions = 3, deletions = 1, changed_files = PullRequestFiles.Count, mergeable_state = MergeableState
+                    additions = 3, deletions = 1, changed_files = PullRequestFiles.Count, mergeable_state = MergeableState,
+                    node_id = $"PR_{number}"
                 })),
                 ("GET", "/reviews") => Json(HttpStatusCode.OK, JsonSerializer.Serialize(Reviews.Select((r, index) => (object)new
                 {
@@ -767,6 +776,18 @@ public partial class WorkItemServiceTests : IDisposable
         {
             CopilotReviewRequests.Add(number);
             return Json(HttpStatusCode.Created, $$"""{"number":{{number}},"requested_reviewers":[{"login":"Copilot","type":"Bot"}]}""");
+        }
+
+        private HttpResponseMessage MarkReadyForReview(string body)
+        {
+            if (MarkReadyFailure is { } failure)
+            {
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { data = (object?)null, errors = new[] { new { type = failure.Type, message = failure.Message } } }));
+            }
+            var id = JsonDocument.Parse(body).RootElement.GetProperty("variables").GetProperty("id").GetString()!;
+            MarkedReadyForReview.Add(id);
+            PullRequestStates[int.Parse(id["PR_".Length..])] = "open";
+            return Json(HttpStatusCode.OK, """{"data":{"markPullRequestReadyForReview":{"pullRequest":{"isDraft":false}}}}""");
         }
 
         private HttpResponseMessage Merge(int number)

@@ -67,6 +67,12 @@ public interface IWorkItemStore
     Task SetCopilotRevisionRequestedAsync(string repositoryFullName, Guid id, DateTimeOffset? requestedAt, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Sets <see cref="WorkItem.CopilotSessionHandledAt"/>: the sync handled the Copilot agent session created then, so it
+    /// doesn't handle it again. <see cref="WorkItem.UpdatedAt"/> doesn't change.
+    /// </summary>
+    Task SetCopilotSessionHandledAsync(string repositoryFullName, Guid id, DateTimeOffset sessionCreatedAt, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Sets <see cref="WorkItem.CopilotReviewHandledAt"/>: the sync acted on the Copilot code review submitted then, so it
     /// doesn't act on it again. <see cref="WorkItem.UpdatedAt"/> doesn't change.
     /// </summary>

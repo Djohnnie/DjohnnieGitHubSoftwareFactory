@@ -16,9 +16,10 @@ namespace Djohnnie.SoftwareFactory.Application.Features.WorkItems;
 
 /// <summary>
 /// Checks that every known repository still exists on GitHub (archiving the ones that don't), then refreshes every accepted
-/// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. The only thing it sends to
-/// GitHub is a request for a Copilot code review, once the Copilot cloud agent finished a revision asked from DGHSF
-/// (<see cref="WorkItemService.RequestCopilotRevisionReviewAsync"/>). The only agent work it starts is a revision once Copilot
+/// work item of the others from its GitHub issue; repositories archived on GitHub are ignored. The only thing it changes on
+/// a pull request by itself is handing it over for review once an agent session of the Copilot cloud agent on it finished:
+/// marking a draft ready for review and requesting a Copilot code review (<see cref="WorkItemService.RequestCopilotRevisionReviewAsync"/>).
+/// The only agent work it starts is a revision once Copilot
 /// code review left remarks on the agent's pull request, for items that ask for it (<see cref="WorkItemService.StartCopilotReviewRevisionAsync"/>),
 /// and a fix of merge conflicts (<see cref="WorkItemService.FixMergeConflictsAsync"/>). What it does is written to the sync log (<see cref="ISyncLogStore"/>) and to <see cref="ILogger"/>.
 /// </summary>
@@ -130,7 +131,8 @@ public sealed class WorkItemSyncService(
                 {
                     progressWarnings.Add((item, warning));
                 }
-                if (result.WorkItem.CopilotRevisionRequestedAt is not null)
+                if (result.WorkItem.CopilotRevisionRequestedAt is not null
+                    || result.WorkItem is { Executor: AgentExecutor.CopilotCloudAgent, Status: WorkItemStatus.InProgress, PullRequestNumber: not null })
                 {
                     var review = await WithRetriesAsync(() => workItems.RequestCopilotRevisionReviewAsync(item.RepositoryFullName, item.Id, cancellationToken), cancellationToken);
                     AddReviewEvent(run, result.WorkItem, review);
@@ -388,8 +390,15 @@ public sealed class WorkItemSyncService(
         switch (review.Outcome)
         {
             case CopilotRevisionReviewOutcome.Requested:
-                run.Add(SyncLogLevel.Information, SyncLogEventKind.CopilotReviewRequested,
-                    $"Copilot finished the revision of pull request #{review.PullRequestNumber} of {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}', so Copilot code review was asked to review it.",
+                run.Add(review.Reason is null ? SyncLogLevel.Information : SyncLogLevel.Warning, SyncLogEventKind.CopilotReviewRequested,
+                    $"{Finished(item, review)}, so {(review.MarkedReadyForReview ? "it was marked ready for review and " : string.Empty)}Copilot code review was asked to review it."
+                    + NotMarkedReady(review),
+                    item.RepositoryFullName, item.IssueNumber, item.Id);
+                break;
+            case CopilotRevisionReviewOutcome.AlreadyReviewed when review.MarkedReadyForReview || review.Reason is not null:
+                run.Add(review.Reason is null ? SyncLogLevel.Information : SyncLogLevel.Warning, SyncLogEventKind.PullRequestMarkedReadyForReview,
+                    $"{Finished(item, review)}{(review.MarkedReadyForReview ? ", so it was marked ready for review" : string.Empty)}; Copilot code review was asked to review it already."
+                    + NotMarkedReady(review),
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
             case CopilotRevisionReviewOutcome.Abandoned:
@@ -398,6 +407,17 @@ public sealed class WorkItemSyncService(
                     item.RepositoryFullName, item.IssueNumber, item.Id);
                 break;
         }
+    }
+
+    private static string Finished(WorkItem item, CopilotRevisionReviewResult review)
+    {
+        var where = $"pull request #{review.PullRequestNumber} of {item.Type.DisplayName.ToLowerInvariant()} '{item.Title}'";
+        return review.AfterFeedback ? $"Copilot finished the revision of {where}" : $"Copilot finished its agent session on {where}";
+    }
+
+    private static string NotMarkedReady(CopilotRevisionReviewResult review)
+    {
+        return review.Reason is null ? string.Empty : $" The draft couldn't be marked ready for review: {review.Reason}";
     }
 
     private static void AddRevisionEvent(Run run, WorkItem item, CopilotReviewRevisionResult revision)

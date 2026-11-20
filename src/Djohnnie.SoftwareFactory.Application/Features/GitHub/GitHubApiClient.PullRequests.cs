@@ -1,11 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Api = Djohnnie.SoftwareFactory.Contracts.GitHub.Api;
 using Djohnnie.SoftwareFactory.Contracts.GitHub;
 
 namespace Djohnnie.SoftwareFactory.Application.Features.GitHub;
 
-/// <summary>Pull requests: listing, opening, files, comments, reviews, Copilot code review requests and merging.</summary>
+/// <summary>Pull requests: listing, opening, files, comments, reviews, marking ready for review, Copilot code review requests and merging.</summary>
 public sealed partial class GitHubApiClient
 {
     /// <summary>The pull requests (open and closed) updated at or after <paramref name="since"/>, most recently updated first.</summary>
@@ -171,6 +172,43 @@ public sealed partial class GitHubApiClient
         using var response = await SendAsync(HttpMethod.Post, $"repos/{repositoryFullName}/pulls/{number}/requested_reviewers",
             JsonContent.Create(new Api.RequestReviewersRequest([CopilotReviewerLogin])), cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    private const string MarkReadyForReviewMutation = """
+        mutation($id: ID!) {
+          markPullRequestReadyForReview(input: { pullRequestId: $id }) {
+            pullRequest { isDraft }
+          }
+        }
+        """;
+
+    /// <summary>
+    /// Marks a draft pull request ready for review, so it can be merged; only GraphQL can. The token needs write access to
+    /// pull requests.
+    /// </summary>
+    /// <param name="nodeId">The pull request's GraphQL id (<see cref="GitHubPullRequestDetails.NodeId"/>), not its number.</param>
+    /// <exception cref="GitHubApiException">GitHub refused it, e.g. 403 without write access or 404 for an unknown pull request.</exception>
+    public async Task MarkPullRequestReadyForReviewAsync(string nodeId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, "graphql",
+            JsonContent.Create(new Api.GraphQlRequest(MarkReadyForReviewMutation, new { id = nodeId })), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<Api.GraphQlResponse<JsonElement>>(cancellationToken)
+            ?? throw new GitHubApiException(response.StatusCode, "GitHub returned an empty response.");
+
+        // GraphQL answers 200 with errors instead of an error status.
+        if (result.Errors is { Count: > 0 } errors)
+        {
+            var error = errors[0];
+            var status = error.Type switch
+            {
+                "NOT_FOUND" => HttpStatusCode.NotFound,
+                "FORBIDDEN" => HttpStatusCode.Forbidden,
+                "RATE_LIMITED" => HttpStatusCode.TooManyRequests,
+                _ => HttpStatusCode.UnprocessableEntity
+            };
+            throw new GitHubApiException(status, $"GitHub couldn't mark the pull request ready for review: {error.Message ?? "no reason given"}");
+        }
     }
 
     /// <summary>The reviewer to request for a Copilot code review.</summary>

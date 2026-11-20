@@ -45,7 +45,10 @@ public enum SyncLogEventKind
     /// <summary>An archived repository exists on GitHub again, so it is synced again.</summary>
     RepositoryRestored = 10,
 
-    /// <summary>The Copilot cloud agent finished a revision asked from DGHSF, so Copilot code review was asked to review the pull request.</summary>
+    /// <summary>
+    /// An agent session of the Copilot cloud agent on its pull request finished (its first one, or a revision), so Copilot code
+    /// review was asked to review the pull request, after marking it ready for review when it was a draft.
+    /// </summary>
     CopilotReviewRequested = 11,
 
     /// <summary>
@@ -73,5 +76,11 @@ public enum SyncLogEventKind
     MergeConflictFixRequested = 15,
 
     /// <summary>A work item's pull request conflicts with its base branch, but the sync couldn't ask its agent to fix it.</summary>
-    MergeConflictFixSkipped = 16
+    MergeConflictFixSkipped = 16,
+
+    /// <summary>
+    /// An agent session of the Copilot cloud agent on its draft pull request finished, so the sync marked it ready for review
+    /// (or couldn't); Copilot code review was asked to review it already, so it wasn't asked again.
+    /// </summary>
+    PullRequestMarkedReadyForReview = 17
 }

@@ -115,6 +115,9 @@ public class WorkItem : Entity
     /// <summary>When the latest Copilot code review was submitted that the sync acted on for <see cref="ReviseOnCopilotReview"/>.</summary>
     public DateTimeOffset? CopilotReviewHandledAt { get; set; }
 
+    /// <summary>When the latest finished agent session of the Copilot cloud agent was created that the sync handled.</summary>
+    public DateTimeOffset? CopilotSessionHandledAt { get; set; }
+
     /// <summary>When the agent was last asked to fix the pull request's merge conflicts; cleared once it no longer conflicts.</summary>
     public DateTimeOffset? MergeConflictFixRequestedAt { get; set; }
 }

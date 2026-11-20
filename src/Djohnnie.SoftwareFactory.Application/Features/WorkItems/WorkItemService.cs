@@ -97,8 +97,9 @@ public sealed class WorkItemService(ISender mediator)
     }
 
     /// <summary>
-    /// Asks Copilot code review to review the item's pull request once the Copilot cloud agent finished the revision that
-    /// feedback sent from DGHSF asked for; nothing happens while Copilot is busy or when no feedback waits for a review.
+    /// Hands the item's pull request over for review once an agent session of the Copilot cloud agent on it finished (its first
+    /// one, or the revision that feedback sent from DGHSF asked for): marks a draft ready for review and asks Copilot code
+    /// review to review it. Every session is handled once; nothing happens while Copilot is busy.
     /// </summary>
     public async Task<CopilotRevisionReviewResult> RequestCopilotRevisionReviewAsync(string repositoryFullName, Guid id, CancellationToken cancellationToken = default)
     {

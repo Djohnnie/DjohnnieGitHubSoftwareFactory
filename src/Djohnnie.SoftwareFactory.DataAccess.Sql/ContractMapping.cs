@@ -225,6 +225,7 @@ internal static class ContractMapping
                 GeneratedByTaskId = value.GeneratedByTaskId,
                 CopilotRevisionRequestedAt = value.CopilotRevisionRequestedAt,
                 CopilotReviewHandledAt = value.CopilotReviewHandledAt,
+                CopilotSessionHandledAt = value.CopilotSessionHandledAt,
                 MergeConflictFixRequestedAt = value.MergeConflictFixRequestedAt
             };
         }

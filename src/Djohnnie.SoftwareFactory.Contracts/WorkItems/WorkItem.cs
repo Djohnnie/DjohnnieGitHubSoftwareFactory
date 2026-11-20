@@ -134,6 +134,14 @@ public sealed record WorkItem
     public DateTimeOffset? CopilotReviewHandledAt { get; set; }
 
     /// <summary>
+    /// When the latest agent session of the Copilot cloud agent was created that the sync handled once it had finished: it
+    /// marked the pull request ready for review and asked Copilot code review to review it (or found it reviewed already, or
+    /// gave up on it), so it handles every session once; <c>null</c> before the first. Only the sync changes it; saving the
+    /// item leaves it as it is.
+    /// </summary>
+    public DateTimeOffset? CopilotSessionHandledAt { get; set; }
+
+    /// <summary>
     /// When the agent was last asked to fix the merge conflicts of the pull request (by the sync or with the button), so the
     /// sync asks once per conflict; <c>null</c> otherwise. A refresh clears it once the pull request no longer conflicts.
     /// Saving the item leaves it as it is.
