@@ -25,13 +25,27 @@ public static class ChatMarkdown
         .UseAutoLinks()
         .Build();
 
+    /// <summary>The same, but raw HTML is passed through to <see cref="GitHubHtml"/>, which keeps only what is safe.</summary>
+    private static readonly MarkdownPipeline HtmlPipeline = new MarkdownPipelineBuilder()
+        .UseEmphasisExtras()
+        .UsePipeTables()
+        .UseTaskLists()
+        .UseAutoLinks()
+        .Build();
+
     /// <param name="markdown">The untrusted Markdown.</param>
     /// <param name="allowAppLinks">Keeps links to the pages of work items and mindmaps, for the replies of the DGHSF Agent.</param>
     /// <param name="appLinkFor">With <paramref name="allowAppLinks"/>: the page in DGHSF for a URL, or <c>null</c> to keep the URL.</param>
     /// <param name="showImage">Whether an image URL may be shown inline; every other image becomes a link.</param>
-    public static string ToHtml(string markdown, bool allowAppLinks = false, Func<string, string?>? appLinkFor = null, Func<string, bool>? showImage = null)
+    /// <param name="allowHtml">
+    /// Renders the HTML that GitHub allows in comments (e.g. the collapsible <c>&lt;details&gt;</c> of Copilot code review)
+    /// instead of showing it as text; <see cref="GitHubHtml"/> removes everything unsafe, so the same rules apply.
+    /// </param>
+    public static string ToHtml(string markdown, bool allowAppLinks = false, Func<string, string?>? appLinkFor = null, Func<string, bool>? showImage = null,
+        bool allowHtml = false)
     {
-        var document = Markdown.Parse(markdown, Pipeline);
+        var pipeline = allowHtml ? HtmlPipeline : Pipeline;
+        var document = Markdown.Parse(markdown, pipeline);
         foreach (var link in document.Descendants<LinkInline>().ToList())
         {
             if (allowAppLinks && AppLinkFor(link.GetDynamicUrl?.Invoke() ?? link.Url, appLinkFor) is { } page)
@@ -62,9 +76,9 @@ public static class ChatMarkdown
 
         using var writer = new StringWriter();
         var renderer = new HtmlRenderer(writer);
-        Pipeline.Setup(renderer);
+        pipeline.Setup(renderer);
         renderer.Render(document);
-        return AllowSubscript(writer.ToString());
+        return allowHtml ? GitHubHtml.Sanitize(writer.ToString(), showImage) : AllowSubscript(writer.ToString());
     }
 
     /// <summary>
@@ -174,7 +188,8 @@ public static class ChatMarkdown
         attributes.AddPropertyIfNotExist("rel", "noopener noreferrer nofollow");
     }
 
-    private static bool IsSafe(string? url)
+    /// <summary>An absolute http(s) or mailto URL: the only links that are kept.</summary>
+    internal static bool IsSafe(string? url)
     {
         return Uri.TryCreate(url, UriKind.Absolute, out var uri)
             && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeMailto);

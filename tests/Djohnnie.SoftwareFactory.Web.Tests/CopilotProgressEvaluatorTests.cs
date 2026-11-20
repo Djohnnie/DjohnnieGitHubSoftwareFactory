@@ -7,10 +7,10 @@ namespace Djohnnie.SoftwareFactory.Web.Tests;
 public class CopilotProgressEvaluatorTests
 {
     private static GitHubLinkedPullRequest PullRequest(string state = "OPEN", string title = "Fix it", string? reviewDecision = null,
-        string[]? latestReviews = null, string? checks = null, int number = 7, int updatedDay = 0)
+        string[]? latestReviews = null, string? checks = null, int number = 7, int updatedDay = 0, bool copilotReviewRequested = false)
     {
         return new(number, $"https://github.com/o/r/pull/{number}", title, state, state == "OPEN", "copilot/fix", DateTimeOffset.UnixEpoch.AddDays(updatedDay),
-            reviewDecision, latestReviews ?? [], checks);
+            reviewDecision, latestReviews ?? [], checks, copilotReviewRequested);
     }
 
     private static GitHubWorkflowRun Run(string status, string? conclusion = null)
@@ -59,6 +59,18 @@ public class CopilotProgressEvaluatorTests
         var pullRequest = PullRequest(reviewDecision: decision, latestReviews: latestReviews);
 
         Assert.Equal(expected, CopilotProgressEvaluator.Evaluate(false, true, pullRequest, null).Progress);
+    }
+
+    [Fact]
+    public void ARequestedCopilotReview_WinsOverEarlierVerdicts_ButNotOverARunningSession()
+    {
+        var pullRequest = PullRequest(reviewDecision: "CHANGES_REQUESTED", copilotReviewRequested: true);
+
+        Assert.Equal(CopilotProgress.CopilotReviewing, CopilotProgressEvaluator.Evaluate(false, true, pullRequest, Run("completed", "success")).Progress);
+        Assert.Equal(CopilotProgress.CopilotReviewing, CopilotProgressEvaluator.Evaluate(false, true, PullRequest(copilotReviewRequested: true), null).Progress);
+        Assert.Equal(CopilotProgress.Working, CopilotProgressEvaluator.Evaluate(false, true, pullRequest, Run("in_progress")).Progress);
+        Assert.Equal(CopilotProgress.Merged,
+            CopilotProgressEvaluator.Evaluate(false, true, PullRequest(state: "MERGED", copilotReviewRequested: true), null).Progress);
     }
 
     [Fact]

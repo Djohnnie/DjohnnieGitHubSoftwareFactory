@@ -621,6 +621,44 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
     }
 
     [Fact]
+    public async Task PullRequest_WhileCopilotCodeReviewIsRequested_SaysToWaitForIt()
+    {
+        await SelectRepositoryAsync();
+        var task = await SaveAcceptedTaskAsync();
+        await using (var db = await Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(_cancellationToken))
+        {
+            var entity = await db.WorkItems.SingleAsync(_cancellationToken);
+            entity.Status = WorkItemStatus.InProgress;
+            entity.Progress = CopilotProgress.CopilotReviewing;
+            entity.PullRequestNumber = 12;
+            entity.PullRequestUrl = "https://github.com/owner/repo/pull/12";
+            await db.SaveChangesAsync(_cancellationToken);
+        }
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12"] = """
+            {"number":12,"title":"Fix the task","html_url":"https://github.com/owner/repo/pull/12","state":"open","draft":false,
+             "user":{"login":"Copilot"},"merged_at":null,"additions":1,"deletions":1,"changed_files":0,"mergeable_state":"clean",
+             "requested_reviewers":[{"login":"Copilot","type":"Bot"}]}
+            """;
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/files"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/issues/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
+        _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = "[]";
+        Navigation.NavigateTo($"/tasks/{task.Id}");
+        Render<MudPopoverProvider>();
+        var cut = Render<WorkItemEditor>(p => p.Add(e => e.Id, task.Id));
+
+        // The work item's status says Copilot is reviewing, and the pull request still counts as one that can be merged.
+        cut.WaitForAssertion(() => Assert.Contains("Copilot reviewing", cut.Markup));
+        await cut.InvokeAsync(() => cut.Find(".pr-mergeable-link").Click());
+
+        // The discussion tab says to wait for its review, instead of "ready to merge".
+        cut.WaitForAssertion(() => Assert.Equal("Copilot reviewing", cut.Find(".pr-copilot-reviewing").TextContent.Trim()));
+        Assert.Contains("hasn't submitted its review yet", cut.Find(".pr-merge-readiness").TextContent);
+        Assert.Contains("still working on it", cut.Find(".pr-copilot-review-pending").TextContent);
+        Assert.DoesNotContain("Nobody reviewed this pull request yet", cut.Markup);
+    }
+
+    [Fact]
     public async Task PullRequest_ShowsTheReviewStatus_AndMergesAndClosesIt()
     {
         await SelectRepositoryAsync();
@@ -645,7 +683,10 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
             """;
         _gitHub.Responses["GET /repos/owner/repo/pulls/12/comments"] = "[]";
         _gitHub.Responses["GET /repos/owner/repo/pulls/12/reviews"] = """
-            [{"user":{"login":"copilot-pull-request-reviewer[bot]"},"state":"COMMENTED","submitted_at":"2026-11-12T08:00:00Z","html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-1"}]
+            [{"id":1,"user":{"login":"copilot-pull-request-reviewer[bot]","type":"Bot"},"state":"COMMENTED","submitted_at":"2026-11-12T08:00:00Z",
+              "html_url":"https://github.com/owner/repo/pull/12#pullrequestreview-1",
+              "body":"<!-- ccr-overview-v2 -->\n\n**No open issues**\n\n<details>\n<summary><img src=\"https://github.githubassets.com/low.png\" alt=\"Low severity\"> Name the constant</summary>\n\nIt's a magic number.\n</details>"},
+             {"id":2,"user":{"login":"djohnnie","type":"User"},"state":"COMMENTED","submitted_at":"2026-11-12T08:30:00Z","body":""}]
             """;
         _gitHub.Responses["PUT /repos/owner/repo/pulls/12/merge"] = """{"sha":"abc123","merged":true,"message":"Pull Request successfully merged"}""";
         Navigation.NavigateTo($"/tasks/{task.Id}");
@@ -660,14 +701,23 @@ public class WorkItemEditorTests : BunitContext, IAsyncLifetime
         cut.WaitForAssertion(() => Assert.Equal("Not approved yet", cut.Find(".pr-review-decision").TextContent.Trim()));
         Assert.Equal("Merge blocked", cut.Find(".pr-merge-state").TextContent.Trim());
         Assert.Contains("A branch rule blocks merging", cut.Find(".pr-merge-readiness").TextContent);
+        Assert.Empty(cut.FindAll(".pr-copilot-reviewing"));
         Assert.Contains("commented", cut.Find(".pr-reviewers").TextContent);
-        // Comments are Markdown: a quote of an earlier comment is a blockquote, HTML comments are hidden like on GitHub, raw HTML stays text.
+        // Comments are Markdown: a quote of an earlier comment is a blockquote, HTML comments are hidden like on GitHub, unsafe HTML is removed.
         var comment = cut.Find(".pr-comment .pr-markdown");
         Assert.Equal("@copilot add tests", comment.QuerySelector("blockquote")!.TextContent.Trim());
         Assert.Equal("tests", comment.QuerySelector("strong")!.TextContent);
         Assert.DoesNotContain("session: 42", comment.TextContent);
         Assert.Null(comment.QuerySelector("script"));
-        Assert.Contains("<script>alert(1)</script>", comment.TextContent);
+        Assert.DoesNotContain("alert(1)", comment.TextContent);
+        // A review's text is in the conversation after the comment, with GitHub's collapsible sections; a review without text isn't.
+        var review = Assert.Single(cut.FindAll(".pr-review-entry"));
+        Assert.Contains("reviewed", review.QuerySelector(".pr-review-verdict")!.TextContent);
+        Assert.Equal("No open issues", review.QuerySelector(".pr-markdown strong")!.TextContent);
+        Assert.Contains("Name the constant", review.QuerySelector("details > summary")!.TextContent);
+        Assert.Equal("Low severity", review.QuerySelector("summary .md-image-alt.md-severity-low")!.TextContent);
+        Assert.Null(review.QuerySelector("img"));
+        Assert.DoesNotContain("ccr-overview", review.TextContent);
 
         // Merging (after confirming) closes the pull request; the banner and the merge card go away.
         Assert.DoesNotContain(cut.FindAll(".pr-approve"), _ => true);

@@ -30,10 +30,14 @@ public sealed record PullRequestChanges(
 /// <summary>Where the pull request stands with its reviewers and whether GitHub would merge it.</summary>
 /// <param name="Reviewers">Each reviewer's verdict, most recent first.</param>
 /// <param name="MergeState">GitHub's <c>mergeable_state</c>: <c>clean</c>, <c>blocked</c>, <c>behind</c>, <c>dirty</c>, <c>unstable</c>, <c>draft</c>, <c>has_hooks</c> or <c>unknown</c> (still being computed).</param>
+/// <param name="CopilotReviewRequested">
+/// Copilot code review was asked to review (by DGHSF after a revision, or on GitHub) and hasn't submitted its review yet.
+/// </param>
 public sealed record PullRequestReviewStatus(
     PullRequestReviewDecision Decision,
     IReadOnlyList<PullRequestReviewer> Reviewers,
-    string? MergeState)
+    string? MergeState,
+    bool CopilotReviewRequested = false)
 {
     public static PullRequestReviewStatus None { get; } = new(PullRequestReviewDecision.None, [], null);
 }
@@ -94,6 +98,10 @@ public sealed record PullRequestFileChange(
 /// <param name="ThreadId">For a line comment: the id of the comment that started its thread (its own id when it did).</param>
 /// <param name="DiffHunk">For a line comment: the diff as it was when it was written, ending at <see cref="Line"/>, as GitHub shows it above the thread.</param>
 /// <param name="StartLine">For a line comment on several lines: the first of them, up to <see cref="Line"/>.</param>
+/// <param name="ReviewState">
+/// For the text of a review (e.g. Copilot code review's overview): its verdict, <c>APPROVED</c>, <c>CHANGES_REQUESTED</c>,
+/// <c>COMMENTED</c> or <c>DISMISSED</c>; <c>null</c> for a comment.
+/// </param>
 public sealed record PullRequestComment(
     string? AuthorLogin,
     string Body,
@@ -105,7 +113,8 @@ public sealed record PullRequestComment(
     long? ThreadId = null,
     PullRequestAuthorKind AuthorKind = PullRequestAuthorKind.Person,
     string? DiffHunk = null,
-    int? StartLine = null)
+    int? StartLine = null,
+    string? ReviewState = null)
 {
     /// <summary>A line comment that answers an earlier one in its thread.</summary>
     public bool IsReply

@@ -31,6 +31,13 @@
                 }
                 var (decision, decisionColor) = DecisionChip(Changes.Review.Decision);
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="decisionColor" Class="pr-review-decision">@decision</MudChip>
+                @if (Changes.Review.CopilotReviewRequested)
+                {
+                    <MudTooltip Text="@CopilotReviewingHint">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassTop"
+                                 Class="pr-copilot-reviewing">Copilot reviewing</MudChip>
+                    </MudTooltip>
+                }
                 @if (MergeChip(Changes.Review.MergeState) is { } merge)
                 {
                     <MudTooltip Text="@merge.Hint">
@@ -230,7 +237,15 @@
             if (first.Path is null)
             {
                 <div class="pr-comment mt-2 @CommentClass(first)">
+                    @if (first.ReviewState is not null)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Class="pr-review-icon" />
+                    }
                     <PullRequestAuthor Login="@first.AuthorLogin" Kind="first.AuthorKind" />
+                    @if (first.ReviewState is { } state)
+                    {
+                        <span class="pr-review-verdict"> @ReviewEntryVerdict(state)</span>
+                    }
                     · <MudLink Href="@first.Url" Target="_blank" Typo="Typo.caption"><TimeAgo At="first.CreatedAt" /></MudLink>
                     <div class="pr-comment-body pr-markdown">@CommentHtml(first)</div>
                 </div>
@@ -288,7 +303,13 @@
         }
 
         <MudText Typo="Typo.subtitle1" Class="mt-4"><b>Reviews</b></MudText>
-        @if (Changes.Review.Reviewers.Count == 0)
+        @if (Changes.Review.CopilotReviewRequested)
+        {
+            <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Dense="true" Icon="@Icons.Material.Filled.HourglassTop" Class="mb-2 pr-copilot-review-pending">
+                @CopilotReviewingHint Reload to see it once it's in.
+            </MudAlert>
+        }
+        @if (Changes.Review.Reviewers.Count == 0 && !Changes.Review.CopilotReviewRequested)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary">Nobody reviewed this pull request yet.</MudText>
         }
@@ -602,11 +623,15 @@
         };
     }
 
-    /// <summary>The comment's frame: colored by who wrote it, and indented when it answers an earlier one.</summary>
+    /// <summary>The comment's frame: colored by who wrote it, indented when it answers an earlier one, and marked when it is a review's text.</summary>
     private static string CommentClass(PullRequestComment comment)
     {
         var by = $"pr-by-{comment.AuthorKind.ToString().ToLowerInvariant()}";
-        return comment.IsReply ? $"{by} pr-comment-reply" : by;
+        if (comment.IsReply)
+        {
+            return $"{by} pr-comment-reply";
+        }
+        return comment.ReviewState is null ? by : $"{by} pr-review-entry";
     }
 
     private async Task SendAsync()
@@ -689,13 +714,14 @@
     }
 
     /// <summary>
-    /// A GitHub comment is Markdown written by anyone who can comment, so it goes through <see cref="ChatMarkdown"/>, which escapes
-    /// raw HTML and keeps only safe links. HTML comments are dropped first, because GitHub hides them too. Images in DGHSF's own
-    /// image storage, such as the agent worker's screenshots, are shown; every other image stays a link.
+    /// A GitHub comment is Markdown written by anyone who can comment, so it goes through <see cref="ChatMarkdown"/>, which keeps
+    /// only the HTML GitHub allows that is safe (see <see cref="GitHubHtml"/>), such as Copilot code review's collapsible
+    /// sections, and only safe links. HTML comments are dropped first, because GitHub hides them too. Images in DGHSF's own
+    /// image storage, such as the agent worker's screenshots, are shown; every other image becomes its alt text or a link.
     /// </summary>
     private MarkupString CommentHtml(PullRequestComment comment)
     {
-        return (MarkupString)ChatMarkdown.ToHtml(HtmlComment.Replace(comment.Body, string.Empty), showImage: ImageUploads.IsStoredImage);
+        return (MarkupString)ChatMarkdown.ToHtml(HtmlComment.Replace(comment.Body, string.Empty), showImage: ImageUploads.IsStoredImage, allowHtml: true);
     }
 
     private static readonly System.Text.RegularExpressions.Regex HtmlComment =
@@ -712,11 +738,17 @@
     }
 
     /// <summary>Whether GitHub would merge the pull request now, in a sentence for the merge card.</summary>
+    private const string CopilotReviewingHint = "Copilot code review was asked to review this pull request and is still working on it.";
+
     private static (Severity Severity, string Text) MergeReadiness(PullRequestChanges changes)
     {
         if (changes.IsDraft)
         {
             return (Severity.Warning, "This is a draft. Mark it as ready for review on GitHub before you can merge it.");
+        }
+        if (changes.Review.CopilotReviewRequested)
+        {
+            return (Severity.Warning, "Copilot code review hasn't submitted its review yet. Wait for it before you merge, so you can still act on what it finds.");
         }
         return changes.Review.MergeState switch
         {
@@ -760,6 +792,18 @@
             "dirty" => ("Merge conflicts", Color.Error, "The branch conflicts with the base branch."),
             "unstable" => ("Checks failing", Color.Warning, "It can be merged, but some checks that aren't required fail."),
             _ => null
+        };
+    }
+
+    /// <summary>What a review in the conversation did, as GitHub words it above the review's text.</summary>
+    private static string ReviewEntryVerdict(string state)
+    {
+        return state switch
+        {
+            "APPROVED" => "approved these changes",
+            "CHANGES_REQUESTED" => "requested changes",
+            "DISMISSED" => "reviewed (dismissed)",
+            _ => "reviewed"
         };
     }
 

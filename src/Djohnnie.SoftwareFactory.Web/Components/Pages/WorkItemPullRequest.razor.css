@@ -285,6 +285,84 @@
     border: 1px solid var(--mud-palette-lines-default);
 }
 
+/* HTML GitHub allows in comments, e.g. Copilot code review's collapsible findings. */
+.pr-markdown ::deep details {
+    margin: 0.4em 0;
+    padding: 2px 8px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+}
+
+.pr-markdown ::deep details details {
+    margin-left: 0.4em;
+}
+
+.pr-markdown ::deep details[open] {
+    padding-bottom: 6px;
+}
+
+.pr-markdown ::deep summary {
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.pr-markdown ::deep summary > * {
+    display: inline;
+}
+
+.pr-markdown ::deep kbd {
+    font-size: 0.85em;
+    padding: 0 4px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+}
+
+.pr-markdown ::deep mark {
+    padding: 0 2px;
+}
+
+/* An image that isn't loaded, shown as its alt text; Copilot's severity badges get their color. */
+.pr-markdown ::deep .md-image-alt {
+    display: inline-block;
+    padding: 0 6px;
+    margin-right: 4px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 10px;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.pr-markdown ::deep .md-severity-critical,
+.pr-markdown ::deep .md-severity-high {
+    color: var(--mud-palette-error);
+    border-color: var(--mud-palette-error);
+}
+
+.pr-markdown ::deep .md-severity-medium {
+    color: var(--mud-palette-warning);
+    border-color: var(--mud-palette-warning);
+}
+
+.pr-markdown ::deep .md-severity-low {
+    color: var(--mud-palette-info);
+    border-color: var(--mud-palette-info);
+}
+
+/* The text of a review in the conversation, e.g. Copilot code review's overview. */
+.pr-review-verdict {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pr-review-entry ::deep .pr-review-icon {
+    vertical-align: middle;
+    margin-right: 2px;
+    color: var(--mud-palette-text-secondary);
+}
+
 .pr-reviewers {
     margin: 4px 0 0;
     padding-left: 20px;

@@ -66,6 +66,17 @@ public partial class WorkItemServiceTests
         Assert.Equal("DISMISSED", Assert.Single(status.Reviewers).State);
     }
 
+    [Fact]
+    public void ReviewStatus_ARequestedCopilotReview_IsAwaitedUntilGitHubRemovesTheRequest()
+    {
+        var reviews = new[] { Review("alice", "APPROVED", 1) };
+
+        Assert.True(WorkItemPullRequests.ReviewStatus(reviews, "clean",
+            [new GitHubOwner("bob", null, "User"), new GitHubOwner("Copilot", null, "Bot")]).CopilotReviewRequested);
+        Assert.False(WorkItemPullRequests.ReviewStatus(reviews, "clean", [new GitHubOwner("bob", null, "User")]).CopilotReviewRequested);
+        Assert.False(WorkItemPullRequests.ReviewStatus(reviews, "clean").CopilotReviewRequested);
+    }
+
     private static GitHubPullRequestReview Review(string login, string state, int hour)
     {
         return new(new GitHubOwner(login, null), DateTimeOffset.UnixEpoch.AddHours(hour), state);

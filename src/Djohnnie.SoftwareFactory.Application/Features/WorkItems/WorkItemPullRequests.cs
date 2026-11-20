@@ -27,7 +27,9 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         var lineComments = await gitHub.GetPullRequestReviewCommentsAsync(repositoryFullName, number, cancellationToken);
         var reviews = await gitHub.GetPullRequestReviewsAsync(repositoryFullName, number, cancellationToken);
 
+        // A review's text comes before its line comments, which GitHub gives the same time (the sort is stable).
         var comments = conversation.Select(c => ToComment(c, onLine: false))
+            .Concat(reviews.Select(ToComment).OfType<PullRequestComment>())
             .Concat(lineComments.Select(c => ToComment(c, onLine: true)))
             .OrderBy(c => c.CreatedAt)
             .ToList();
@@ -37,7 +39,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             files.Select(f => new PullRequestFileChange(f.FileName, f.PreviousFileName, f.Status, f.Additions, f.Deletions, f.Patch, f.BlobUrl)).ToList(),
             pullRequest.ChangedFiles > files.Count && files.Count >= GitHubApiClient.MaxPullRequestFiles,
             comments,
-            ReviewStatus(reviews, pullRequest.MergeableState),
+            ReviewStatus(reviews, pullRequest.MergeableState, pullRequest.RequestedReviewers),
             (await WorkerRunsOnAsync(item, number, cancellationToken)) is not null,
             string.IsNullOrWhiteSpace(pullRequest.Body) ? null : Description(pullRequest));
     }
@@ -76,7 +78,9 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
     /// a later comment-only review doesn't change it. Reviewers who only commented are listed as <c>COMMENTED</c>.
     /// </summary>
     /// <param name="reviews">The pull request's reviews, oldest first.</param>
-    public static PullRequestReviewStatus ReviewStatus(IReadOnlyList<GitHubPullRequestReview> reviews, string? mergeableState)
+    /// <param name="requestedReviewers">Whose review is still awaited; GitHub removes a reviewer once they submitted their review.</param>
+    public static PullRequestReviewStatus ReviewStatus(IReadOnlyList<GitHubPullRequestReview> reviews, string? mergeableState,
+        IReadOnlyList<GitHubOwner>? requestedReviewers = null)
     {
         var reviewers = reviews
             .Where(r => r.User is not null && r.State is not null && r.State != "PENDING")
@@ -89,7 +93,7 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
         var decision = reviewers.Any(r => r.State == "CHANGES_REQUESTED") ? PullRequestReviewDecision.ChangesRequested
             : reviewers.Any(r => r.State == "APPROVED") ? PullRequestReviewDecision.Approved
             : PullRequestReviewDecision.None;
-        return new(decision, reviewers, mergeableState);
+        return new(decision, reviewers, mergeableState, requestedReviewers?.Any(r => r.IsCopilot) == true);
     }
 
     /// <summary>Merges the pull request as the signed-in user, which closes it. Refreshing the work item afterwards picks up its progress.</summary>
@@ -147,6 +151,21 @@ public sealed class WorkItemPullRequests(IWorkItemStore store, GitHubApiClient g
             comment.Path, current ? comment.Line : comment.OriginalLine,
             comment.Id, comment.InReplyToId ?? comment.Id, kind,
             comment.DiffHunk, current ? comment.StartLine : comment.OriginalStartLine);
+    }
+
+    /// <summary>
+    /// The text of a submitted review, such as Copilot code review's overview, as an entry of the conversation; <c>null</c> for
+    /// a review without text (e.g. one that only holds an answer to a line comment) or one that isn't submitted yet.
+    /// </summary>
+    private static PullRequestComment? ToComment(GitHubPullRequestReview review)
+    {
+        if (string.IsNullOrWhiteSpace(review.Body) || review.SubmittedAt is not { } submittedAt || review.State is null or "PENDING")
+        {
+            return null;
+        }
+        var kind = AuthorKind(review.User, review.Body);
+        return new(review.User?.Login, BodyOf(kind, review.Body), submittedAt, review.HtmlUrl ?? string.Empty,
+            Id: review.Id, AuthorKind: kind, ReviewState: review.State);
     }
 
     /// <summary>

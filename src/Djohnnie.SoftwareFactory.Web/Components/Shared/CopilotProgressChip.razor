@@ -33,6 +33,7 @@
             CopilotProgress.Stopped => $"{agent} stopped",
             CopilotProgress.ReadyForReview => "Ready for review",
             CopilotProgress.ChangesRequested => "Changes requested",
+            CopilotProgress.CopilotReviewing => "Copilot reviewing",
             CopilotProgress.Approved => "Approved",
             CopilotProgress.Merged => "Merged",
             CopilotProgress.Closed => "PR closed",
@@ -49,6 +50,7 @@
             CopilotProgress.Stopped => "Copilot's last session failed, was cancelled or timed out; click to see why.",
             CopilotProgress.ReadyForReview => "Copilot finished; the pull request waits for your review.",
             CopilotProgress.ChangesRequested => "A reviewer asked for changes. Mention @copilot in a comment to have it pick them up.",
+            CopilotProgress.CopilotReviewing => "Copilot code review is reviewing the pull request; wait for its review before you review or merge it.",
             CopilotProgress.Approved => "The pull request was approved and can be merged.",
             CopilotProgress.Merged => "The pull request was merged.",
             CopilotProgress.Closed => "The pull request was closed without merging.",
@@ -60,7 +62,7 @@
     {
         return progress switch
         {
-            CopilotProgress.Working => Color.Warning,
+            CopilotProgress.Working or CopilotProgress.CopilotReviewing => Color.Warning,
             CopilotProgress.Stopped or CopilotProgress.ChangesRequested => Color.Error,
             CopilotProgress.ReadyForReview => Color.Info,
             CopilotProgress.Approved or CopilotProgress.Merged => Color.Success,
@@ -78,6 +80,7 @@
             CopilotProgress.Stopped => Icons.Material.Filled.ErrorOutline,
             CopilotProgress.ReadyForReview => Icons.Material.Filled.RateReview,
             CopilotProgress.ChangesRequested => Icons.Material.Filled.Edit,
+            CopilotProgress.CopilotReviewing => Icons.Material.Filled.HourglassTop,
             CopilotProgress.Approved => Icons.Material.Filled.ThumbUp,
             CopilotProgress.Merged => Icons.Material.Filled.MergeType,
             _ => Icons.Material.Filled.Close

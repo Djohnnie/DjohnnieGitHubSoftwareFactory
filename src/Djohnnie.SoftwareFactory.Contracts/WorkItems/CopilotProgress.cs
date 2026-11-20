@@ -31,7 +31,10 @@ public enum CopilotProgress
     Merged = 7,
 
     /// <summary>The pull request was closed without merging.</summary>
-    Closed = 8
+    Closed = 8,
+
+    /// <summary>Copilot code review was asked to review the pull request and hasn't submitted its review yet.</summary>
+    CopilotReviewing = 9
 }
 
 /// <summary>The combined state of the checks on the pull request's last commit.</summary>

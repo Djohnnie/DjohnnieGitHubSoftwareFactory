@@ -133,9 +133,19 @@ public sealed record LinkedPullRequestNode(
     [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt,
     [property: JsonPropertyName("reviewDecision")] string? ReviewDecision,
     [property: JsonPropertyName("latestReviews")] GraphQlNodes<ReviewStateNode>? LatestReviews,
-    [property: JsonPropertyName("commits")] GraphQlNodes<PullRequestCommitNode>? Commits);
+    [property: JsonPropertyName("commits")] GraphQlNodes<PullRequestCommitNode>? Commits,
+    [property: JsonPropertyName("reviewRequests")] GraphQlNodes<ReviewRequestNode>? ReviewRequests = null);
 
 public sealed record ReviewStateNode([property: JsonPropertyName("state")] string? State);
+
+/// <summary>A pending review request; GitHub removes it when the reviewer submits their review.</summary>
+public sealed record ReviewRequestNode([property: JsonPropertyName("requestedReviewer")] RequestedReviewerNode? RequestedReviewer);
+
+/// <param name="TypeName">GraphQL's <c>__typename</c>: <c>User</c>, <c>Bot</c>, <c>Team</c> or <c>Mannequin</c>.</param>
+/// <param name="Login">A user's or bot's login; <c>null</c> for a team.</param>
+public sealed record RequestedReviewerNode(
+    [property: JsonPropertyName("__typename")] string? TypeName,
+    [property: JsonPropertyName("login")] string? Login);
 
 public sealed record PullRequestCommitNode([property: JsonPropertyName("commit")] CommitStatusNode? Commit);
 

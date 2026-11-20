@@ -82,6 +82,21 @@ public partial class WorkItemServiceTests
     }
 
     [Fact]
+    public async Task Refresh_WhileCopilotCodeReviewIsRequested_IsCopilotReviewing_UntilItReviewed()
+    {
+        var task = await AcceptAsync(WorkItemType.Task, "Task");
+        _gitHub.RunsFailure = HttpStatusCode.Forbidden;
+        _gitHub.LinkedPullRequests[42] = [new(7, "Task", "OPEN", "copilot/fix-42", LatestReviews: ["APPROVED"],
+            ReviewRequests: [("Team", null), ("User", "copilot-fan"), ("Bot", "copilot-pull-request-reviewer")])];
+
+        Assert.Equal(CopilotProgress.CopilotReviewing, (await RefreshAssignedTaskAsync(task)).Progress);
+
+        _gitHub.LinkedPullRequests[42] = [new(7, "Task", "OPEN", "copilot/fix-42", LatestReviews: ["APPROVED", "COMMENTED"],
+            ReviewRequests: [("User", "copilot-fan")])];
+        Assert.Equal(CopilotProgress.Approved, (await RefreshAssignedTaskAsync(task)).Progress);
+    }
+
+    [Fact]
     public async Task Refresh_AfterMerging_IsMergedAndDone()
     {
         var task = await AcceptAsync(WorkItemType.Task, "Task");

@@ -669,7 +669,8 @@ else if (_item is not null)
             {
                 return changes.IsOpen && !changes.IsDraft;
             }
-            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped;
+            return _item?.Progress is CopilotProgress.ReadyForReview or CopilotProgress.ChangesRequested or CopilotProgress.Approved or CopilotProgress.Stopped
+                or CopilotProgress.CopilotReviewing;
         }
     }
 

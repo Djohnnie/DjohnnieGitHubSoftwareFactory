@@ -88,6 +88,12 @@ public static class CopilotProgressEvaluator
             return CopilotProgress.Working;
         }
 
+        // A requested Copilot code review is still coming, so earlier verdicts may be outdated: wait for it first.
+        if (pullRequest.CopilotReviewRequested)
+        {
+            return CopilotProgress.CopilotReviewing;
+        }
+
         // Without required reviews there is no review decision; then the reviewers' latest reviews decide.
         return pullRequest.ReviewDecision switch
         {

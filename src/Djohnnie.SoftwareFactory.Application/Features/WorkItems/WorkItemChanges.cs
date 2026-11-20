@@ -61,6 +61,7 @@ public static class WorkItemChanges
         {
             CopilotProgress.ReadyForReview => "Ready for review",
             CopilotProgress.ChangesRequested => "Changes requested",
+            CopilotProgress.CopilotReviewing => "Copilot reviewing",
             _ => progress.ToString()
         };
     }

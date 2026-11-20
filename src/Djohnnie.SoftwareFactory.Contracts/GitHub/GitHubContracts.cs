@@ -117,6 +117,7 @@ public sealed record CopilotCodeReviewSettingsUpdate(
 /// <param name="ReviewDecision">GraphQL's <c>APPROVED</c>, <c>CHANGES_REQUESTED</c> or <c>REVIEW_REQUIRED</c>; <c>null</c> when no review is required.</param>
 /// <param name="LatestReviewStates">The latest review state of each reviewer, e.g. <c>APPROVED</c> or <c>CHANGES_REQUESTED</c>.</param>
 /// <param name="ChecksState">The status check rollup of the last commit (<c>SUCCESS</c>, <c>FAILURE</c>, <c>ERROR</c>, <c>PENDING</c> or <c>EXPECTED</c>), or <c>null</c> without checks.</param>
+/// <param name="CopilotReviewRequested">Copilot code review was asked to review and hasn't submitted its review yet.</param>
 public sealed record GitHubLinkedPullRequest(
     int Number,
     string Url,
@@ -127,7 +128,8 @@ public sealed record GitHubLinkedPullRequest(
     DateTimeOffset UpdatedAt,
     string? ReviewDecision,
     IReadOnlyList<string> LatestReviewStates,
-    string? ChecksState)
+    string? ChecksState,
+    bool CopilotReviewRequested = false)
 {
     public bool IsOpen => State == "OPEN";
     public bool IsMerged => State == "MERGED";
@@ -204,7 +206,8 @@ public sealed record GitHubPullRequestDetails(
     [property: JsonPropertyName("head")] GitHubPullRequestBranch? Head = null,
     [property: JsonPropertyName("base")] GitHubPullRequestBranch? Base = null,
     [property: JsonPropertyName("body")] string? Body = null,
-    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt = default)
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt = default,
+    [property: JsonPropertyName("requested_reviewers")] IReadOnlyList<GitHubOwner>? RequestedReviewers = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 }
