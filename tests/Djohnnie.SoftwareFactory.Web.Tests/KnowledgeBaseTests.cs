@@ -28,6 +28,7 @@ public class KnowledgeBaseTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddLogging();
         Services.AddDataProtection();
         Services.AddScoped<ProtectedLocalStorage>();

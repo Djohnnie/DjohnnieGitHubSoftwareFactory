@@ -1,13 +1,14 @@
 @using System.Globalization
 @inject GitHubService GitHub
 @inject TimeProvider Time
+@inject BrowserTimeZone LocalTime
 
 @* The open pull requests and the agent sessions running right now: the Copilot cloud agent's, read live from GitHub, and the DGHSF agent worker's. *@
 <section class="usage-infographic mb-6" aria-labelledby="copilot-sessions-title">
     <div class="usage-infographic-header">
         <MudText Typo="Typo.h6" id="copilot-sessions-title">Pull requests &amp; Agent sessions</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            @(_overview is { } checkedOverview ? $"Right now · checked {checkedOverview.CheckedAt.ToLocalTime():HH:mm}" : "Right now")
+            @(_overview is { } checkedOverview ? $"Right now · checked {LocalTime.ToLocal(checkedOverview.CheckedAt):HH:mm}" : "Right now")
         </MudText>
         <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadAsync" Disabled="_loading"
                        title="Check again" aria-label="Check the pull requests and sessions again" />

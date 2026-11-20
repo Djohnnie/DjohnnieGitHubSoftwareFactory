@@ -6,6 +6,7 @@
 @inject SyncLogService SyncLogService
 @inject RepositoryService Repositories
 @inject ILogger<SyncLog> Logger
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>Sync log</PageTitle>
 
@@ -182,9 +183,9 @@
         }
     }
 
-    private static string Format(DateTimeOffset moment)
+    private string Format(DateTimeOffset moment)
     {
-        return moment.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+        return LocalTime.Format(moment, "yyyy-MM-dd HH:mm:ss");
     }
 
     private static string LabelOf(SyncLogLevel level)

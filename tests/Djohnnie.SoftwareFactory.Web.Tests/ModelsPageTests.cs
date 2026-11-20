@@ -4,6 +4,7 @@ using Djohnnie.SoftwareFactory.Application.Features.AiModels;
 using Djohnnie.SoftwareFactory.Contracts.AiModels;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -27,6 +28,7 @@ public class ModelsPageTests : BunitContext, IAsyncLifetime
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddDataProtection();
         Services.AddLogging();
         Services.AddScoped<ProtectedLocalStorage>();

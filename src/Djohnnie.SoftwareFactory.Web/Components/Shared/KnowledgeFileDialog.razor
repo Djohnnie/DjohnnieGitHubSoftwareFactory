@@ -4,6 +4,7 @@
 @inject ISnackbar Snackbar
 @inject ILogger<KnowledgeFileDialog> Logger
 @implements IDisposable
+@inject BrowserTimeZone LocalTime
 
 <MudDialog>
     <DialogContent>
@@ -36,7 +37,7 @@
                         <MudIcon Icon="@KnowledgeBaseRoutes.Icon(file)" Color="Color.Primary" />
                         <div class="flex-grow-1" style="min-width:0">
                             <MudText Typo="Typo.body1" Style="overflow-wrap:anywhere"><b>@file.FileName</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@KnowledgeFile.FormatSize(file.Size) · uploaded @file.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@KnowledgeFile.FormatSize(file.Size) · uploaded @LocalTime.Format(file.CreatedAt, "yyyy-MM-dd HH:mm")</MudText>
                         </div>
                         @if (!string.IsNullOrEmpty(file.Url))
                         {

@@ -22,6 +22,7 @@ builder.Services.AddMudServices(options =>
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddSingleton<SqlTicketStore>();
 builder.Services.AddScoped<RepositoryContext>();
+builder.Services.AddScoped<Djohnnie.SoftwareFactory.Web.Components.Shared.BrowserTimeZone>();
 builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.AddSingleton<GitHubSessionValidator>();
 builder.Services.AddHttpClient(GitHubSessionValidator.HttpClientName, client =>

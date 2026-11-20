@@ -9,6 +9,7 @@ using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.Web.Auth;
 using Djohnnie.SoftwareFactory.Web.Components.Layout;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -34,6 +35,7 @@ public class CopilotCodeReviewTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddDataProtection();
         Services.AddLogging();
         AddAuthorization().SetAuthorized("Djohnnie").SetClaims(new Claim(GitHubClaims.AccessToken, "token"));

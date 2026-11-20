@@ -3,6 +3,7 @@
 @inject RepositoryContext Repository
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>Skills</PageTitle>
 
@@ -74,7 +75,7 @@
                     break;
             }
         </MudTd>
-        <MudTd DataLabel="Updated">@context.Skill.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd DataLabel="Updated">@LocalTime.Format(context.Skill.UpdatedAt, "yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             @if (context.Status == SkillRepositoryStatus.Outdated)
             {

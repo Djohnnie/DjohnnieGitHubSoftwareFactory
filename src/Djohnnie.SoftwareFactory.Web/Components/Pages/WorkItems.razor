@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>@_type.PluralName</PageTitle>
 
@@ -95,7 +96,7 @@
             <MudTd DataLabel="Agent"><span class="mono">@(context.CustomAgent ?? "Copilot")</span></MudTd>
             <MudTd DataLabel="Model"><span class="mono">@(context.Model ?? "auto")</span></MudTd>
         }
-        <MudTd DataLabel="Updated">@context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd DataLabel="Updated">@LocalTime.Format(context.UpdatedAt, "yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             @if (context.IsDraft)
             {

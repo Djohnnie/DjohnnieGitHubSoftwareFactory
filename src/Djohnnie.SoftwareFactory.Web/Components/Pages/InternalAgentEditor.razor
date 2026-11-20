@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>@(_agent?.Name ?? "Internal agent")</PageTitle>
 
@@ -130,7 +131,7 @@ else if (_agent is not null)
                     @if (_agent.Id != Guid.Empty)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
-                            Updated @_agent.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            Updated @LocalTime.Format(_agent.UpdatedAt, "yyyy-MM-dd HH:mm")
                         </MudText>
                     }
                 </MudPaper>

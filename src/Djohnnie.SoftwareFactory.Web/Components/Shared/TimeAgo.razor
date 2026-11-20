@@ -1,7 +1,8 @@
 @inject TimeProvider Time
+@inject BrowserTimeZone LocalTime
 
 @* A relative time ("3 hours ago") with the exact local date and time in a tooltip. *@
-<MudTooltip Text="@At.ToLocalDateTimeText()" Inline="true">
+<MudTooltip Text="@LocalTime.Format(At)" Inline="true">
     <span class="time-ago">@At.ToTimeAgo(Time)</span>
 </MudTooltip>
 

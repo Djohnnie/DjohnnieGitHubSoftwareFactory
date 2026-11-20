@@ -4,6 +4,7 @@
 @using Djohnnie.SoftwareFactory.Application.Features.Repositories
 @using Djohnnie.SoftwareFactory.Contracts.Repositories
 @implements IDisposable
+@inject BrowserTimeZone LocalTime
 
 @if (_knownError is not null)
 {
@@ -33,7 +34,7 @@
             {
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.History"
                            Disabled="_selecting" OnClick="() => SelectKnownAsync(repository)"
-                           title="@($"Last accessed {repository.LastAccessedAt?.ToLocalTime():yyyy-MM-dd HH:mm}")">
+                           title="@($"Last accessed {LocalTime.ToLocal(repository.LastAccessedAt):yyyy-MM-dd HH:mm}")">
                     @repository.FullName
                 </MudButton>
             }
@@ -104,7 +105,7 @@ else
                     @(context.Private ? "private" : "public")
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="Last push">@context.PushedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Last push">@LocalTime.Format(context.PushedAt, "yyyy-MM-dd HH:mm")</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             <MudText>No repositories match your search.</MudText>
@@ -143,8 +144,8 @@ else
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">removed from GitHub</MudChip>
                     </MudStack>
                 </MudTd>
-                <MudTd DataLabel="Removed from GitHub">@context.ArchivedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
-                <MudTd DataLabel="Last accessed">@context.LastAccessedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="Removed from GitHub">@LocalTime.Format(context.ArchivedAt, "yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="Last accessed">@LocalTime.Format(context.LastAccessedAt, "yyyy-MM-dd HH:mm")</MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <MudText>No removed repositories match your search.</MudText>

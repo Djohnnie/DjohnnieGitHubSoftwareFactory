@@ -5,6 +5,7 @@ using Djohnnie.SoftwareFactory.Contracts;
 using Djohnnie.SoftwareFactory.Contracts.SyncLog;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
@@ -21,6 +22,7 @@ public class SyncLogTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddLogging();
         var dbOptions = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         Services.AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(dbOptions));
@@ -119,6 +121,19 @@ public class SyncLogTests : BunitContext
         var issue = rows[2].QuerySelector("td[data-label='Issue'] a")!;
         Assert.Equal(("#42", "https://github.com/owner/repo/issues/42"), (issue.TextContent.Trim(), issue.GetAttribute("href")));
         Assert.DoesNotContain("since", rows[2].TextContent);
+    }
+
+    [Fact]
+    public async Task Page_ShowsTheMomentsInTheBrowsersTimeZone()
+    {
+        await Store.AddAsync([Event(0, "first")], _cancellationToken);
+        Services.GetRequiredService<BrowserTimeZone>().Use("Europe/Brussels", 60);
+        Render<MudPopoverProvider>();
+
+        var cut = Render<Components.Pages.SyncLog>();
+
+        // 08:00 UTC is 09:00 in Brussels in November.
+        cut.WaitForAssertion(() => Assert.Contains("2026-11-12 09:00:00", cut.Find("tbody tr td[data-label='When']").TextContent));
     }
 
     [Fact]

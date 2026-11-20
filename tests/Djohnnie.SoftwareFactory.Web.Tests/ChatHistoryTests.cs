@@ -14,6 +14,7 @@ using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Djohnnie.SoftwareFactory.Web.Auth;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
@@ -50,6 +51,7 @@ public class ChatHistoryTests : BunitContext, IAsyncLifetime
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddDataProtection();
         Services.AddLogging();
         AddAuthorization().SetAuthorized("Djohnnie").SetClaims(new Claim(GitHubClaims.AccessToken, "token"));

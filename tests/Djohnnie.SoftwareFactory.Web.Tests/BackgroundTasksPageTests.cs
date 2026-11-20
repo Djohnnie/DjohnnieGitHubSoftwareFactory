@@ -5,6 +5,7 @@ using Djohnnie.SoftwareFactory.Contracts.TodoTasks;
 using Djohnnie.SoftwareFactory.DataAccess.Sql;
 using Djohnnie.SoftwareFactory.DataAccess.Sql.Stores;
 using Djohnnie.SoftwareFactory.Web.Components.Pages;
+using Djohnnie.SoftwareFactory.Web.Components.Shared;
 using Djohnnie.SoftwareFactory.Web.Repositories;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ public class BackgroundTasksPageTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddDataProtection();
         Services.AddLogging();
         AddAuthorization().SetAuthorized("octocat");

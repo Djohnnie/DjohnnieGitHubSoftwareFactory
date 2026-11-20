@@ -21,6 +21,7 @@ public class MarkdownEditorTests : BunitContext
     public MarkdownEditorTests()
     {
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddLogging();
         var dbOptions = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         Services.AddSingleton<IDbContextFactory<AppDbContext>>(new ModelPricingScraperTests.TestDbFactory(dbOptions));

@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Djohnnie.SoftwareFactory.Web.Components.Shared;
 
 public static class DateTimeOffsetExtensions
@@ -34,11 +32,6 @@ public static class DateTimeOffsetExtensions
         return at.ToTimeAgo(time.GetUtcNow());
     }
 
-    /// <summary>The full local date and time, for showing next to (or behind) a relative time.</summary>
-    public static string ToLocalDateTimeText(this DateTimeOffset at)
-    {
-        return at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-    }
 
     private static string Count(int value, string unit)
     {

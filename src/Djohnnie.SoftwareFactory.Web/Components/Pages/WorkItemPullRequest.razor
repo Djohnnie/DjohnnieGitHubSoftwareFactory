@@ -3,6 +3,7 @@
 @inject ImageUploadService ImageUploads
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
+@inject BrowserTimeZone LocalTime
 
 @* One tab of a work item's pull request: the diff with line comments, or the discussion with a form to send feedback to its
    agent: Copilot (an @copilot comment or review), or, on a pull request the DGHSF agent worker opened, the worker (the comment
@@ -688,12 +689,12 @@
         }
     }
 
-    private static string AskToFixHint(WorkItem item)
+    private string AskToFixHint(WorkItem item)
     {
         var agent = item.Executor == AgentExecutor.DghsfWorker ? "the agent" : "Copilot";
         if (item.MergeConflictFixRequestedAt is { } requestedAt)
         {
-            return $"Posts a comment that asks {agent} to merge the base branch and resolve the conflicts. {Capitalize(agent)} was asked already on {requestedAt.ToLocalTime():g}.";
+            return $"Posts a comment that asks {agent} to merge the base branch and resolve the conflicts. {Capitalize(agent)} was asked already on {LocalTime.ToLocal(requestedAt):g}.";
         }
         return $"Posts a comment that asks {agent} to merge the base branch and resolve the conflicts.";
     }

@@ -1,5 +1,6 @@
 using Bunit;
 using Djohnnie.SoftwareFactory.Web.Components.Shared;
+using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
 
@@ -13,6 +14,7 @@ public class PageBreadcrumbsTests : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
     }
 
     [Fact]

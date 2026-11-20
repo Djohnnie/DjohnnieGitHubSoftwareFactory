@@ -1,6 +1,7 @@
 @* The DGHSF agent worker sessions that were counted on one GitHub Copilot model, newest first, a page at a time. *@
 @inject AiModelService Models
 @inject RepositoryContext Repository
+@inject BrowserTimeZone LocalTime
 
 <MudTable @ref="_table" T="AiModelUsage" ServerData="LoadAsync" RowsPerPage="25" Outlined="true" Striped="true" Dense="true" Hover="true"
           Elevation="0" LoadingProgressColor="Color.Primary" aria-label="Agent sessions">
@@ -18,7 +19,7 @@
         <MudTh Style="text-align:right">AI credits</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="When" Style="white-space:nowrap">@context.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        <MudTd DataLabel="When" Style="white-space:nowrap">@LocalTime.Format(context.OccurredAt, "yyyy-MM-dd HH:mm:ss")</MudTd>
         <MudTd DataLabel="Work item">
             @if (context.WorkItem is { } item)
             {

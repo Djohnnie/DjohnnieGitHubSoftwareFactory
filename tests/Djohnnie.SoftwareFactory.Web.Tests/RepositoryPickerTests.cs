@@ -33,6 +33,7 @@ public class RepositoryPickerTests : BunitContext, IAsyncLifetime
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
+        Services.AddScoped<BrowserTimeZone>();
         Services.AddDataProtection();
         Services.AddScoped<ProtectedLocalStorage>();
         Services.AddScoped<RepositoryContext>();

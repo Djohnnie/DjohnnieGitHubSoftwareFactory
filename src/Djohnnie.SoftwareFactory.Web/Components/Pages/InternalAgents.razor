@@ -3,6 +3,7 @@
 @inject InternalAgentService Agents
 @inject AssistantService Assistant
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>Internal agents</PageTitle>
 
@@ -116,7 +117,7 @@
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Default</MudChip>
                 }
             </MudTd>
-            <MudTd DataLabel="Updated" Style="white-space:nowrap">@(context.Id == Guid.Empty ? "–" : context.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))</MudTd>
+            <MudTd DataLabel="Updated" Style="white-space:nowrap">@(context.Id == Guid.Empty ? "–" : LocalTime.Format(context.UpdatedAt, "yyyy-MM-dd HH:mm"))</MudTd>
             <MudTd DataLabel="Enabled">
                 <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="enabled => SetEnabledAsync(context, enabled)" Color="Color.Primary"
                            Disabled="_saving" aria-label="@($"Enable {context.Name}")" />

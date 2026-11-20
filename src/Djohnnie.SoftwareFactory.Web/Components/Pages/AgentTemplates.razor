@@ -4,6 +4,7 @@
 @inject RepositoryContext Repository
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>Agent templates</PageTitle>
 
@@ -54,7 +55,7 @@
             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Agents.TargetLabel(context.Agent?.Target)</MudChip>
         </MudTd>
         <MudTd DataLabel="Model">@(string.IsNullOrEmpty(context.Agent?.Model) ? "default" : context.Agent.Model)</MudTd>
-        <MudTd DataLabel="Updated">@context.Template.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd DataLabel="Updated">@LocalTime.Format(context.Template.UpdatedAt, "yyyy-MM-dd HH:mm")</MudTd>
         <MudTd Style="text-align:right; white-space:nowrap">
             <MudTooltip Text="@CreateAgentText">
                 <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.AddCircleOutline" Color="Color.Primary"

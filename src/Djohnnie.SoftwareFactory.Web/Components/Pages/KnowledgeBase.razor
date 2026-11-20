@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject RepositoryContext Repository
+@inject BrowserTimeZone LocalTime
 
 @*
     The knowledge base: a library of files. A file is global (every repository sees it, never in a folder) or belongs to
@@ -104,7 +105,7 @@
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Size">@ContentsOf(folder.Id)</MudTd>
-            <MudTd DataLabel="Updated">@folder.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Updated">@LocalTime.Format(folder.UpdatedAt, "yyyy-MM-dd HH:mm")</MudTd>
             <MudTd Style="text-align:right; white-space:nowrap">
                 <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.DriveFileRenameOutline" OnClick="() => EditFolderAsync(folder)"
                                title="Rename or move" aria-label="@($"Rename or move {folder.Name}")" />
@@ -130,7 +131,7 @@
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Size" Style="white-space:nowrap">@KnowledgeFile.FormatSize(file.Size)</MudTd>
-            <MudTd DataLabel="Updated">@file.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Updated">@LocalTime.Format(file.UpdatedAt, "yyyy-MM-dd HH:mm")</MudTd>
             <MudTd Style="text-align:right; white-space:nowrap">
                 <MudIconButton Variant="Variant.Text" Icon="@Icons.Material.Filled.Link" OnClick="() => CopyLinkAsync(file)" Disabled="@string.IsNullOrEmpty(file.Url)"
                                title="Copy link" aria-label="@($"Copy the link to {file.Title}")" />

@@ -3,6 +3,8 @@
 @inject RepositoryContext Repository
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject BrowserTimeZone LocalTime
+@inject IJSRuntime JS
 @using Djohnnie.SoftwareFactory.Contracts.Repositories
 
 <MudThemeProvider Theme="AppTheme.Theme" />
@@ -255,6 +257,8 @@
     {
         Repository.Changed += OnRepositoryChanged;
         Navigation.LocationChanged += OnLocationChanged;
+        // Before any page renders (they wait for _loaded), so every timestamp is in the browser's time zone.
+        await LocalTime.InitializeAsync(JS);
         await Repository.LoadAsync();
         _loaded = true;
 

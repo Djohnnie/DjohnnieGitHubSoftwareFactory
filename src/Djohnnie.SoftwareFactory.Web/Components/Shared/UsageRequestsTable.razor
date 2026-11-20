@@ -1,5 +1,6 @@
 @* The model requests of one internal agent, or of all of them together, newest first, a page at a time. *@
 @inject InternalAgentService Agents
+@inject BrowserTimeZone LocalTime
 
 <MudTable @ref="_table" T="InternalAgentUsage" ServerData="LoadAsync" RowsPerPage="25" Outlined="true" Striped="true" Dense="true" Hover="true"
           Elevation="0" LoadingProgressColor="Color.Primary" aria-label="@Label">
@@ -20,7 +21,7 @@
         <MudTh Style="text-align:right">Total</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="When" Style="white-space:nowrap">@context.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        <MudTd DataLabel="When" Style="white-space:nowrap">@LocalTime.Format(context.OccurredAt, "yyyy-MM-dd HH:mm:ss")</MudTd>
         @if (ShowAgent)
         {
             <MudTd DataLabel="Agent"><MudLink Href="@($"/internal-agents/{context.AgentKey}")" Typo="Typo.body2">@context.AgentName</MudLink></MudTd>

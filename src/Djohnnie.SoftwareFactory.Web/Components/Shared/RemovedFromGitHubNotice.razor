@@ -1,10 +1,11 @@
 @inject RepositoryContext Repository
+@inject BrowserTimeZone LocalTime
 
 @* Explains, on every page of a repository that the sync found removed from GitHub, why everything that needs GitHub is disabled. *@
 @if (Repository.IsRemovedFromGitHub && Repository.Current is { } repository)
 {
     <MudAlert Variant="Variant.Outlined" Severity="Severity.Warning" Icon="@Icons.Material.Filled.Inventory2" Class="@Class" role="status">
-        <b>@repository.FullName was removed from GitHub</b>@(Repository.RemovedFromGitHubAt is { } at ? $" (noticed by the sync on {at.ToLocalTime():yyyy-MM-dd HH:mm})" : null).
+        <b>@repository.FullName was removed from GitHub</b>@(Repository.RemovedFromGitHubAt is { } at ? $" (noticed by the sync on {LocalTime.ToLocal(at):yyyy-MM-dd HH:mm})" : null).
         @if (RequiresGitHub)
         {
             @: This page only works with GitHub, so it isn't available. Everything DGHSF stored, like the work items, mindmaps and chats, can still be opened.

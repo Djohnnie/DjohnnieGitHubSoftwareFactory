@@ -1,5 +1,6 @@
 @page "/"
 @inject RepositoryContext Repository
+@inject BrowserTimeZone LocalTime
 
 <PageTitle>DGHSF</PageTitle>
 
@@ -46,7 +47,7 @@
         }
         @if (repo.PushedAt is { } pushedAt)
         {
-            <MudChip Variant="Variant.Text" T="string" Color="Color.Secondary" Icon="@Icons.Material.Filled.Schedule">Last push @pushedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudChip>
+            <MudChip Variant="Variant.Text" T="string" Color="Color.Secondary" Icon="@Icons.Material.Filled.Schedule">Last push @LocalTime.Format(pushedAt, "yyyy-MM-dd HH:mm")</MudChip>
         }
         @if (!Repository.IsRemovedFromGitHub)
         {
