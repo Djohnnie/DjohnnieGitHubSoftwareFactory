@@ -91,29 +91,61 @@ public static partial class AgentRunPrompt
 
         prompt.Append("\n---\n\nThe issue that the pull request implements:\n\n");
         AppendIssue(prompt, item, ancestors);
-        AppendScreenshots(prompt, screenshots, "DGHSF's comment about this revision");
+        AppendScreenshots(prompt, screenshots, "DGHSF's comment about this revision", revision: true);
         return prompt.ToString();
     }
 
-    /// <summary>Asks for screenshots of the user interface the agent changed, which the worker shows in <paramref name="where"/>.</summary>
-    private static void AppendScreenshots(StringBuilder prompt, string? directory, string where)
+    /// <summary>
+    /// Asks for screenshots of the user interface the agent changed, which the worker shows in <paramref name="where"/>. In a
+    /// revision the agent only takes new ones when the feedback changed what the screens look like.
+    /// </summary>
+    private static void AppendScreenshots(StringBuilder prompt, string? directory, string where, bool revision = false)
     {
         if (directory is null)
         {
             return;
         }
         prompt.Append("\n## Screenshots\n\n");
-        prompt.Append(CultureInfo.InvariantCulture,
-            $"If your change affects a user interface (web pages, components, a desktop or mobile app), show the reviewers what it looks like in {where}. ");
-        prompt.Append("When you're done and the tests pass, start the app in the background (with development or test settings and seed data: ");
-        prompt.Append("no secrets are available), open the screens you changed in a headless browser and take a screenshot of each. ");
-        prompt.Append("Chromium and Playwright are installed: use `playwright screenshot --wait-for-timeout=2000 <url> <file>`, or a Node.js script with ");
-        prompt.Append("`require('playwright')` to sign in, click or fill in a form first. Keep to the screens and states that matter (at most ");
+        if (revision)
+        {
+            prompt.Append("The pull request already shows screenshots of the earlier work. Decide from the feedback whether new ones help the reviewers: ");
+            prompt.Append("take them when your changes for this revision alter what a screen looks like or how it behaves (layout, styling, texts, ");
+            prompt.Append("fields, states, a new or different page), or when the feedback asks for screenshots or questions what a screen looks like. ");
+            prompt.Append(CultureInfo.InvariantCulture, $"Then show the affected screens as they are now in {where}, and only those. ");
+            prompt.Append("Take none when the feedback only touches code the user doesn't see (refactoring, tests, the back end without a visible ");
+            prompt.Append("effect, naming, comments) or when you only answered a question, and don't retake screens that didn't change.\n\n");
+        }
+        else
+        {
+            prompt.Append(CultureInfo.InvariantCulture,
+                $"If your change affects a user interface (web pages, components, a desktop or mobile app), show the reviewers what it looks like in {where}. ");
+            prompt.Append("Take none when nothing visible changed.\n\n");
+        }
+
+        prompt.Append("A useful screenshot shows the real use case: the right page, signed in as a user who may see it, with realistic data ");
+        prompt.Append("in it, in the state the change is about (filled in, with a validation error, an empty list, a dialog open). An empty page, a ");
+        prompt.Append("login screen or an error page shows nothing. No secrets or external services are available, so set the app up for it:\n\n");
+        prompt.Append("- **Run it locally.** Start the app in the background with development or test settings and local or in-memory ");
+        prompt.Append("dependencies (e.g. SQLite, an in-memory database, a database container the repository already describes, fakes of external APIs).\n");
+        prompt.Append("- **Data.** Reuse the seed data, fixtures, test builders or factories the repository has. When they are missing or don't ");
+        prompt.Append("cover the screen, add test data that does: a few believable records, not `test1`/`foo`, enough to show lists, paging or ");
+        prompt.Append("totals when those matter.\n");
+        prompt.Append("- **Signing in.** Use the test users or development sign-in the repository has. Without one, add a test user to the ");
+        prompt.Append("seed data, or a sign-in that only exists in the development or test environment (e.g. a fake authentication handler), ");
+        prompt.Append("so the screenshots don't depend on a real identity provider.\n");
+        prompt.Append("- **Getting there.** Chromium and Playwright are installed. Use `playwright screenshot --wait-for-timeout=2000 <url> <file>` ");
+        prompt.Append("for a page that needs no interaction; otherwise write a Node.js script with `require('playwright')` that signs in, navigates ");
+        prompt.Append("to the page, waits until the data has loaded and puts it in the right state (click, fill in, open) before each screenshot.\n\n");
+        prompt.Append("Whatever you add for this (seed data, test users, development-only sign-in, the Playwright script) is a reusable ");
+        prompt.Append("abstraction for future screenshots and UI tests, so commit it with your changes: keep it small, put it where the ");
+        prompt.Append("repository keeps its test and development tooling, follow its conventions, and extend what an earlier run added instead ");
+        prompt.Append("of starting over. It must only be active in development or test environments and never change how the app behaves in ");
+        prompt.Append("production. Mention it in your summary.\n\n");
+        prompt.Append("When you're done and the tests pass, take the screenshots: keep to the screens and states that matter (at most ");
         prompt.Append(CultureInfo.InvariantCulture, $"{UiScreenshots.MaxScreenshots}), at viewport size unless the whole page matters. ");
         prompt.Append(CultureInfo.InvariantCulture, $"Save them in `{directory}`, the one place outside the working directory you may write to, ");
         prompt.Append(CultureInfo.InvariantCulture, $"call the `{UiScreenshots.ToolName}` tool for each, and stop the app afterwards.\n\n");
-        prompt.Append("If nothing visible changed, or the app can't be started here, take no screenshots and say why in one sentence of your summary. ");
-        prompt.Append("Don't change the app's code or settings only to take screenshots.\n");
+        prompt.Append("If you take no screenshots, or the app can't be started here even with the above, say why in one sentence of your summary.\n");
     }
 
     private static void AppendIssue(StringBuilder prompt, WorkItem item, IReadOnlyList<WorkItem> ancestors)

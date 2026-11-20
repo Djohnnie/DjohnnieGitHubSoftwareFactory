@@ -654,6 +654,29 @@ public class AgentRunTests
     }
 
     [Fact]
+    public void Prompt_Screenshots_AskForARealisticSetup_AndInARevisionDependOnTheFeedback()
+    {
+        var item = new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Task, Title = "Add the orders page", Description = "A page.", IssueNumber = 42 };
+        var discussion = new PullRequestDiscussion([], []);
+
+        var initial = AgentRunPrompt.Build(item, [], "dghsf/42", "main", "/work/screenshots");
+        Assert.Contains("show the reviewers what it looks like in the pull request", initial);
+        Assert.Contains("signed in as a user who may see it, with realistic data", initial);
+        Assert.Contains("only be active in development or test environments", initial);
+        Assert.DoesNotContain("Decide from the feedback", initial);
+        Assert.DoesNotContain("Don't change the app's code or settings only to take screenshots", initial);
+
+        var revision = AgentRunPrompt.BuildRevision(item, [], 7, "Add the orders page", "dghsf/42", "main", discussion, GitMergeResult.UpToDate,
+            "/work/screenshots");
+        Assert.Contains("Decide from the feedback whether new ones help the reviewers", revision);
+        Assert.Contains("in DGHSF's comment about this revision, and only those", revision);
+        Assert.Contains("extend what an earlier run added", revision);
+
+        Assert.DoesNotContain("## Screenshots", AgentRunPrompt.BuildRevision(item, [], 7, "Add the orders page", "dghsf/42", "main", discussion,
+            GitMergeResult.UpToDate));
+    }
+
+    [Fact]
     public void TheAgentsEnvironment_LeavesOutTheWorkersSecrets()
     {
         var environment = AgentEnvironment.Sanitized(new System.Collections.Hashtable
