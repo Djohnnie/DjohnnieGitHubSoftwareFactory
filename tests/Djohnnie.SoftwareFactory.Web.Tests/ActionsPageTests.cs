@@ -139,15 +139,15 @@ public class ActionsPageTests : BunitContext
     }
 
     [Fact]
-    public async Task OverviewPage_ShowsTheWorkflowRunsJustAboveThePullRequests()
+    public async Task OverviewPage_ShowsTheWorkflowRunsAtTheBottom()
     {
         await SelectRepositoryAsync();
 
         var cut = Render<Home>();
 
         var sections = cut.FindAll("section[aria-labelledby]").Select(s => s.GetAttribute("aria-labelledby")).ToList();
-        Assert.Equal(sections.IndexOf("copilot-sessions-title") - 1, sections.IndexOf("workflow-runs-title"));
-        Assert.True(sections.IndexOf("workflow-runs-title") >= 0);
+        Assert.Contains("copilot-sessions-title", sections);
+        Assert.Equal("workflow-runs-title", sections[^1]);
     }
 
     [Theory]

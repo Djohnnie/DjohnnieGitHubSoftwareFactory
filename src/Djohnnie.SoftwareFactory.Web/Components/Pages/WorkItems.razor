@@ -82,7 +82,7 @@
         <MudTd DataLabel="@_type.DisplayName">
             <MudLink Href="@WorkItemRoutes.ItemPath(context.Type, context.Id)" Typo="Typo.body1"><b>@context.Title</b></MudLink>
         </MudTd>
-        <MudTd DataLabel="Status"><WorkItemStatusChip Status="context.Status" /></MudTd>
+        <MudTd DataLabel="Status"><WorkItemStatusChip Status="context.Status" Executor="context.Executor" /></MudTd>
         <MudTd DataLabel="Issue">
             @if (context.IssueNumber is { } number)
             {

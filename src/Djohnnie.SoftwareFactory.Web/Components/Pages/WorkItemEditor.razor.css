@@ -1,4 +1,4 @@
-/* The pull request's branch next to the heading, with a button to copy its name. */
+/* The pull request's branch below the heading, with a button to copy its name. */
 .pr-branch {
     display: inline-flex;
     align-items: center;

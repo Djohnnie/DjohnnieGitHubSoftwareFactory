@@ -4,8 +4,8 @@
 {
     <span style="white-space:nowrap">
         <MudTooltip Text="@DescriptionOf(Item.Progress)">
-            <MudChip T="string" Size="Size.Small" Color="@ColorOf(Item.Progress)" Variant="Variant.Outlined" Icon="@IconOf(Item.Progress)"
-                     Href="@(Repository.IsRemovedFromGitHub ? null : Item.AgentRunUrl ?? Item.PullRequestUrl)" Target="_blank">@LabelOf(Item.Progress)</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@ColorOf(Item.Progress)" Variant="Variant.Outlined" Icon="@IconOf(Item.Progress, Item.Executor)"
+                     Href="@(Repository.IsRemovedFromGitHub ? null : Item.AgentRunUrl ?? Item.PullRequestUrl)" Target="_blank">@LabelOf(Item.Progress, Item.Executor)</MudChip>
         </MudTooltip>
         @if (Item.PullRequestNumber is { } number)
         {
@@ -22,13 +22,15 @@
 @code {
     [Parameter, EditorRequired] public WorkItem Item { get; set; } = null!;
 
-    public static string LabelOf(CopilotProgress progress)
+    /// <summary>The agent's state; a working or stopped agent is named (the DGHSF agent worker or Copilot).</summary>
+    public static string LabelOf(CopilotProgress progress, AgentExecutor executor)
     {
+        var agent = executor == AgentExecutor.DghsfWorker ? "Agent" : "Copilot";
         return progress switch
         {
             CopilotProgress.Queued => "Queued",
-            CopilotProgress.Working => "Copilot working",
-            CopilotProgress.Stopped => "Copilot stopped",
+            CopilotProgress.Working => $"{agent} working",
+            CopilotProgress.Stopped => $"{agent} stopped",
             CopilotProgress.ReadyForReview => "Ready for review",
             CopilotProgress.ChangesRequested => "Changes requested",
             CopilotProgress.Approved => "Approved",
@@ -54,7 +56,7 @@
         };
     }
 
-    private static Color ColorOf(CopilotProgress progress)
+    public static Color ColorOf(CopilotProgress progress)
     {
         return progress switch
         {
@@ -66,12 +68,13 @@
         };
     }
 
-    private static string IconOf(CopilotProgress progress)
+    /// <summary>A working agent shows its own icon (see <see cref="WorkItemRoutes.Icon(AgentExecutor)"/>).</summary>
+    public static string IconOf(CopilotProgress progress, AgentExecutor executor)
     {
         return progress switch
         {
             CopilotProgress.Queued => Icons.Material.Filled.HourglassEmpty,
-            CopilotProgress.Working => Icons.Material.Filled.SmartToy,
+            CopilotProgress.Working => WorkItemRoutes.Icon(executor),
             CopilotProgress.Stopped => Icons.Material.Filled.ErrorOutline,
             CopilotProgress.ReadyForReview => Icons.Material.Filled.RateReview,
             CopilotProgress.ChangesRequested => Icons.Material.Filled.Edit,
@@ -92,7 +95,7 @@
         };
     }
 
-    private static string ChecksIconOf(PullRequestChecks checks)
+    public static string ChecksIconOf(PullRequestChecks checks)
     {
         return checks switch
         {
@@ -102,7 +105,7 @@
         };
     }
 
-    private static Color ChecksColorOf(PullRequestChecks checks)
+    public static Color ChecksColorOf(PullRequestChecks checks)
     {
         return checks switch
         {

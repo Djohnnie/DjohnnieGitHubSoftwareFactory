@@ -431,6 +431,11 @@ h1:focus {
     column-gap: 1rem;
 }
 
+/* The refresh button sits on the middle of the title line, like the colored bar, instead of on the text's baseline. */
+.usage-infographic-header > .mud-icon-button {
+    align-self: center;
+}
+
 /* A colored bar in front of every section title. */
 .usage-infographic-header::before {
     content: "";

@@ -56,21 +56,62 @@ public class CopilotSessionsInfographicTests : BunitContext
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("tbody tr")));
         Assert.Equal("3", Stat(cut, "Open pull requests"));
         Assert.Contains("1 draft", cut.Markup);
-        Assert.Equal("2", Stat(cut, "Opened by Copilot"));
+        Assert.Equal("2", Stat(cut, "Opened by Copilot agent"));
+        Assert.Equal("0", Stat(cut, "Opened by DGHSF agent"));
         // The CI run on 'readme' isn't Copilot's; the session on 'copilot/new-thing' has no pull request yet.
-        Assert.Equal("2", Stat(cut, "Copilot sessions running"));
+        Assert.Equal("2", Stat(cut, "Copilot agent running"));
+        Assert.Equal("0", Stat(cut, "DGHSF agent running"));
         Assert.Contains("1 queued", cut.Markup);
+        Assert.Contains("Pull requests &amp; Agent sessions", cut.Markup);
 
         var rows = cut.FindAll("tbody tr");
         Assert.Equal(3, rows.Count);
         Assert.Contains("Running for 42 min", rows[0].TextContent);
         Assert.Contains("Fix the login bug", rows[0].TextContent);
+        Assert.Contains("Copilot agent", rows[0].TextContent);
+        Assert.Contains("Copilot working", rows[0].TextContent);
         Assert.Contains(bug.Title, rows[0].TextContent);
         Assert.NotNull(rows[0].QuerySelector($"a[href='/bugs/{bug.Id}']"));
         Assert.Contains("Queued", rows[1].TextContent);
+        Assert.Contains("Copilot agent", rows[1].TextContent);
+        Assert.Contains("Open", rows[1].TextContent);
+        // A person opened the readme pull request: no agent and no session.
+        Assert.DoesNotContain("agent", rows[2].TextContent);
         Assert.Contains("—", rows[2].TextContent);
-        Assert.Contains("Sessions without an open pull request", cut.Markup);
+        Assert.Contains("Copilot sessions without an open pull request", cut.Markup);
         Assert.Contains("copilot/new-thing", cut.Markup);
+    }
+
+    [Fact]
+    public async Task Overview_TellsTheDghsfAgentWorkersPullRequestsAndRunsApartFromCopilots()
+    {
+        var bug = await SeedBugWithPullRequestAsync(12);
+        var task = await SeedBugWithPullRequestAsync(14, WorkItemType.Task, "Upgrade .NET");
+        var runs = Services.GetRequiredService<IAgentRunStore>();
+        // A revision run on the worker's pull request #12, and a first run on an item without a pull request yet.
+        await runs.CreateRevisionAsync(Repo, bug.Id, null, 1, "dghsf/login", 12, $"https://github.com/{Repo}/pull/12", _cancellationToken);
+        var crash = await Services.GetRequiredService<IWorkItemStore>().SaveAsync(
+            new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Bug, Title = "The app crashes on start" }, _cancellationToken);
+        await runs.CreateAsync(Repo, crash.Id, null, 1, _cancellationToken);
+        _gitHub.PullRequests.Add(PullRequest(12, "Fix the login bug", "Djohnnie", "User", draft: false, branch: "dghsf/login", updated: Now));
+        _gitHub.PullRequests.Add(PullRequest(14, "Upgrade .NET", "Copilot", "Bot", draft: false, branch: "copilot/upgrade", updated: Now.AddHours(-1)));
+
+        var cut = Render<CopilotSessionsInfographic>(p => p.Add(x => x.Repository, Repository()));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tbody tr").Count));
+        Assert.Equal("1", Stat(cut, "Opened by DGHSF agent"));
+        Assert.Equal("1", Stat(cut, "Opened by Copilot agent"));
+        Assert.Equal("0", Stat(cut, "DGHSF agent running"));
+        Assert.Contains("2 queued", cut.Markup);
+
+        var rows = cut.FindAll("tbody tr");
+        Assert.Contains("DGHSF agent", rows[0].TextContent);
+        Assert.Contains("Agent working", rows[0].TextContent);
+        Assert.Contains("Queued", rows[0].TextContent);
+        Assert.Contains("Copilot agent", rows[1].TextContent);
+        Assert.Contains(task.Title, rows[1].TextContent);
+        Assert.Contains("DGHSF agent runs without an open pull request", cut.Markup);
+        Assert.NotNull(cut.Find($"a[href='/bugs/{crash.Id}']"));
     }
 
     [Fact]
@@ -82,7 +123,7 @@ public class CopilotSessionsInfographicTests : BunitContext
         var cut = Render<CopilotSessionsInfographic>(p => p.Add(x => x.Repository, Repository()));
 
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("tbody tr")));
-        Assert.Equal("?", Stat(cut, "Copilot sessions running"));
+        Assert.Equal("?", Stat(cut, "Copilot agent running"));
         Assert.Contains("needs access to Actions", cut.Markup);
     }
 
@@ -109,18 +150,20 @@ public class CopilotSessionsInfographicTests : BunitContext
         Assert.Equal(2, _gitHub.PullRequestListings);
     }
 
-    private async Task<WorkItem> SeedBugWithPullRequestAsync(int pullRequestNumber)
+    private async Task<WorkItem> SeedBugWithPullRequestAsync(int pullRequestNumber, WorkItemType type = WorkItemType.Bug, string title = "Login fails")
     {
         var store = Services.GetRequiredService<IWorkItemStore>();
-        var bug = await store.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = WorkItemType.Bug, Title = "Login fails" }, _cancellationToken);
-        await store.MarkAcceptedAsync(Repo, bug.Id, 1, 1, "https://example.com/1", _cancellationToken);
-        return await store.ApplyIssueAsync(Repo, bug.Id, new WorkItemIssueSnapshot(1, "https://example.com/1", "Login fails", string.Empty, false, true,
+        var item = await store.SaveAsync(new WorkItem { RepositoryFullName = Repo, Type = type, Title = title }, _cancellationToken);
+        await store.MarkAcceptedAsync(Repo, item.Id, pullRequestNumber, pullRequestNumber, $"https://example.com/{pullRequestNumber}", _cancellationToken);
+        return await store.ApplyIssueAsync(Repo, item.Id, new WorkItemIssueSnapshot(pullRequestNumber, $"https://example.com/{pullRequestNumber}", title, string.Empty, false, true,
             new WorkItemProgressSnapshot(CopilotProgress.Working, pullRequestNumber, $"https://github.com/{Repo}/pull/{pullRequestNumber}")), _cancellationToken);
     }
 
+    /// <summary>The number in the stat box (or, in a box split per agent, in the half) with the label.</summary>
     private static string Stat(IRenderedComponent<CopilotSessionsInfographic> cut, string label)
     {
-        var stat = cut.FindAll(".infographic-stat").Single(s => s.TextContent.Contains(label));
+        var stat = cut.FindAll(".infographic-part").SingleOrDefault(s => s.TextContent.Contains(label))
+            ?? cut.FindAll(".infographic-stat").Single(s => s.QuerySelector(".infographic-part") is null && s.TextContent.Contains(label));
         return stat.QuerySelectorAll("h6").Single().TextContent.Trim();
     }
 

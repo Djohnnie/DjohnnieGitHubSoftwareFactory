@@ -1,16 +1,19 @@
-@if (Status == WorkItemStatus.Generated)
+@if (TooltipOf(Status, Executor) is { } tooltip)
 {
-    <MudTooltip Text="A draft the background agents generated from the repository. Review it like any draft before accepting it." Inline="true">
-        <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status)">@LabelOf(Status)</MudChip>
+    <MudTooltip Text="@tooltip" Inline="true">
+        <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status, Executor)">@LabelOf(Status)</MudChip>
     </MudTooltip>
 }
 else
 {
-    <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status)">@LabelOf(Status)</MudChip>
+    <MudChip T="string" Size="Size.Small" Color="@ColorOf(Status)" Variant="Variant.Outlined" Icon="@IconOf(Status, Executor)">@LabelOf(Status)</MudChip>
 }
 
 @code {
     [Parameter] public WorkItemStatus Status { get; set; }
+
+    /// <summary>The agent the item runs on: an item in progress shows that agent's icon.</summary>
+    [Parameter] public AgentExecutor Executor { get; set; } = AgentExecutor.DghsfWorker;
 
     /// <summary>The statuses in the order of a work item's life, for filters.</summary>
     public static IReadOnlyList<WorkItemStatus> Ordered { get; } =
@@ -29,6 +32,16 @@ else
         };
     }
 
+    private static string? TooltipOf(WorkItemStatus status, AgentExecutor executor)
+    {
+        return status switch
+        {
+            WorkItemStatus.Generated => "A draft the background agents generated from the repository. Review it like any draft before accepting it.",
+            WorkItemStatus.InProgress => $"The {executor.DisplayName} works on it.",
+            _ => null
+        };
+    }
+
     private static Color ColorOf(WorkItemStatus status)
     {
         return status switch
@@ -41,13 +54,14 @@ else
         };
     }
 
-    private static string IconOf(WorkItemStatus status)
+    /// <summary>An item in progress shows the icon of the agent that works on it (see <see cref="WorkItemRoutes.Icon(AgentExecutor)"/>).</summary>
+    public static string IconOf(WorkItemStatus status, AgentExecutor executor)
     {
         return status switch
         {
             WorkItemStatus.Generated => Icons.Material.Filled.AutoAwesome,
             WorkItemStatus.Accepted => Icons.Material.Filled.TaskAlt,
-            WorkItemStatus.InProgress => Icons.Material.Filled.SmartToy,
+            WorkItemStatus.InProgress => WorkItemRoutes.Icon(executor),
             WorkItemStatus.Done => Icons.Material.Filled.Done,
             _ => Icons.Material.Filled.EditNote
         };

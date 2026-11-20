@@ -58,9 +58,9 @@
     <RepositoryInfographic RepositoryFullName="@repo.FullName" GitHubAvailable="@(!Repository.IsRemovedFromGitHub)" />
     @if (!Repository.IsRemovedFromGitHub)
     {
-        <WorkflowRunsInfographic Repository="@repo" />
         <CopilotSessionsInfographic Repository="@repo" />
         <CopilotActivityInfographic Repository="@repo" />
         <CopilotBillingInfographic Repository="@repo" />
+        <WorkflowRunsInfographic Repository="@repo" />
     }
 }

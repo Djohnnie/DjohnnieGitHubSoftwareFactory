@@ -31,6 +31,11 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h4">@Heading</MudText>
     <WorkItemTypeChip Type="_type" />
+    @if (!_loading && _item is not null)
+    {
+        @* Follows _item, which every action on the page replaces with the stored item. *@
+        <WorkItemStatusChip Status="_item.Status" Executor="_item.Executor" />
+    }
     @foreach (var link in _linkedIdeas)
     {
         @* The mindmap ideas this item is linked to; each opens the map with the idea selected. *@
@@ -40,9 +45,12 @@
             @link.MindmapTitle › @link.IdeaText
         </MudChip>
     }
-    @if (!_loading && _item?.PullRequestBranch is { } branch)
-    {
-        @* Copilot's branch, to check the pull request out locally. *@
+</MudStack>
+
+@if (!_loading && _item?.PullRequestBranch is { } branch)
+{
+    @* The agent's branch, on its own line below the heading, to check the pull request out locally. *@
+    <div class="mb-2">
         <span class="pr-branch">
             <MudIcon Icon="@Icons.Material.Filled.AltRoute" Size="Size.Small" />
             <GitHubLink Href="@BranchUrl(branch)" Class="pr-branch-name" Title="Open the branch on GitHub">@branch</GitHubLink>
@@ -51,8 +59,8 @@
                                OnClick="() => CopyBranchAsync(branch)" />
             </MudTooltip>
         </span>
-    }
-</MudStack>
+    </div>
+}
 
 @if (!_loading && _item is not null)
 {
@@ -263,7 +271,7 @@ else if (_item is not null)
                 <MudStack Spacing="4" Class="sticky-side">
                     <MudPaper Class="pa-4" Outlined="true" Elevation="0">
                         <MudText Typo="Typo.h6" GutterBottom="true">Status</MudText>
-                        <WorkItemStatusChip Status="_item.Status" />
+                        <WorkItemStatusChip Status="_item.Status" Executor="_item.Executor" />
                         @if (_item.IssueNumber is { } number)
                         {
                             <MudText Typo="Typo.body2" Class="mt-2">

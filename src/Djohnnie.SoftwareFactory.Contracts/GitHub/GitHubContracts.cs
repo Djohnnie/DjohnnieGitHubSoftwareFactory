@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Djohnnie.SoftwareFactory.Contracts.WorkItems;
 
 namespace Djohnnie.SoftwareFactory.Contracts.GitHub;
 
@@ -250,22 +251,32 @@ public sealed record GitHubReviewLineComment(
     [property: JsonPropertyName("side")] string Side,
     [property: JsonPropertyName("body")] string Body);
 
-/// <summary>The open pull requests of a repository and the Copilot cloud agent sessions running in it right now.</summary>
-/// <param name="SessionsUnavailable">The token may not read Actions, so the running sessions are unknown (not zero).</param>
-/// <param name="OtherSessions">Running sessions whose branch has no open pull request (yet).</param>
+/// <summary>
+/// The open pull requests of a repository and the agent sessions running in it right now: the Copilot cloud agent's
+/// Actions runs and the DGHSF agent worker's active tasks.
+/// </summary>
+/// <param name="SessionsUnavailable">The token may not read Actions, so the running Copilot sessions are unknown (not zero).</param>
+/// <param name="OtherSessions">Running Copilot sessions whose branch has no open pull request (yet).</param>
+/// <param name="OtherWorkerSessions">Active DGHSF agent worker tasks without an open pull request (yet).</param>
 public sealed record CopilotPullRequestOverview(
     IReadOnlyList<OpenPullRequest> OpenPullRequests,
     IReadOnlyList<CopilotSession> OtherSessions,
+    IReadOnlyList<AgentWorkerSession> OtherWorkerSessions,
     bool SessionsUnavailable,
     DateTimeOffset CheckedAt)
 {
-    public int ByCopilot => OpenPullRequests.Count(p => p.ByCopilot);
+    public int ByCopilot => OpenPullRequests.Count(p => p.Agent == AgentExecutor.CopilotCloudAgent);
+    public int ByWorker => OpenPullRequests.Count(p => p.Agent == AgentExecutor.DghsfWorker);
     public int Drafts => OpenPullRequests.Count(p => p.IsDraft);
     public int RunningSessions => OpenPullRequests.Count(p => p.Session is { IsQueued: false }) + OtherSessions.Count(s => !s.IsQueued);
     public int QueuedSessions => OpenPullRequests.Count(p => p.Session is { IsQueued: true }) + OtherSessions.Count(s => s.IsQueued);
+    public int RunningWorkerSessions => OpenPullRequests.Count(p => p.WorkerSession is { IsQueued: false }) + OtherWorkerSessions.Count(s => !s.IsQueued);
+    public int QueuedWorkerSessions => OpenPullRequests.Count(p => p.WorkerSession is { IsQueued: true }) + OtherWorkerSessions.Count(s => s.IsQueued);
 }
 
+/// <param name="Agent">The agent that works on the pull request, or <c>null</c> when no agent does (e.g. a person opened it).</param>
 /// <param name="Session">Copilot's session on the pull request's branch, when one is running or queued.</param>
+/// <param name="WorkerSession">The DGHSF agent worker's active task on the pull request, when one is running or queued.</param>
 /// <param name="WorkItem">The DGHSF work item whose progress is about this pull request, if any.</param>
 public sealed record OpenPullRequest(
     int Number,
@@ -277,15 +288,27 @@ public sealed record OpenPullRequest(
     string? Branch,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    AgentExecutor? Agent,
     CopilotSession? Session,
+    AgentWorkerSession? WorkerSession,
     OpenPullRequestWorkItem? WorkItem);
 
-/// <summary>A work item linked to an open pull request (a short reference, to link to it).</summary>
-public sealed record OpenPullRequestWorkItem(Guid Id, Djohnnie.SoftwareFactory.Contracts.WorkItems.WorkItemType Type, string Title);
+/// <summary>A work item linked to an open pull request (a short reference, to link to it), with how far its agent got.</summary>
+public sealed record OpenPullRequestWorkItem(
+    Guid Id,
+    WorkItemType Type,
+    string Title,
+    CopilotProgress Progress = CopilotProgress.None,
+    PullRequestChecks Checks = PullRequestChecks.None);
 
 /// <summary>A Copilot cloud agent session: the Actions run it works in.</summary>
 /// <param name="StartedAt">When it started running, or when it was queued.</param>
 public sealed record CopilotSession(long RunId, string Url, bool IsQueued, DateTimeOffset StartedAt, string? Branch);
+
+/// <summary>An active task of the DGHSF agent worker: waiting, queued or running.</summary>
+/// <param name="StartedAt">When its current run started, or when it was created or queued.</param>
+/// <param name="WorkItem">The work item the task implements; <c>null</c> when it was deleted.</param>
+public sealed record AgentWorkerSession(Guid RunId, bool IsQueued, DateTimeOffset StartedAt, string? Branch, OpenPullRequestWorkItem? WorkItem);
 
 /// <summary>A workflow with its most recent run.</summary>
 /// <param name="LatestRun"><c>null</c> when the workflow never ran.</param>

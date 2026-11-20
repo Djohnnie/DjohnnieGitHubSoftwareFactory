@@ -2,10 +2,10 @@
 @inject GitHubService GitHub
 @inject TimeProvider Time
 
-@* The open pull requests and the Copilot cloud agent sessions running right now, read live from GitHub. *@
+@* The open pull requests and the agent sessions running right now: the Copilot cloud agent's, read live from GitHub, and the DGHSF agent worker's. *@
 <section class="usage-infographic mb-6" aria-labelledby="copilot-sessions-title">
     <div class="usage-infographic-header">
-        <MudText Typo="Typo.h6" id="copilot-sessions-title">Pull requests &amp; Copilot sessions</MudText>
+        <MudText Typo="Typo.h6" id="copilot-sessions-title">Pull requests &amp; Agent sessions</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary">
             @(_overview is { } checkedOverview ? $"Right now · checked {checkedOverview.CheckedAt.ToLocalTime():HH:mm}" : "Right now")
         </MudText>
@@ -25,20 +25,26 @@
     }
     else
     {
+        var open = overview.OpenPullRequests.Count;
         <div class="usage-infographic-stats">
-            @Stat(Icons.Material.Filled.CallSplit, "Open pull requests", overview.OpenPullRequests.Count.ToString("#,0", CultureInfo.InvariantCulture),
+            @Stat(Icons.Material.Filled.CallSplit, "Open pull requests", Number(open),
                   overview.Drafts == 0 ? null : $"{overview.Drafts} {(overview.Drafts == 1 ? "draft" : "drafts")}")
-            @Stat(Icons.Material.Filled.SmartToy, "Opened by Copilot", overview.ByCopilot.ToString("#,0", CultureInfo.InvariantCulture),
-                  $"of {overview.OpenPullRequests.Count} open")
-            @Stat(Icons.Material.Filled.PlayCircle, "Copilot sessions running", overview.SessionsUnavailable ? "?" : overview.RunningSessions.ToString("#,0", CultureInfo.InvariantCulture),
-                  overview.SessionsUnavailable ? "needs access to Actions" : overview.QueuedSessions == 0 ? null : $"{overview.QueuedSessions} queued")
+            @SplitStat(Icons.Material.Filled.CallMerge,
+                       new StatPart(AgentExecutor.DghsfWorker, "Opened by DGHSF agent", Number(overview.ByWorker), $"of {open} open"),
+                       new StatPart(AgentExecutor.CopilotCloudAgent, "Opened by Copilot agent", Number(overview.ByCopilot), $"of {open} open"))
+            @SplitStat(Icons.Material.Filled.PlayCircle,
+                       new StatPart(AgentExecutor.DghsfWorker, "DGHSF agent running", Number(overview.RunningWorkerSessions),
+                                    overview.QueuedWorkerSessions == 0 ? null : $"{overview.QueuedWorkerSessions} queued"),
+                       new StatPart(AgentExecutor.CopilotCloudAgent, "Copilot agent running",
+                                    overview.SessionsUnavailable ? "?" : Number(overview.RunningSessions),
+                                    overview.SessionsUnavailable ? "needs access to Actions" : overview.QueuedSessions == 0 ? null : $"{overview.QueuedSessions} queued"))
         </div>
 
         <MudPaper Outlined="true" Elevation="0" Class="usage-infographic-panel">
             <div class="usage-infographic-panel-header">
                 <MudText Typo="Typo.subtitle2">Open pull requests</MudText>
             </div>
-            @if (overview.OpenPullRequests.Count == 0)
+            @if (open == 0)
             {
                 <MudText Typo="Typo.body2" Color="Color.Secondary">There are no open pull requests.</MudText>
             }
@@ -50,7 +56,9 @@
                             <tr>
                                 <th scope="col">Pull request</th>
                                 <th scope="col">Author</th>
-                                <th scope="col">Copilot session</th>
+                                <th scope="col">Agent</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Agent session</th>
                                 <th scope="col">Work item</th>
                                 <th scope="col" class="infographic-number">Updated</th>
                             </tr>
@@ -62,25 +70,24 @@
                                     <th scope="row" class="sessions-title">
                                         <MudLink Href="@pullRequest.Url" Target="_blank">#@pullRequest.Number</MudLink>
                                         @pullRequest.Title
-                                        @if (pullRequest.IsDraft)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">Draft</MudChip>
-                                        }
                                     </th>
+                                    <td>@(pullRequest.AuthorLogin ?? "unknown")</td>
+                                    <td>@Agent(pullRequest.Agent)</td>
+                                    <td>@Status(pullRequest)</td>
                                     <td>
-                                        @if (pullRequest.ByCopilot)
+                                        @if (pullRequest.WorkerSession is { } workerSession)
                                         {
-                                            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Style="vertical-align:text-bottom" />
+                                            @WorkerSession(workerSession)
                                         }
-                                        @(pullRequest.AuthorLogin ?? "unknown")
+                                        else
+                                        {
+                                            @Session(pullRequest.Session)
+                                        }
                                     </td>
-                                    <td>@Session(pullRequest.Session)</td>
                                     <td>
                                         @if (pullRequest.WorkItem is { } item)
                                         {
-                                            <MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)" title="@item.Type.DisplayName">
-                                                <MudIcon Icon="@WorkItemRoutes.Icon(item.Type)" Size="Size.Small" Style="vertical-align:text-bottom" /> @item.Title
-                                            </MudLink>
+                                            @WorkItemLink(item)
                                         }
                                     </td>
                                     <td class="infographic-number"><TimeAgo At="pullRequest.UpdatedAt" /></td>
@@ -91,9 +98,24 @@
                 </div>
             }
 
+            @if (overview.OtherWorkerSessions.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-3">DGHSF agent runs without an open pull request</MudText>
+                @foreach (var session in overview.OtherWorkerSessions)
+                {
+                    <MudText Typo="Typo.body2">
+                        @WorkerSession(session)
+                        @if (session.WorkItem is { } item)
+                        {
+                            <span class="ml-2">@WorkItemLink(item)</span>
+                        }
+                    </MudText>
+                }
+            }
+
             @if (overview.OtherSessions.Count > 0)
             {
-                <MudText Typo="Typo.subtitle2" Class="mt-3">Sessions without an open pull request</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mt-3">Copilot sessions without an open pull request</MudText>
                 @foreach (var session in overview.OtherSessions)
                 {
                     <MudText Typo="Typo.body2">
@@ -112,6 +134,9 @@
     private bool _loading = true;
     private CopilotPullRequestOverview? _overview;
     private string? _error;
+
+    /// <summary>One half of a split stat box: the count for one agent.</summary>
+    private sealed record StatPart(AgentExecutor Agent, string Label, string Value, string? Detail);
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,6 +160,64 @@
         _loading = false;
     }
 
+    private static string Number(int value)
+    {
+        return value.ToString("#,0", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The agent's icon and name, or a dash for a pull request no agent works on (e.g. one a person opened).</summary>
+    private static RenderFragment Agent(AgentExecutor? agent)
+    {
+        if (agent is not { } executor)
+        {
+            return @<span class="sessions-idle">—</span>;
+        }
+        return @<span class="sessions-agent" title="@executor.DisplayName">
+            <MudIcon Icon="@WorkItemRoutes.Icon(executor)" Size="Size.Small" Style="vertical-align:text-bottom" />
+            @AgentName(executor)
+        </span>;
+    }
+
+    private static string AgentName(AgentExecutor executor)
+    {
+        return executor == AgentExecutor.DghsfWorker ? "DGHSF agent" : "Copilot agent";
+    }
+
+    /// <summary>
+    /// How far the agent got, from the work item whose progress is about the pull request (as of the item's last refresh);
+    /// without one, whether the pull request is a draft.
+    /// </summary>
+    private static RenderFragment Status(OpenPullRequest pullRequest)
+    {
+        if (pullRequest.WorkItem is { Progress: not CopilotProgress.None } item)
+        {
+            var executor = pullRequest.Agent ?? AgentExecutor.DghsfWorker;
+            return @<span class="sessions-agent">
+                <MudTooltip Text="@CopilotProgressChip.DescriptionOf(item.Progress)">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@CopilotProgressChip.ColorOf(item.Progress)"
+                             Icon="@CopilotProgressChip.IconOf(item.Progress, executor)">@CopilotProgressChip.LabelOf(item.Progress, executor)</MudChip>
+                </MudTooltip>
+                @if (item.Checks != PullRequestChecks.None)
+                {
+                    <MudIcon Icon="@CopilotProgressChip.ChecksIconOf(item.Checks)" Color="@CopilotProgressChip.ChecksColorOf(item.Checks)" Size="Size.Small"
+                             Style="vertical-align:text-bottom" title="@CopilotProgressChip.ChecksLabelOf(item.Checks)" />
+                }
+            </span>;
+        }
+        if (pullRequest.IsDraft)
+        {
+            return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.EditNote">Draft</MudChip>;
+        }
+        return @<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Icon="@Icons.Material.Filled.CallSplit">Open</MudChip>;
+    }
+
+    private static RenderFragment WorkItemLink(OpenPullRequestWorkItem item)
+    {
+        return @<MudLink Href="@WorkItemRoutes.ItemPath(item.Type, item.Id)" title="@item.Type.DisplayName">
+            <MudIcon Icon="@WorkItemRoutes.Icon(item.Type)" Size="Size.Small" Style="vertical-align:text-bottom" /> @item.Title
+        </MudLink>;
+    }
+
     private RenderFragment Session(CopilotSession? session)
     {
         if (session is null)
@@ -142,17 +225,29 @@
             return @<span class="sessions-idle">—</span>;
         }
         return @<MudLink Href="@session.Url" Target="_blank" title="Open the session log">
-            @if (session.IsQueued)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Style="vertical-align:text-bottom" />
-                <span> Queued <TimeAgo At="session.StartedAt" /></span>
-            }
-            else
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Warning" Style="width:14px;height:14px;vertical-align:middle" />
-                <span> Running for @Duration(session.StartedAt)</span>
-            }
+            @SessionState(session.IsQueued, session.StartedAt)
         </MudLink>;
+    }
+
+    /// <summary>A run of the DGHSF agent worker; its details are on the work item's page.</summary>
+    private RenderFragment WorkerSession(AgentWorkerSession session)
+    {
+        return @<span title="A run of the DGHSF agent worker">@SessionState(session.IsQueued, session.StartedAt)</span>;
+    }
+
+    private RenderFragment SessionState(bool isQueued, DateTimeOffset startedAt)
+    {
+        if (isQueued)
+        {
+            return @<span>
+                <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Style="vertical-align:text-bottom" />
+                <span> Queued <TimeAgo At="startedAt" /></span>
+            </span>;
+        }
+        return @<span>
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Warning" Style="width:14px;height:14px;vertical-align:middle" />
+            <span> Running for @Duration(startedAt)</span>
+        </span>;
     }
 
     private static RenderFragment Stat(string icon, string label, string value, string? detail)
@@ -165,6 +260,29 @@
                 @if (detail is not null)
                 {
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@detail</MudText>
+                }
+            </div>
+        </MudPaper>;
+    }
+
+    /// <summary>A box with the count of each agent side by side, split by a thin line (like the repository overview's agents and skills).</summary>
+    private static RenderFragment SplitStat(string icon, StatPart dghsf, StatPart copilot)
+    {
+        return @<MudPaper Outlined="true" Elevation="0" Class="infographic-stat">
+            <MudIcon Icon="@icon" Class="infographic-stat-icon" />
+            <div class="infographic-split">
+                @foreach (var part in new[] { dghsf, copilot })
+                {
+                    <div class="infographic-part">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" title="@part.Agent.DisplayName">
+                            <MudIcon Icon="@WorkItemRoutes.Icon(part.Agent)" Size="Size.Small" Style="vertical-align:text-bottom" /> @part.Label
+                        </MudText>
+                        <MudText Typo="Typo.h6">@part.Value</MudText>
+                        @if (part.Detail is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@part.Detail</MudText>
+                        }
+                    </div>
                 }
             </div>
         </MudPaper>;

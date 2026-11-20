@@ -286,7 +286,7 @@
         {
             AgentRunStatus.Succeeded => Icons.Material.Filled.CheckCircle,
             AgentRunStatus.Failed => Icons.Material.Filled.Error,
-            AgentRunStatus.Running => Icons.Material.Filled.SmartToy,
+            AgentRunStatus.Running => WorkItemRoutes.Icon(AgentExecutor.DghsfWorker),
             AgentRunStatus.Cancelled => Icons.Material.Filled.Block,
             _ => Icons.Material.Filled.Schedule
         };

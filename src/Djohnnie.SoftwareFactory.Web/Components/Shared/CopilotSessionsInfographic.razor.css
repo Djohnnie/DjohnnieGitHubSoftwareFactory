@@ -12,3 +12,8 @@
 .sessions-idle {
     color: var(--mud-palette-text-secondary);
 }
+
+/* The agent's icon and name, and the status chip with the checks, stay together. */
+.sessions-agent {
+    white-space: nowrap;
+}
